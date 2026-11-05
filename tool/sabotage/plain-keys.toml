@@ -1,0 +1,18 @@
+# A modified Enter, Tab, Backspace or Escape is the plain key until a program
+# asks for a keyboard protocol (project.md sec 7.0).
+
+# libvterm's CSI u goes to a shell again.
+[[sabotage]]
+name = "modified keys always use CSI u"
+file = "src/term/emulator_vterm.cpp"
+find = "\tif (plain_key && (modifiers & (MOD_SHIFT | MOD_CTRL)) && m_private->kitty_flags() == 0\n"
+replace = "\tif (false && plain_key && (modifiers & (MOD_SHIFT | MOD_CTRL)) && m_private->kitty_flags() == 0\n"
+expect = "modified_plain_keys_need_a_protocol_for_csi_u"
+
+# A program that asked for modifyOtherKeys loses it.
+[[sabotage]]
+name = "modifyOtherKeys is ignored"
+file = "src/term/emulator_vterm.cpp"
+find = "\t    && m_private->modify_other_keys == 0) {\n"
+replace = "\t    ) {\n"
+expect = "modified_plain_keys_need_a_protocol_for_csi_u"

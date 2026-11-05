@@ -4870,6 +4870,15 @@ same way. Ours say "not recognised" honestly where xterm has a mode this
 terminal lacks; the one fault was the ANSI modes getting no DECRQM answer at
 all, which left an asking program waiting (`vterm-patch/0024`).
 
+**Keys too.** All 26 keys under seven modifier sets in both cursor modes, sent
+to xterm by xdotool and compared with `send_key` (a scratch run, not kept). One
+fault that reached the prompt: Shift or Ctrl on Enter, Tab, Backspace and Escape
+wrote `CSI 13;2u` and the like with no keyboard protocol on, so bash printed
+`;2u`. They are the plain keys now unless kitty or modifyOtherKeys is on, with
+Ctrl swapping Backspace to `^H` as xterm's does, and Shift+Tab always `CSI Z`.
+Left as they are: plain Backspace is DEL where this xterm said `^H`, and what
+xterm kept for itself (Shift+Insert, Shift+PageUp) goes to the remote here.
+
 What programs meet was the point, and `vterm-patch/0022` lists it. The two
 that reach daily use: a saved cursor shared between screens, so a full-screen
 program's DECSC moved the prompt it returned to, and `CSI s`, which went home

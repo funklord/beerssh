@@ -138,6 +138,31 @@ void emulator_test::the_ansi_modes_answer_decrqm() {
 	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[4;1$y\x1b[20;2$y\x1b[99;0$y"));
 }
 
+/* A shell has no use for CSI 13;2u: it prints the tail of it at the prompt. */
+void emulator_test::modified_plain_keys_need_a_protocol_for_csi_u() {
+	const auto bytes = [](int key, int modifiers) {
+		bssh_emulator emulator(20, 8);
+		emulator.send_key(key, quint8(modifiers));
+		return emulator.take_output();
+	};
+	QCOMPARE(bytes(bssh_emulator::KEY_ENTER, bssh_emulator::MOD_SHIFT), QByteArrayLiteral("\r"));
+	QCOMPARE(bytes(bssh_emulator::KEY_ENTER, bssh_emulator::MOD_CTRL), QByteArrayLiteral("\r"));
+	QCOMPARE(bytes(bssh_emulator::KEY_ESCAPE, bssh_emulator::MOD_SHIFT), QByteArrayLiteral("\x1b"));
+	QCOMPARE(bytes(bssh_emulator::KEY_TAB, bssh_emulator::MOD_CTRL), QByteArrayLiteral("\t"));
+	QCOMPARE(bytes(bssh_emulator::KEY_TAB, bssh_emulator::MOD_SHIFT), QByteArrayLiteral("\x1b[Z"));
+	QCOMPARE(bytes(bssh_emulator::KEY_TAB, bssh_emulator::MOD_CTRL | bssh_emulator::MOD_SHIFT), QByteArrayLiteral("\x1b[Z"));
+	QCOMPARE(bytes(bssh_emulator::KEY_BACKSPACE, bssh_emulator::MOD_SHIFT), QByteArrayLiteral("\x7f"));
+	QCOMPARE(bytes(bssh_emulator::KEY_BACKSPACE, bssh_emulator::MOD_CTRL), QByteArrayLiteral("\x08"));
+	QCOMPARE(bytes(bssh_emulator::KEY_BACKSPACE, bssh_emulator::MOD_CTRL | bssh_emulator::MOD_ALT), QByteArrayLiteral("\x1b\x08"));
+
+	/* A program that asked for more still gets it. */
+	bssh_emulator asked(20, 8);
+	asked.feed(QByteArrayLiteral("\x1b[>4;2m"));
+	asked.take_output();
+	asked.send_key(bssh_emulator::KEY_ENTER, bssh_emulator::MOD_SHIFT);
+	QVERIFY(asked.take_output() != QByteArrayLiteral("\r"));
+}
+
 void emulator_test::plain_text_lands_on_the_first_row() {
 	bssh_emulator emulator(20, 5);
 	emulator.feed(QByteArrayLiteral("hello"));

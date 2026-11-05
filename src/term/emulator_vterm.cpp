@@ -2752,6 +2752,32 @@ void bssh_emulator::send_key(int key, quint8 modifiers) {
 		return;
 	}
 
+	/*
+	 * Shift or Ctrl on these four, with no keyboard protocol asked for.
+	 * libvterm writes CSI 13;2u and the like whatever the mode, which only
+	 * a program that turned a protocol on can read: a shell printed ";2u"
+	 * for a Shift held a moment too long on Backspace, and every terminal
+	 * sends the plain key here. Measured against xterm, which also swaps
+	 * Backspace's two codes for Ctrl.
+	 */
+	const bool plain_key = key == KEY_ENTER || key == KEY_TAB || key == KEY_BACKSPACE || key == KEY_ESCAPE;
+	if (plain_key && (modifiers & (MOD_SHIFT | MOD_CTRL)) && m_private->kitty_flags() == 0
+	    && m_private->modify_other_keys == 0) {
+		const VTermModifier alt = static_cast<VTermModifier>(mod & VTERM_MOD_ALT);
+		if (key == KEY_TAB && (modifiers & MOD_SHIFT)) {
+			m_private->reply(QByteArrayLiteral("\x1b[Z"));
+		} else if (key == KEY_BACKSPACE && (modifiers & MOD_CTRL)) {
+			m_private->reply((alt ? QByteArrayLiteral("\x1b") : QByteArray()) + '\x08');
+		} else {
+			const VTermKey plain = key == KEY_ENTER ? VTERM_KEY_ENTER
+			                       : key == KEY_TAB ? VTERM_KEY_TAB
+			                       : key == KEY_BACKSPACE ? VTERM_KEY_BACKSPACE
+			                       : VTERM_KEY_ESCAPE;
+			vterm_keyboard_key(m_private->vt, plain, alt);
+		}
+		return;
+	}
+
 	static const VTermKey mapping[] = {
 		VTERM_KEY_NONE,
 		VTERM_KEY_ENTER,
