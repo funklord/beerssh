@@ -109,6 +109,15 @@ bssh_sshd_window::bssh_sshd_window(bssh_sshd_platform *platform, bssh_sshd_contr
 		boot->setChecked(m_platform->start_at_boot());
 		connect(boot, &QCheckBox::toggled, this, [this](bool on) { m_platform->set_start_at_boot(on); });
 		layout->addWidget(boot);
+
+		/*
+		 * Said here because the wording above promises more than a phone
+		 * with a lock can give: its storage stays encrypted, and
+		 * BOOT_COMPLETED unsent, until the first unlock (sec 19.6).
+		 */
+		layout->addWidget(wrapped_label(tr("With a screen lock, serving starts at the first unlock "
+		                                   "after the restart: until then Android keeps your files "
+		                                   "encrypted.")));
 	}
 
 	/*

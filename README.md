@@ -288,7 +288,8 @@ authorized keys and password from its one screen. It is built to stay
 reachable: the server runs in a foreground service of its own, with Stop
 in its notification; it waits out a Wi-Fi drop and listens again when the
 network returns; with "Serve again after the phone restarts" ticked it
-comes back after a reboot with no tap; and it offers to be left out of
+comes back after a reboot with no tap in the app, at the first unlock on a
+phone with a screen lock; and it offers to be left out of
 battery optimisation, which is what a vendor's battery manager would
 otherwise use to pause it.
 

@@ -1233,7 +1233,19 @@ events from `bssh_platform` (§3) without caring which platform produced them.
   returns false) and retried at the next `application_active_changed`, and
   `transportMediumChanged` counts as a network change, since Wi-Fi back on a
   phone with mobile data never changes reachability. Same 30-45 s off:
-  service up throughout, signed in again **8 s** after Wi-Fi came back.
+  service up throughout, signed in again **8 s** after Wi-Fi came back. The
+  session then stayed up off USB with the holder in other apps: connected
+  when last read 15 minutes on, and no new login in the half hour after.
+  **And an outage past the backoff no longer ends it.** Ten attempts take about
+  five minutes; then `gave_up` took the count to 0, the service went the same
+  way, and nothing was left to hear the network return. `is_waiting_for_network()`
+  holds the service with nothing dialling, so the cap still spares the radio,
+  and the notification reads "connecting" until the user closes the tab. On
+  the API 36 emulator, all networks off for 8 minutes in the background:
+  service up throughout, signed in 4 s after they returned. That the cap was
+  reached there is arithmetic, no log line says so; the unit test and its
+  sabotage hold the path itself. **Rejected:** dropping the cap, which is the
+  storm above, and letting go of the process, which is the fault.
 ### 5.4 Battery / OEM caveats (Android)
 Aggressive OEM battery managers (e.g. some Chinese OEM skins) may kill the
 service anyway. Add an in-app prompt to whitelist the app from battery
@@ -17679,20 +17691,20 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
   one of the four that overwrites no recorded decision: it is additive, and
   `--term-features=?` had already set the shape. See §8.6.
 
-- **Where the 2026-11-03/04 session stopped (folded at 97 per cent).**
-  Waiting on the phone. On 2026-11-05 it was on Wi-Fi adb, locked and in
-  use, so only read: BeerSSH's service there was `types=0x10`. What follows
-  needs it unlocked, a tap and a reboot, so it needs the holder. On it, run beersshd's arm64 build
-  (`make android-sshd ANDROID_ABI=arm64-v8a`, built): `dumpsys activity
-  services` should say `types=0x10`; with the dataSync limit at 60 s
-  (`device_config set_sync_disabled_for_tests until_reboot` FIRST, then
-  `put`, then start the service -- §19.6) it must keep serving after
-  Home; reboot with "Serve again after the phone restarts" ticked must
-  serve with no tap; and see what One UI does with the battery button
-  (§5.4). BeerSSH's background reconnect (§5.3) wants the same phone.
-  (The two questions that stood here -- whether a start restores every
-  window, and the cross-process fixes never having met two real
-  processes -- are settled in §8.4 and §7's store entry, 2026-11-04.)
+- **What is left of the Fold run (2026-11-06).** Seen there: beersshd's
+  `types=0x10`, serving past a 60 s limit, One UI's battery dialog, and
+  BeerSSH's background reconnect (§5.3, which found the worst fault of the
+  run; §5.4; §19.6). **Not seen on the phone: the reboot.** The holder took
+  it up before it could be done, so it is seen on an API 36 emulator with a
+  PIN instead (§19.6). What only the Fold can add is One UI's boot, with
+  beersshd left ticked and exempt for it: reboot, unlock, serving with no
+  tap. For the record of how to run it: `make android-sshd
+  ANDROID_ABI=arm64-v8a`, and `device_config set_sync_disabled_for_tests
+  until_reboot` FIRST, then `put` (§19.6). Restore both with `delete` and
+  `set_sync_disabled_for_tests none`: the limit is system-wide.
+  Also seen once on the Fold, on a cold `ssh://` open just after an
+  install: the password prompt drawn twice, a stale copy at the top of the
+  window for as long as the prompt stood. Not on the emulator; not chased.
 
 **Decided, and kept here so they are not reopened:**
 
@@ -18535,7 +18547,19 @@ caught.
   new process each time and none left after Stop; ticked and rebooted,
   serving about 50 s after boot completed with no tap and no notice;
   Wi-Fi off and on in that state, logged at the times they happened and
-  serving again; Stop from the app ends it. Not yet seen on the Fold.
+  serving again; Stop from the app ends it. On the Fold, 2026-11-05: Wi-Fi
+  off, "Waiting for Wi-Fi" within 6 s, "Serving" within 5 s of its return and
+  `sftp` answering.
+  **A phone with a screen lock serves from the first unlock, not from boot
+  -- seen 2026-11-06 on the API 36 emulator with a PIN, which no earlier run
+  had.** Locked, 90 s after boot: no service, nothing on 8022. Android sends
+  `BOOT_COMPLETED` only after that unlock, and could not do better for us:
+  the shared storage and the host key are credential-encrypted until then,
+  so a direct-boot receiver would have nothing to serve. PIN entered:
+  foreground 18 s later, the launcher in front, no tap in the app. So "an
+  update at night" leaves the server down until the morning's unlock, and
+  the window says so under the tick box. **What the rest of that reads as
+  "no tap" means no tap in the app.**
 - **Stop in the notification -- BUILT 2026-11-03.** Play asks that a
   foreground service can be stopped by the user, and §19.7's declaration
   says it can, "Stop in the notification and the app"; the notification
