@@ -172,8 +172,7 @@ struct bssh_command_line_t {
 
 	bssh_command_line_t()
 	    : cols(0), rows(0), grid_cols(0), grid_rows(0), x(0), y(0), has_position(false), hold(false),
-	      restore_window(-1), no_restore(false),
-	      self_test(false), help(false), version(false), man(false),
+	      self_test(false), restore_window(-1), no_restore(false), help(false), version(false), man(false),
 	      completion(false) {}
 
 	/* Nothing to open: the program prints something and stops. */
