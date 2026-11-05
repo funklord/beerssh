@@ -26,6 +26,8 @@ bssh_conn_manager::bssh_conn_manager(bssh_session *session, QObject *parent)
       m_timer(new QTimer(this)),
       m_auto_reconnect(true),
       m_reconnecting(false),
+      m_waiting_for_network(false),
+      m_max_attempts(BSSH_MAX_ATTEMPTS),
       m_user_disconnected(false),
       m_attempt(0) {
 	m_timer->setSingleShot(true);
@@ -154,6 +156,7 @@ void bssh_conn_manager::on_session_state_changed() {
 	 */
 	if (m_session->state() == bssh_ssh_session::CONNECTED) {
 		m_attempt = 0;
+		m_waiting_for_network = false;
 		set_reconnecting(false);
 		m_timer->stop();
 		return;
@@ -199,7 +202,8 @@ void bssh_conn_manager::schedule_reconnect() {
 	if (!m_auto_reconnect || m_user_disconnected || !m_session) return;
 	if (m_timer->isActive()) return;
 
-	if (m_attempt >= BSSH_MAX_ATTEMPTS) {
+	if (m_attempt >= m_max_attempts) {
+		m_waiting_for_network = true;
 		set_reconnecting(false);
 		emit gave_up();
 		return;
@@ -232,10 +236,14 @@ void bssh_conn_manager::attempt_reconnect() {
 
 void bssh_conn_manager::cancel() {
 	m_timer->stop();
+	const bool was_waiting = m_waiting_for_network;
+	m_waiting_for_network = false;
 	set_reconnecting(false);
+	if (was_waiting) emit reconnecting_changed();
 }
 
 void bssh_conn_manager::set_reconnecting(bool reconnecting) {
+	if (reconnecting) m_waiting_for_network = false;
 	if (m_reconnecting == reconnecting) return;
 	m_reconnecting = reconnecting;
 	emit reconnecting_changed();

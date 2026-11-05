@@ -83,7 +83,7 @@ public:
 	 * so a session retrying a dead host read "1 session connected" for
 	 * each attempt and "0" between them -- seen on the Fold, 2026-11-05.
 	 * Connecting is everything still on its way there, a reconnect waiting
-	 * out its backoff included.
+	 * out its backoff or the next network included.
 	 */
 	int connected_count() const;
 	int connecting_count() const;

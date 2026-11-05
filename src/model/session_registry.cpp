@@ -324,7 +324,10 @@ int bssh_session_registry::connecting_count() const {
 	for (bssh_session *session : m_sessions) {
 		if (session->state() == bssh_ssh_session::CONNECTED) continue;
 		const bssh_conn_manager *manager = m_managers.value(session, nullptr);
-		if (session->is_live() || (manager && manager->is_reconnecting())) ++connecting;
+		if (session->is_live()
+		    || (manager && (manager->is_reconnecting() || manager->is_waiting_for_network()))) {
+			++connecting;
+		}
 	}
 	return connecting;
 }

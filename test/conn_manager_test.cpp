@@ -136,6 +136,50 @@ void conn_manager_test::a_failing_reconnect_does_not_reset_its_own_backoff() {
 	bssh_ssh_session::set_factory(nullptr);
 }
 
+void conn_manager_test::giving_up_still_waits_for_the_network() {
+	const bssh_factory_reset_t factory_reset;
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+
+	bssh_session session(host(QStringLiteral("away")));
+	bssh_conn_manager manager(&session);
+	manager.set_max_attempts(1);
+	session.connect_to_host();
+	fake->simulate_key_auth_success();
+
+	QSignalSpy started(&manager, &bssh_conn_manager::reconnect_started);
+	QSignalSpy gave_up(&manager, &bssh_conn_manager::gave_up);
+	fake->simulate_connection_lost();
+	QVERIFY(!manager.is_waiting_for_network());
+	QVERIFY(started.wait(5000));
+	fake->simulate_connection_lost();
+	QCOMPARE(gave_up.count(), 1);
+
+	/* Dialling no more, and what holds the process for the next network. */
+	QVERIFY(!manager.is_reconnecting());
+	QVERIFY(manager.is_waiting_for_network());
+
+	manager.note_network_changed();
+	QVERIFY(!manager.is_waiting_for_network());
+	QVERIFY(manager.is_reconnecting());
+	QVERIFY(started.wait(5000));
+	fake->simulate_key_auth_success();
+	QVERIFY(!manager.is_waiting_for_network());
+
+	/* Given up again, and closed by the user: nothing left to wait for. */
+	fake->simulate_connection_lost();
+	QVERIFY(started.wait(5000));
+	fake->simulate_connection_lost();
+	QVERIFY(manager.is_waiting_for_network());
+	manager.note_user_disconnect();
+	QVERIFY(!manager.is_waiting_for_network());
+
+	bssh_ssh_session::set_factory(nullptr);
+}
+
 void conn_manager_test::a_network_flap_staggers_the_sessions_rather_than_dialling_them() {
 	const bssh_factory_reset_t factory_reset;
 	/*

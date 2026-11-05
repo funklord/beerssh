@@ -48,6 +48,18 @@ public:
 	bool auto_reconnect() const { return m_auto_reconnect; }
 
 	bool is_reconnecting() const { return m_reconnecting; }
+
+	/*
+	 * Out of attempts, and dialling no more: the cap is there for the
+	 * radio. But a network change still brings a session back, and that
+	 * takes a process to hear it, so this holds the foreground service
+	 * as a retry does. An outage longer than the backoff -- a train, a
+	 * night with Wi-Fi off -- otherwise ended every session it touched.
+	 */
+	bool is_waiting_for_network() const { return m_waiting_for_network; }
+
+	/* The cap, for a test that cannot sit out five minutes of backoff. */
+	void set_max_attempts(int attempts) { m_max_attempts = attempts; }
 	int attempt() const { return m_attempt; }
 
 	/*
@@ -85,6 +97,8 @@ private:
 	QTimer *m_timer;
 	bool m_auto_reconnect;
 	bool m_reconnecting;
+	bool m_waiting_for_network;
+	int m_max_attempts;
 	bool m_user_disconnected;
 	int m_attempt;
 };

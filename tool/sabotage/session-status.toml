@@ -25,3 +25,12 @@ file = "src/model/session_registry.cpp"
 find = "\tbssh_conn_manager *manager = new bssh_conn_manager(session, this);\n"
 replace = "\tconnect(session, &bssh_session::state_changed, this, &bssh_session_registry::changed);\n\tbssh_conn_manager *manager = new bssh_conn_manager(session, this);\n"
 expect = "only_a_connected_session_counts_as_connected"
+
+# Out of attempts with the process let go: nothing is left to hear the
+# network come back, and the outage ends the session.
+[[sabotage]]
+name = "giving up forgets the next network"
+file = "src/model/conn_manager.cpp"
+find = "\t\tm_waiting_for_network = true;\n"
+replace = ""
+expect = "giving_up_still_waits_for_the_network"
