@@ -116,6 +116,28 @@ void emulator_test::decrc_with_nothing_saved_is_a_clean_cursor() {
 	QVERIFY(!(reset.screen().cell(0, 0).attrs & bssh_cell_t::BOLD));
 }
 
+/* Saved with the cursor: a program restoring it gets its set back too. */
+void emulator_test::decsc_keeps_the_line_drawing_set() {
+	bssh_emulator emulator(20, 8);
+	emulator.feed(QByteArrayLiteral("\x1b(0\x1b" "7\x1b(Bq\x1b" "8q"));
+	QCOMPARE(emulator.screen().cell(0, 0).ch, char32_t(0x2500));
+
+	/* And across a dump, where a charset is an index and not a pointer. */
+	bssh_emulator kept(20, 8);
+	kept.feed(QByteArrayLiteral("\x1b(0\x1b" "7\x1b(B"));
+	bssh_emulator copy(20, 8);
+	QVERIFY(copy.import_state(kept.export_state()));
+	copy.feed(QByteArrayLiteral("\x1b" "8q"));
+	QCOMPARE(copy.screen().cell(0, 0).ch, char32_t(0x2500));
+}
+
+/* A program that asks waits for the answer, so an unknown mode gets one too. */
+void emulator_test::the_ansi_modes_answer_decrqm() {
+	bssh_emulator emulator(20, 8);
+	emulator.feed(QByteArrayLiteral("\x1b[4h\x1b[4$p\x1b[20$p\x1b[99$p"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[4;1$y\x1b[20;2$y\x1b[99;0$y"));
+}
+
 void emulator_test::plain_text_lands_on_the_first_row() {
 	bssh_emulator emulator(20, 5);
 	emulator.feed(QByteArrayLiteral("hello"));

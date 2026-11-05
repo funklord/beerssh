@@ -1,0 +1,132 @@
+Save the character sets with the cursor, and answer DECRQM for ANSI modes
+
+DECSC saves the character sets on every DEC terminal; here a program that
+restored its cursor kept whatever set was selected. Carried beside saved
+and saved_primary and swapped with them, and dumped as table indexes like
+the live ones, since an encoding is a pointer.
+
+DECRQM without the ? had no case at all, so a program asking about IRM or
+LNM waited for an answer that never came. Mode 47 and 1048 are reported.
+
+--- a/src/state.c
++++ b/src/state.c
+@@ -632,6 +632,9 @@
+   if(save) {
+     state->saved.pos = state->pos;
+     state->saved.at_phantom = state->at_phantom;
++    memcpy(state->saved_charsets[0].encoding, state->encoding, sizeof state->encoding);
++    state->saved_charsets[0].gl_set = state->gl_set;
++    state->saved_charsets[0].gr_set = state->gr_set;
+     state->saved.mode.cursor_visible = state->mode.cursor_visible;
+     state->saved.mode.cursor_blink   = state->mode.cursor_blink;
+     state->saved.mode.cursor_shape   = state->mode.cursor_shape;
+@@ -643,6 +646,9 @@
+ 
+     state->pos = state->saved.pos;
+     state->at_phantom = state->saved.at_phantom;
++    memcpy(state->encoding, state->saved_charsets[0].encoding, sizeof state->encoding);
++    state->gl_set = state->saved_charsets[0].gl_set;
++    state->gr_set = state->saved_charsets[0].gr_set;
+ 
+     /* Saved outside the margins and restored inside origin mode. */
+     if(state->mode.origin) {
+@@ -845,6 +851,9 @@
+   __typeof__(state->saved) other = state->saved;
+   state->saved = state->saved_primary;
+   state->saved_primary = other;
++  struct VTermSavedCharsets charsets = state->saved_charsets[0];
++  state->saved_charsets[0] = state->saved_charsets[1];
++  state->saved_charsets[1] = charsets;
+   settermprop_bool(state, VTERM_PROP_ALTSCREEN, val);
+ }
+ 
+@@ -1040,10 +1049,15 @@
+       reply = state->mouse_protocol == MOUSE_RXVT;
+       break;
+ 
++    case 47:
+     case 1047:
+       reply = state->mode.alt_screen;
+       break;
+ 
++    case 1048: /* Save and restore have no state to report; xterm says set. */
++      reply = 1;
++      break;
++
+     case 2004:
+       reply = state->mode.bracketpaste;
+       break;
+@@ -1600,6 +1614,14 @@
+     vterm_state_reset(state, 0);
+     break;
+ 
++  case INTERMED('$', 0x70): // DECRQM for the ANSI modes, which went unanswered
++    val = CSI_ARG_OR(args[0], 0);
++    vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "%d;%d$y", val,
++        val == 4  ? (state->mode.insert ? 1 : 2) :
++        val == 20 ? (state->mode.newline ? 1 : 2) :
++        val == 2  ? 2 : val == 12 ? 1 : 0);
++    break;
++
+   case LEADER('?', INTERMED('$', 0x70)):
+     request_dec_mode(state, CSI_ARG(args[0]));
+     break;
+@@ -2396,6 +2418,12 @@
+   state->gr_set = 1;
+   state->gsingle_set = 0;
+ 
++  for(int slot = 0; slot < 2; slot++) {
++    memcpy(state->saved_charsets[slot].encoding, state->encoding, sizeof state->encoding);
++    state->saved_charsets[slot].gl_set = state->gl_set;
++    state->saved_charsets[slot].gr_set = state->gr_set;
++  }
++
+   state->protected_cell = 0;
+ 
+   // Initialise the props
+--- a/src/vterm.c
++++ b/src/vterm.c
+@@ -553,6 +553,12 @@
+     PUT(&w, protected_cell);
+     PUT(&w, state->saved);
+     PUT(&w, state->saved_primary);
++    for(int slot = 0; slot < 2; slot++) {
++      for(int i = 0; i < 4; i++)
++        export_encoding(&w, &state->saved_charsets[slot].encoding[i]);
++      PUT(&w, state->saved_charsets[slot].gl_set);
++      PUT(&w, state->saved_charsets[slot].gr_set);
++    }
+     PUT(&w, state->tmp);
+   }
+ 
+@@ -664,6 +670,13 @@
+     GET(&r, protected_cell);
+     GET(&r, st.saved);
+     GET(&r, st.saved_primary);
++    for(int slot = 0; slot < 2; slot++) {
++      for(int i = 0; i < 4; i++)
++        if(!import_encoding(&r, &st.saved_charsets[slot].encoding[i]))
++          goto refuse;
++      GET(&r, st.saved_charsets[slot].gl_set);
++      GET(&r, st.saved_charsets[slot].gr_set);
++    }
+     GET(&r, st.tmp);
+     if(!r.ok)
+       goto refuse;
+--- a/src/vterm_internal.h
++++ b/src/vterm_internal.h
+@@ -150,6 +150,14 @@
+     } mode;
+   } saved, saved_primary; /* saved_primary: the primary screen's, while the alternate is up */
+ 
++  /* The character sets DECSC saves, beside saved and saved_primary in that
++   * order. Apart from them because an encoding is a pointer, which the dump
++   * writes as its table index. */
++  struct VTermSavedCharsets {
++    VTermEncodingInstance encoding[4];
++    int gl_set, gr_set;
++  } saved_charsets[2];
++
+   /* Temporary state for DECRQSS parsing */
+   union {
+     char decrqss[4];

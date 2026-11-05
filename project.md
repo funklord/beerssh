@@ -4861,6 +4861,15 @@ authors wrote down. The app itself does not answer DECRQCRA, deliberately:
 it would let a remote read the screen back, so the harness answers from the
 cells.
 
+**Real programs too.** The bytes vim, less, top, nano, htop, mc, tmux and man
+sent to a pty at 80 by 24, driven by scripted keys, replayed through both
+terminals with a comparison after every key: no differences at 64 checkpoints,
+on screens with up to 1333 cells inked (2026-11-05, after 0022 and 0023; a
+scratch script, not kept). The answers to about 90 queries were compared the
+same way. Ours say "not recognised" honestly where xterm has a mode this
+terminal lacks; the one fault was the ANSI modes getting no DECRQM answer at
+all, which left an asking program waiting (`vterm-patch/0024`).
+
 What programs meet was the point, and `vterm-patch/0022` lists it. The two
 that reach daily use: a saved cursor shared between screens, so a full-screen
 program's DECSC moved the prompt it returned to, and `CSI s`, which went home
@@ -4872,10 +4881,6 @@ rather than saving, in every script that uses it.
 - Left and right margins (`lr`): DECBI, DECFI, SL and SR are not implemented,
   and text wraps to column 0 inside DECLRMM. No program this was written for
   sets them; a real one using them would make this worth doing.
-- DECSC does not save the character sets (`charset`). Saving them means
-  carrying an encoding pointer through the tear-out dump, which needs its own
-  form there. A program that restores line-drawing with DECRC keeps whatever
-  was selected.
 - A second `?1049h` does not clear the alternate screen, and entering by
   `?47h` clears it where xterm keeps it (`alt`).
 - A few wide-glyph cases with wrapping switched off while a wrap is pending

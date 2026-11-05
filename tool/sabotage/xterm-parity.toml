@@ -72,3 +72,19 @@ file = "vterm/src/state.c"
 find = "  state->saved.pen = state->pen;\n"
 replace = ""
 expect = "decrc_with_nothing_saved_is_a_clean_cursor"
+
+# DECRC leaves the character set as it found it.
+[[sabotage]]
+name = "DECRC does not restore the charset"
+file = "vterm/src/state.c"
+find = "    memcpy(state->encoding, state->saved_charsets[0].encoding, sizeof state->encoding);\n"
+replace = ""
+expect = "decsc_keeps_the_line_drawing_set"
+
+# The ANSI modes go unanswered again.
+[[sabotage]]
+name = "ANSI DECRQM is not answered"
+file = "vterm/src/state.c"
+find = "  case INTERMED('$', 0x70): // DECRQM for the ANSI modes, which went unanswered\n"
+replace = "  case INTERMED('$', 0x71):\n"
+expect = "the_ansi_modes_answer_decrqm"
