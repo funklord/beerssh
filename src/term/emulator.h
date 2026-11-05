@@ -292,6 +292,9 @@ public:
 	 */
 	bool mouse_reporting() const;
 
+	/* Mode 1003: the remote wants the pointer with no button held as well. */
+	bool mouse_wants_motion() const;
+
 	/* The last OSC 7 the shell sent, as it sent it; empty if none. */
 	QString reported_directory() const;
 	void send_mouse_move(int row, int col, quint8 modifiers);

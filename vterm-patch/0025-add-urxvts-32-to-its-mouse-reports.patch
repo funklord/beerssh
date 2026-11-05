@@ -1,0 +1,20 @@
+Add urxvt's 32 to its mouse reports
+
+Mode 1015 sends the X10 button number, 32 included, in decimal. xterm
+writes 32 for a left press and clients take the 32 off again; this wrote
+0, which they read as a negative button.
+
+--- a/src/mouse.c
++++ b/src/mouse.c
+@@ -45,8 +45,10 @@
+     if(!pressed)
+       code = 3;
+ 
++    /* urxvt's numbers are X10's, 32 included, which is what a client takes
++     * off again. Without it a press read as a negative button. */
+     vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "%d;%d;%dM",
+-        code | modifiers, col + 1, row + 1);
++        (code | modifiers) + 0x20, col + 1, row + 1);
+     break;
+   }
+ }

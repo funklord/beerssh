@@ -197,6 +197,16 @@ void emulator_test::ctrl_makes_what_xterm_makes_of_a_character() {
 	QCOMPARE(emulator.take_output(), bytes);
 }
 
+void emulator_test::urxvt_mouse_reports_carry_the_32() {
+	bssh_emulator emulator(20, 8);
+	emulator.feed(QByteArrayLiteral("\x1b[?1000h\x1b[?1015h"));
+	emulator.take_output();
+	emulator.send_mouse_move(4, 9, 0);
+	emulator.send_mouse_button(1, true, 0);
+	emulator.send_mouse_button(1, false, 0);
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[32;10;5M\x1b[35;10;5M"));
+}
+
 void emulator_test::plain_text_lands_on_the_first_row() {
 	bssh_emulator emulator(20, 5);
 	emulator.feed(QByteArrayLiteral("hello"));

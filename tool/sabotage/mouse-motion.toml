@@ -1,0 +1,33 @@
+# A program that asked for the mouse gets all of it (project.md sec 7.0).
+
+# Motion stops at the view again.
+[[sabotage]]
+name = "a drag is not forwarded"
+file = "src/ui/terminal_view.cpp"
+find = "\tif (m_emulator && (m_reported_button != 0 || hover)) {\n"
+replace = "\tif (m_emulator && hover) {\n"
+expect = "a_drag_reaches_a_program_that_asked_for_one"
+
+# Hover goes to any program with the mouse on.
+[[sabotage]]
+name = "hover ignores what the mode asked for"
+file = "src/ui/terminal_view.cpp"
+find = "\tconst bool hover = !event->buttons() && m_emulator && m_emulator->mouse_wants_motion()\n"
+replace = "\tconst bool hover = !event->buttons() && m_emulator && m_emulator->mouse_reporting()\n"
+expect = "the_pointer_reaches_a_program_that_asked_for_it"
+
+# A press goes without what was held.
+[[sabotage]]
+name = "a click drops the held key"
+file = "src/ui/terminal_view.cpp"
+find = "\t\t\tconst quint8 modifiers = report_modifiers(event->modifiers());\n"
+replace = "\t\t\tconst quint8 modifiers = 0;\n"
+expect = "a_held_key_reaches_the_program_with_the_click"
+
+# urxvt's report without its 32.
+[[sabotage]]
+name = "urxvt's 32 is gone"
+file = "vterm/src/mouse.c"
+find = "        (code | modifiers) + 0x20, col + 1, row + 1);\n"
+replace = "        code | modifiers, col + 1, row + 1);\n"
+expect = "urxvt_mouse_reports_carry_the_32"

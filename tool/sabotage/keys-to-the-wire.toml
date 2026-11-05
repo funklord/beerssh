@@ -46,8 +46,8 @@ expect = "a_keystroke_in_a_pane_reaches_the_wire"
 [[sabotage]]
 name = "a click is encoded and never sent"
 file = "src/ui/terminal_view.cpp"
-find = "\t\t\tm_emulator->send_mouse_move(screen_row_for_line(line), col, 0);\n\t\t\tm_emulator->send_mouse_button(button, true, 0);"
-replace = "\t\t\tm_emulator->send_mouse_move(screen_row_for_line(line), col, 0);"
+find = "\t\t\tm_emulator->send_mouse_button(button, true, modifiers);\n"
+replace = ""
 expect = "a_mouse_report_reaches_the_wire"
 
 # The legacy fallback emits CSI u again.

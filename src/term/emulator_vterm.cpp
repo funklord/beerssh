@@ -2642,6 +2642,10 @@ bool bssh_emulator::mouse_reporting() const {
 	return m_private->mouse_reporting;
 }
 
+bool bssh_emulator::mouse_wants_motion() const {
+	return m_private->mouse_mode == VTERM_PROP_MOUSE_MOVE;
+}
+
 void bssh_emulator::reset_modes() {
 	/*
 	 * A soft reset, not a hard one: the hard branch homes the cursor and

@@ -25,6 +25,7 @@ private slots:
 	void decrc_with_nothing_saved_is_a_clean_cursor();
 	void decsc_keeps_the_line_drawing_set();
 	void the_ansi_modes_answer_decrqm();
+	void urxvt_mouse_reports_carry_the_32();
 	void modified_plain_keys_need_a_protocol_for_csi_u();
 	void ctrl_makes_what_xterm_makes_of_a_character_data();
 	void ctrl_makes_what_xterm_makes_of_a_character();

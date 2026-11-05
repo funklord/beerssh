@@ -484,6 +484,69 @@ void terminal_view_test::shift_overrides_mouse_reporting_to_select() {
 	QCOMPARE(emulator.take_output(), QByteArray());
 }
 
+void terminal_view_test::a_drag_reaches_a_program_that_asked_for_one() {
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	/* tmux's pane borders and vim's selection: press, motion, release. */
+	emulator.feed(QByteArrayLiteral("\x1b[?1002h\x1b[?1006h"));
+	emulator.take_output();
+	drag(view, 1, 1, 3, 1, Qt::NoModifier);
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[<0;2;2M\x1b[<32;4;2M\x1b[<0;4;2m"));
+
+	/* And a program that asked for clicks alone hears none of the motion. */
+	emulator.feed(QByteArrayLiteral("\x1b[?1002l\x1b[?1000h"));
+	emulator.take_output();
+	drag(view, 1, 1, 3, 1, Qt::NoModifier);
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[<0;2;2M\x1b[<0;4;2m"));
+}
+
+void terminal_view_test::the_pointer_reaches_a_program_that_asked_for_it() {
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	QVERIFY(view.hasMouseTracking());
+	const QPoint at(2 * view.cell_width() + 1, 1 * view.cell_height() + 1);
+	const auto hover = [&](Qt::KeyboardModifiers modifiers) {
+		QMouseEvent move(QEvent::MouseMove, at, view.mapToGlobal(at), Qt::NoButton, Qt::NoButton, modifiers);
+		QCoreApplication::sendEvent(&view, &move);
+	};
+
+	emulator.feed(QByteArrayLiteral("\x1b[?1002h\x1b[?1006h"));
+	emulator.take_output();
+	hover(Qt::NoModifier);
+	QCOMPARE(emulator.take_output(), QByteArray());
+
+	emulator.feed(QByteArrayLiteral("\x1b[?1003h"));
+	emulator.take_output();
+	hover(Qt::ShiftModifier);
+	QCOMPARE(emulator.take_output(), QByteArray());
+	hover(Qt::NoModifier);
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[<35;3;2M"));
+}
+
+void terminal_view_test::a_held_key_reaches_the_program_with_the_click() {
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	emulator.feed(QByteArrayLiteral("\x1b[?1000h\x1b[?1006h"));
+	emulator.take_output();
+	drag(view, 1, 1, 1, 1, Qt::ControlModifier);
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[<16;2;2M\x1b[<16;2;2m"));
+}
+
 void terminal_view_test::a_touch_body_drag_scrolls_in_scroll_mode() {
 	forced_touch_t touch(1);
 

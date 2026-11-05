@@ -13,7 +13,7 @@
 [[sabotage]]
 name = "the wheel never reaches the remote"
 file = "src/ui/terminal_view.cpp"
-find = "\t\t\t\tm_emulator->send_mouse_button(button, true, 0);"
+find = "\t\t\t\tm_emulator->send_mouse_button(button, true, report_modifiers(event->modifiers()));"
 expect = "the_wheel_goes_to_the_remote_when_it_asked_for_the_mouse"
 
 # The alternate screen having no history. Without this the scrollback --
@@ -64,7 +64,7 @@ expect = "the_block_cursor_does_not_cover_its_character"
 [[sabotage]]
 name = "the release always claims button 1"
 file = "src/ui/terminal_view.cpp"
-find = "\t\tif (m_emulator) m_emulator->send_mouse_button(m_reported_button, false, 0);"
+find = "\t\tif (m_emulator) m_emulator->send_mouse_button(m_reported_button, false, report_modifiers(event->modifiers()));"
 replace = "\t\tif (m_emulator) m_emulator->send_mouse_button(1, false, 0);"
 expect = "a_release_names_the_button_the_press_reported"
 

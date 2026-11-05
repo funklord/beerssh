@@ -4882,6 +4882,15 @@ now, the digits included, which an older comment had left out as "a decision".
 Left as they are: plain Backspace is DEL where this xterm said `^H`, and what
 xterm kept for itself (Shift+Insert, Shift+PageUp) goes to the remote here.
 
+**The mouse too.** 320 sequences of move, press, drag and release, in every
+tracking mode and encoding, against xterm through xdotool (a scratch run). The
+encoder had one fault, urxvt's missing 32 (`vterm-patch/0025`). What the
+comparison led to was worse and in the view: nothing forwarded motion, so a drag
+never reached tmux or vim whatever mode they set, and every call passed no
+modifiers, so Ctrl+click arrived as a click. Both are built now, Ctrl+wheel
+staying the zoom, Ctrl+click on a link the link and Alt+left the pane (§8.4). Left: X10's mode 9 is not
+implemented, and xterm's own uses of Ctrl+click and Alt+middle do not apply here.
+
 What programs meet was the point, and `vterm-patch/0022` lists it. The two
 that reach daily use: a saved cursor shared between screens, so a full-screen
 program's DECSC moved the prompt it returned to, and `CSI s`, which went home

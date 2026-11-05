@@ -65,6 +65,9 @@ private slots:
 	void triple_click_selects_the_line();
 	void mouse_goes_to_the_remote_when_it_asks_for_it();
 	void shift_overrides_mouse_reporting_to_select();
+	void a_drag_reaches_a_program_that_asked_for_one();
+	void the_pointer_reaches_a_program_that_asked_for_it();
+	void a_held_key_reaches_the_program_with_the_click();
 
 	/*
 	 * The touch input selector routes a body drag (sec 8.7): scroll moves

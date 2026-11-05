@@ -297,7 +297,8 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
 	 */
 	bssh_terminal_accessible::install();
 	setAccessibleName(QStringLiteral("Terminal"));
-	setMouseTracking(false);
+	/* On for mode 1003, which asks for the pointer with no button held. */
+	setMouseTracking(true);
 	/* Without this Qt never routes input-method events here at all. */
 	setAttribute(Qt::WA_InputMethodEnabled);
 	setAttribute(Qt::WA_OpaquePaintEvent);
@@ -782,6 +783,15 @@ void bssh_terminal_view::handle_pinch(qreal change) {
 	if (steps != 0) emit zoom_requested(steps);
 }
 
+/* Held keys in the emulator's bits, for a report to the remote. */
+static quint8 report_modifiers(Qt::KeyboardModifiers modifiers) {
+	quint8 out = bssh_emulator::MOD_NONE;
+	if (modifiers & Qt::ShiftModifier) out |= bssh_emulator::MOD_SHIFT;
+	if (modifiers & Qt::AltModifier) out |= bssh_emulator::MOD_ALT;
+	if (modifiers & Qt::ControlModifier) out |= bssh_emulator::MOD_CTRL;
+	return out;
+}
+
 void bssh_terminal_view::wheelEvent(QWheelEvent *event) {
 	const int notches = event->angleDelta().y() / 120;
 
@@ -831,7 +841,7 @@ void bssh_terminal_view::wheelEvent(QWheelEvent *event) {
 		qint64 line = 0;
 		int col = 0;
 		if (notches != 0 && cell_at(event->position().toPoint(), line, col)) {
-			m_emulator->send_mouse_move(screen_row_for_line(line), col, 0);
+			m_emulator->send_mouse_move(screen_row_for_line(line), col, report_modifiers(event->modifiers()));
 
 			/*
 			 * One report per notch, and PRESS only: a wheel has no
@@ -840,7 +850,7 @@ void bssh_terminal_view::wheelEvent(QWheelEvent *event) {
 			 */
 			const int button = notches > 0 ? 4 : 5;
 			for (int i = 0; i < qAbs(notches); ++i) {
-				m_emulator->send_mouse_button(button, true, 0);
+				m_emulator->send_mouse_button(button, true, report_modifiers(event->modifiers()));
 			}
 		}
 		event->accept();
@@ -3288,8 +3298,9 @@ void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 			const int button = event->button() == Qt::RightButton ? 3
 			                    : event->button() == Qt::MiddleButton ? 2 : 1;
 
-			m_emulator->send_mouse_move(screen_row_for_line(line), col, 0);
-			m_emulator->send_mouse_button(button, true, 0);
+			const quint8 modifiers = report_modifiers(event->modifiers());
+			m_emulator->send_mouse_move(screen_row_for_line(line), col, modifiers);
+			m_emulator->send_mouse_button(button, true, modifiers);
 
 			/* The release is the press's business -- see below. */
 			m_reported_button = button;
@@ -3438,6 +3449,25 @@ void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 }
 
 void bssh_terminal_view::mouseMoveEvent(QMouseEvent *event) {
+	/*
+	 * A button the remote was told about is the remote's until it comes
+	 * up, so the drag is too: tmux's pane borders and vim's selection are
+	 * this. With no button held only mode 1003 asks, under the rule a press
+	 * goes by. libvterm says nothing for a cell the pointer has not left,
+	 * or for a mode that did not ask.
+	 */
+	const bool hover = !event->buttons() && m_emulator && m_emulator->mouse_wants_motion()
+	                   && m_input_mode == BSSH_INPUT_CLICK && !event->modifiers().testFlag(Qt::ShiftModifier);
+	if (m_emulator && (m_reported_button != 0 || hover)) {
+		qint64 line = 0;
+		int col = 0;
+		if (cell_at(event->pos(), line, col)) {
+			m_emulator->send_mouse_move(screen_row_for_line(line), col, report_modifiers(event->modifiers()));
+		}
+		event->accept();
+		return;
+	}
+
 	/*
 	 * Moving a handle moves ONE end and leaves the other where it is,
 	 * which is what a handle means -- dragging the start up must not
@@ -3642,7 +3672,7 @@ void bssh_terminal_view::mouseReleaseEvent(QMouseEvent *event) {
 	 * first, which is what stops the bit being stranded.
 	 */
 	if (m_reported_button != 0) {
-		if (m_emulator) m_emulator->send_mouse_button(m_reported_button, false, 0);
+		if (m_emulator) m_emulator->send_mouse_button(m_reported_button, false, report_modifiers(event->modifiers()));
 		m_reported_button = 0;
 		event->accept();
 		return;
