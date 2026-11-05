@@ -81,6 +81,20 @@ for patch in "$@"; do
 		echo "  $patch: already applied"
 		continue
 	fi
-	git -C "$tree" apply "$patch"
+	# Not seeing any repository above the tree. A tree unpacked inside
+	# another git repository -- a home directory under git, say -- is a
+	# subdirectory of that one, where `git apply` reads a git-format
+	# patch's paths from ITS root, finds them outside the current
+	# directory, skips them and exits 0.
+	(cd "$tree" && GIT_CEILING_DIRECTORIES=$(dirname "$(pwd -P)") git apply "$patch")
 	echo "  $patch: applied"
 done
+
+# And the tree has to be what the series says it is, whatever git said:
+# that skip printed "applied" for every patch and left a half-patched
+# source to fail in the compiler, naming a struct member.
+if ! matches "$pristine"; then
+	echo "  $tree is not what the series produces, though every patch" >&2
+	echo "  reported success. Nothing was built from it." >&2
+	exit 1
+fi
