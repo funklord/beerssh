@@ -57,6 +57,14 @@ QMAKE_CXXFLAGS_RELEASE += -fno-strict-aliasing
 QMAKE_CFLAGS_RELEASE   -= -O2
 QMAKE_CFLAGS_RELEASE   += -Os
 
+# Unused code goes at the link: `-Os` works a function at a time, and without
+# sections the linker keeps every object on the line whole, so libssh's
+# server half would ride along in the client. Nothing here is reached only
+# by name or by section; the suite runs against the same flags.
+QMAKE_CFLAGS_RELEASE   += -ffunction-sections -fdata-sections
+QMAKE_CXXFLAGS_RELEASE += -ffunction-sections -fdata-sections
+QMAKE_LFLAGS_RELEASE   += -Wl,--gc-sections
+
 INCLUDEPATH += $$PWD/src $$PWD
 
 SOURCES += \

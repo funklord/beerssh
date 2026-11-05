@@ -292,7 +292,7 @@ VTERM_STAMP = $(VTERM_BUILD_DIR)/.patched
 
 # -w: this is third-party code built to someone else's warning standard, and
 # a wall of warnings nobody will act on is a wall that hides ours.
-VTERM_CFLAGS = -std=c99 -Os -w -I$(VTERM_DIR)/include -I$(VTERM_DIR)/src
+VTERM_CFLAGS = -std=c99 -Os -ffunction-sections -fdata-sections -w -I$(VTERM_DIR)/include -I$(VTERM_DIR)/src
 
 # --- vendored libvterm, cross-compiled ------------------------------------
 # The host archive cannot be reused: it is x86_64, and the first Android
@@ -485,6 +485,7 @@ $(LIBSSH_LIB): $(LIBSSH_STAMP) FORCE
 			-DCMAKE_INSTALL_PREFIX="$(CURDIR)/$(LIBSSH_PREFIX)" \
 			-DCMAKE_INSTALL_LIBDIR=lib \
 			-DCMAKE_BUILD_TYPE=MinSizeRel \
+			-DCMAKE_C_FLAGS="-ffunction-sections -fdata-sections" \
 			-DCMAKE_POSITION_INDEPENDENT_CODE=ON \
 			-DBUILD_SHARED_LIBS=OFF \
 			-DWITH_EXAMPLES=OFF \

@@ -30,6 +30,11 @@ QMAKE_CXXFLAGS_RELEASE += -fno-strict-aliasing
 QMAKE_CFLAGS_RELEASE   -= -O2
 QMAKE_CFLAGS_RELEASE   += -Os
 
+# The app's unused-code flags, so the suite runs against what they keep.
+QMAKE_CFLAGS_RELEASE   += -ffunction-sections -fdata-sections
+QMAKE_CXXFLAGS_RELEASE += -ffunction-sections -fdata-sections
+QMAKE_LFLAGS_RELEASE   += -Wl,--gc-sections
+
 # Same define as the app's, and passed in the same way by the top-level
 # Makefile. The emulator answers XTVERSION with the program's own name and
 # version (sec 7.1), so this file has to carry it or that source will not

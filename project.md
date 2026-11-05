@@ -6278,18 +6278,16 @@ takes the same 49x40 to 120x2 and back and keeps the line, so the
 emulator is not what lost it; Android's shell, told of two size changes,
 did not redraw its prompt. Recorded as the shell's, cause unconfirmed.
 
-**Steps 2 and 3 seen on an emulator, for a stacked pair, 2026-11-05.** API 36
-at 1080x2400, `--es store_view split`, keyboard up: two panes stacked upright;
-turned sideways, where a stack has no height, one pane, the other session kept
-as a tab; turned back, both panes again in their places, no crash. **The
-side-by-side pair is still undriven.** It is unit-tested against
-`bssh_layout_manager`; two tries with the store view changed by hand to
-`EDGE_RIGHT` opened on the host list rather than on panes, the second under a
-System UI ANR on a loaded machine, and why was not established. A
-phone held upright keeps a stack rather than going to tabs, which is the
-column arrangement `max_panes()` allows and this section's "tabs" predates.
-**Seen in passing and not chased:** a store view opened already sideways, with
-the keyboard down, gave the first pane about 60 px.
+**Steps 2 and 3 seen on an emulator, 2026-11-05.** API 36 at 1080x2400. A
+phone's split is a scrolling column, not a side-by-side pair: "Split Beside
+Current" on two real local shells, held sideways, stacks them with a scrollbar,
+and turning the phone upright and back kept both alive with no crash. The
+store view's stacked pair, keyboard up, went to one pane sideways and came back
+whole upright. A phone held upright keeps its stack rather than going to tabs,
+which is the column arrangement `max_panes()` allows and this section's "tabs"
+predates. **Side-by-side panes are a tablet's and a desktop's**, unit-tested
+against `bssh_layout_manager` and not driven on a device; a store view changed
+by hand to `EDGE_RIGHT` opened on the host list, and why was not established.
 
 **The 1886 ms frame that same run logged is not this section's**, and that is
 measured rather than assumed. The device reported `Skipped 92 frames` and a
@@ -16583,6 +16581,17 @@ Folded at 97 per cent of the weekly window; what the next session picks up.
   across a full `make deb`.
 
 ### 12.4 CI
+
+**Unused code goes at the link, since 2026-11-05** (the holder's size rule):
+`-ffunction-sections -fdata-sections` and `-Wl,--gc-sections` in both programs,
+the suite, libvterm and libssh. Text, before and after: `beerssh` 2,380,077 to
+2,265,073 (4.8%); `beersshd` 426,691 to 300,693 (29.5%), libssh's client half
+and the Qt it does not use. **Android gains almost nothing**, 4.8 kB of a 12.5 MB
+`.so`: Qt's Android mkspec and the NDK's toolchain file already do this, so
+`build-deps-android.sh` is left alone. Nothing here is reached only by name or
+section; the suite ran against the collected test program, 945 passing, and
+`make check-windows` against the collected app.
+
 
 **The `linux` job was red from before 2026-11-01 to 2026-11-05, and nobody
 looked.** Every run failed on the same three tests while the local suite

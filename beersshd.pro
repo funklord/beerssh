@@ -23,6 +23,11 @@ QMAKE_CXXFLAGS_RELEASE += -Os
 # Strict aliasing off, for Qt 6.8's headers, as beerssh.pro explains.
 QMAKE_CXXFLAGS_RELEASE += -fno-strict-aliasing
 
+# Unused code goes at the link, as beerssh.pro explains.
+QMAKE_CFLAGS_RELEASE   += -ffunction-sections -fdata-sections
+QMAKE_CXXFLAGS_RELEASE += -ffunction-sections -fdata-sections
+QMAKE_LFLAGS_RELEASE   += -Wl,--gc-sections
+
 INCLUDEPATH += $$PWD/src
 
 SOURCES += \
