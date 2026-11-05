@@ -393,8 +393,10 @@ Or with [fmake](../fmake), which needs no build file and nothing beyond the
 Python standard library:
 
 ```sh
-python3 ~/src/fmake/fmake   # ./beerssh, same sources
+make && python3 ~/src/fmake/fmake   # ./beerssh, same sources
 ```
+
+`make` first, for the patched libvterm and libssh it builds and fmake links.
 
 **Not `/usr/bin/fmake`.** The packaged one predates `$file()` and leaves the
 reference in the value as text, so the build succeeds and the binary

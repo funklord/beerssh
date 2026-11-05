@@ -463,13 +463,15 @@ $(LIBSSH_STAMP): $(LIBSSH_PATCHES)
 	@sh tool/apply-patches.sh $(LIBSSH_DIR) $(addprefix $(CURDIR)/,$(LIBSSH_PATCHES))
 	@touch $@
 
-# FORCE, because only cmake knows whether its sources moved; an unchanged
-# tree is a no-op build, and `cmake --install` leaves an unchanged archive
-# alone, so nothing downstream relinks for nothing. -Os per
+# Its sources are named rather than FORCE'd, so a second make writes nothing:
+# FORCE ran cmake every time, and a no-op cmake still rewrites its logs and
+# install_manifest.txt. Touched at the end because a rebuild that changes
+# nothing leaves the archive older than the source that asked for it. -Os per
 # build-and-commit.md (MinSizeRel). The options match
 # tool/build-deps-android.sh's: static, with the server half beersshd
 # needs, without examples or tests.
-$(LIBSSH_LIB): $(LIBSSH_STAMP) FORCE
+LIBSSH_SOURCES = $(shell find $(LIBSSH_DIR) -path $(LIBSSH_DIR)/.git -prune -o -type f \( -name '*.c' -o -name '*.h' -o -name 'CMakeLists.txt' -o -name '*.cmake' \) -print 2>/dev/null)
+$(LIBSSH_LIB): $(LIBSSH_STAMP) $(LIBSSH_SOURCES)
 	@mkdir -p $(LIBSSH_BUILD_DIR)
 	@if [ ! -f $(LIBSSH_BUILD_DIR)/build/CMakeCache.txt ]; then \
 		cmake -S $(LIBSSH_DIR) -B $(LIBSSH_BUILD_DIR)/build \
@@ -494,6 +496,7 @@ $(LIBSSH_LIB): $(LIBSSH_STAMP) FORCE
 	@# instead of build-libssh/prefix, where the link looks for it.
 	@env -u DESTDIR cmake --install $(LIBSSH_BUILD_DIR)/build > $(LIBSSH_BUILD_DIR)/install.log 2>&1 \
 		|| { cat $(LIBSSH_BUILD_DIR)/install.log >&2; exit 1; }
+	@touch $@
 
 ifdef DEBUG
     QMAKE_CONFIG = CONFIG+=debug CONFIG-=release

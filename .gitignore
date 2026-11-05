@@ -33,6 +33,10 @@ android/assets/terminfo/
 # The built binary, copied out of build/ by `make`
 /beerssh
 /beersshd
+# fmake names a program for its directory: tool/handoff's three.
+/authenticated
+/plaintext
+/migrate
 
 # Python bytecode from tool/
 __pycache__/

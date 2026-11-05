@@ -10,8 +10,11 @@
 # test program to write its rules -- stops inside Qt's qstringliteral.h
 # with `expected primary-expression before '(' token', the same shape
 # BSSH_VERSION_STRING had before the line above carried it.
+#
+# LIBSSH_STATIC with the two lines below it: see libssh's.
 defines = ['BSSH_VERSION_STRING="$file(VERSION)"',
-           'BSSH_TEST_FONT_DIR="$root/fonts"']
+           'BSSH_TEST_FONT_DIR="$root/fonts"',
+           'LIBSSH_STATIC']
 
 # What the Makefile's test target already sets. Without it the test program
 # builds and then aborts for want of a display, which reads as a broken
@@ -22,11 +25,23 @@ test-env = ["QT_QPA_PLATFORM=offscreen"]
 # INCLUDEPATH; without it src/term/emulator_vterm.cpp does not compile and
 # every bssh_emulator method is missing at the link. softkeys/include for
 # the same reason: the keyboard's headers are "softkeys/keyboard.h".
-include-dirs = ["vterm/include", "softkeys/include"]
+#
+# And the vendored libssh, as libssh.pri has it, which `make` builds and
+# fmake does not: the system's has no ssh_session_export_transport and the
+# rest of libssh-patch/, so src/ssh and tool/handoff fail against it. First,
+# so that its headers win over /usr/include. The -L does the same for the
+# link: the prefix holds only the archive, so -lssh finds it before the
+# system's, and crypto and z are what an archive cannot bring with it.
+include-dirs = ["build-libssh/prefix/include", "vterm/include", "softkeys/include"]
+ldflags = ["-Lbuild-libssh/prefix/lib"]
+libs = ["ssh", "crypto", "z"]
 
 # Android-only translation units. qmake scopes them out with `android { }`;
 # on a desktop build they reach for QJniEnvironment, which is not there.
 exclude = [
+  # libssh's sources, which its own cmake build compiles (Makefile); read
+  # as this tree's, they stop on the config.h that build writes.
+  "libssh",
   # softkeys' own test program, a second main() that is not BeerSSH's.
   "softkeys/test",
   "src/platform/secret_store_keystore.cpp",
