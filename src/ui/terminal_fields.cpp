@@ -39,6 +39,13 @@ QJsonValue normalised(const QString &key, const QJsonValue &value) {
 bssh_terminal_fields::bssh_terminal_fields(QWidget *parent) : QWidget(parent) {
 	m_form = new QFormLayout(this);
 	m_form->setContentsMargins(0, 0, 0, 0);
+
+	/*
+	 * As every other form here: with rows that cannot wrap, a label and
+	 * its field set the width of whatever embeds this, and in a wider
+	 * font that was a phone's settings page scrolling sideways.
+	 */
+	m_form->setRowWrapPolicy(QFormLayout::WrapLongRows);
 	m_form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
 
 	m_term = new QLineEdit(this);
