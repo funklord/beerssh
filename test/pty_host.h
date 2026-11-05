@@ -51,6 +51,11 @@ static unsigned checksum_of(const bssh_screen &screen, const QList<int> &request
 		for (int x = qMax(left, 1); x <= qMin(right, screen.cols()); x++) {
 			const bssh_cell_t &cell = screen.cell(y - 1, x - 1);
 			if (!(cell.attrs & bssh_cell_t::UNWRITTEN)) sum += cell.ch;
+			/* xterm's own weights for the VT100 attributes. */
+			if (cell.attrs & bssh_cell_t::UNDERLINE) sum += 0x10;
+			if (cell.attrs & bssh_cell_t::INVERSE) sum += 0x20;
+			if (cell.attrs & bssh_cell_t::BLINK) sum += 0x40;
+			if (cell.attrs & bssh_cell_t::BOLD) sum += 0x80;
 		}
 	}
 	return sum;

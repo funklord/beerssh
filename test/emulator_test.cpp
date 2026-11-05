@@ -105,6 +105,17 @@ void emulator_test::a_soft_reset_keeps_the_alternate_screen() {
 	QVERIFY(!emulator.alternate_screen());
 }
 
+/* A program's bare ESC 8 must not hide the cursor or bring back old colours. */
+void emulator_test::decrc_with_nothing_saved_is_a_clean_cursor() {
+	bssh_emulator fresh(20, 8);
+	fresh.feed(QByteArrayLiteral("\x1b" "8"));
+	QVERIFY(fresh.screen().cursor_visible());
+
+	bssh_emulator reset(20, 8);
+	reset.feed(QByteArrayLiteral("\x1b[1m\x1b" "7\x1b" "c\x1b" "8x"));
+	QVERIFY(!(reset.screen().cell(0, 0).attrs & bssh_cell_t::BOLD));
+}
+
 void emulator_test::plain_text_lands_on_the_first_row() {
 	bssh_emulator emulator(20, 5);
 	emulator.feed(QByteArrayLiteral("hello"));

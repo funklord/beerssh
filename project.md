@@ -4849,10 +4849,11 @@ it is for selection.
 **`make check-xterm`, 2026-11-05.** `tool/check-xterm.py` sends the same
 random sequences to a real xterm on Xvfb and to `bssh_emulator` on a pty
 (`test/pty_host.h`), reads back every cell with DECRQCRA and the cursor with
-CPR, and shrinks a difference to the shortest sequence that shows it. Six op
-sets, up to 2000 sequences each. It exits non-zero only for `base` and
-`modes`, which must have no differences; neither has since
-`vterm-patch/0022`, which the first 2000 sequences of `base` alone showed 61
+CPR, and shrinks a difference to the shortest sequence that shows it. Seven op
+sets, up to 2000 sequences each; the checksum carries bold, underline, blink
+and inverse as well as the character. It exits non-zero only for `sgr`, `base`
+and `modes`, which must have no differences; none has since
+`vterm-patch/0022` and `0023`, which the first 2000 sequences of `base` alone showed 61
 distinct ways of needing. esctest was the first choice and could not be run
 from a clone here; the same idea written against the installed xterm needs
 nothing downloaded and compares more, since esctest only knows what its
@@ -17617,8 +17618,9 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
   `--term-features=?` had already set the shape. See §8.6.
 
 - **Where the 2026-11-03/04 session stopped (folded at 97 per cent).**
-  Waiting on the phone: the Fold has not been on adb (`lsusb` showed no
-  Samsung device on 2026-11-04). On it, run beersshd's arm64 build
+  Waiting on the phone. On 2026-11-05 it was on Wi-Fi adb, locked and in
+  use, so only read: BeerSSH's service there was `types=0x10`. What follows
+  needs it unlocked, a tap and a reboot, so it needs the holder. On it, run beersshd's arm64 build
   (`make android-sshd ANDROID_ABI=arm64-v8a`, built): `dumpsys activity
   services` should say `types=0x10`; with the dataSync limit at 60 s
   (`device_config set_sync_disabled_for_tests until_reboot` FIRST, then

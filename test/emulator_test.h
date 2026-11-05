@@ -22,6 +22,7 @@ private slots:
 	void a_position_report_is_relative_in_origin_mode();
 	void mode_47_is_the_alternate_screen();
 	void a_soft_reset_keeps_the_alternate_screen();
+	void decrc_with_nothing_saved_is_a_clean_cursor();
 	void a_terminal_moves_whole_into_another_emulator();
 	void a_moved_terminal_refuses_what_it_cannot_take();
 	void the_kitty_query_reports_only_the_flags_in_force();

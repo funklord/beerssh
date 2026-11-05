@@ -56,3 +56,19 @@ file = "src/term/emulator_vterm.cpp"
 find = "\tif (alternate_screen()) vterm_input_write(m_private->vt, \"\\x1b[?1049l\", 8);\n"
 replace = ""
 expect = "a_reconnect_hands_the_new_shell_a_clean_terminal"
+
+# DECRC with nothing saved restores zeros again.
+[[sabotage]]
+name = "a bare DECRC hides the cursor"
+file = "vterm/src/state.c"
+find = "  state->saved.mode.cursor_visible = 1;\n"
+replace = ""
+expect = "decrc_with_nothing_saved_is_a_clean_cursor"
+
+# And the pen from before a reset.
+[[sabotage]]
+name = "a bare DECRC brings back the old pen"
+file = "vterm/src/state.c"
+find = "  state->saved.pen = state->pen;\n"
+replace = ""
+expect = "decrc_with_nothing_saved_is_a_clean_cursor"

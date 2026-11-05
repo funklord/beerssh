@@ -1,0 +1,44 @@
+Give DECRC something to restore after a reset
+
+Found by comparing attributes with xterm as well as characters. With
+nothing saved DECRC restored whatever the saved slot held: the pen from
+before a reset, and on a new terminal zeros, which hide the cursor. Set
+the slots from the state the reset leaves. And DECALN's pattern takes no
+attributes from the pen.
+
+--- a/src/state.c
++++ b/src/state.c
+@@ -721,9 +721,15 @@
+       {
+         VTermPos pos;
+         uint32_t E[] = { 'E', 0 };
++        /* The test pattern has no attributes, whatever the pen says. */
++        struct VTermPen kept = state->saved.pen;
++        vterm_state_savepen(state, 1);
++        vterm_state_resetpen(state);
+         for(pos.row = 0; pos.row < state->rows; pos.row++)
+           for(pos.col = 0; pos.col < ROWWIDTH(state, pos.row); pos.col++)
+             putglyph(state, E, 1, pos);
++        vterm_state_savepen(state, 0);
++        state->saved.pen = kept;
+         /* DEC STD 070, and xterm: the margins go and the cursor goes home. */
+         state->scrollregion_top = 0;
+         state->scrollregion_bottom = -1;
+@@ -2397,6 +2403,17 @@
+   settermprop_bool(state, VTERM_PROP_CURSORBLINK,   1);
+   settermprop_int (state, VTERM_PROP_CURSORSHAPE,   VTERM_PROP_CURSORSHAPE_BLOCK);
+ 
++  /* What DECRC gives with nothing saved. Left as it was, that was an old
++   * pen after a reset and, on a new terminal, a hidden cursor. */
++  state->saved.pen = state->pen;
++  state->saved.mode.cursor_visible = 1;
++  state->saved.mode.cursor_blink = 1;
++  state->saved.mode.cursor_shape = VTERM_PROP_CURSORSHAPE_BLOCK;
++  state->saved_primary.pen = state->saved.pen;
++  state->saved_primary.mode.cursor_visible = 1;
++  state->saved_primary.mode.cursor_blink = 1;
++  state->saved_primary.mode.cursor_shape = VTERM_PROP_CURSORSHAPE_BLOCK;
++
+   if(hard) {
+     state->pos.row = 0;
+     state->pos.col = 0;

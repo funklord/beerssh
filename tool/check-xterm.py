@@ -41,7 +41,8 @@ WIDE={'wide':lambda r:''.join(r.choice('日本語') for _ in range(r.randint(1,C
       'mix':lambda r:r.choice(['a日b','日a','ab本'])}
 CHARSET={'g0':lambda r:'\x1b('+r.choice('0B'),'g1':lambda r:'\x1b)'+r.choice('0B'),'so':lambda r:'\x0e','si':lambda r:'\x0f',
 	'gl':lambda r:'lqkx`a','ls2':lambda r:'\x1bn','ls3':lambda r:'\x1bo','g2':lambda r:'\x1b*0','g3':lambda r:'\x1b+0','ss2':lambda r:'\x1bNq','ss3':lambda r:'\x1bOq'}
-SETS={'base':BASE,'modes':{**BASE,**MODES},'lr':{**BASE,**MODES,**LR},'alt':{**BASE,**MODES,**ALT},'wide':{**BASE,**MODES,**WIDE},'charset':{**BASE,**CHARSET}}
+SGR={'sgr':lambda r:CSI+r.choice(['0','1','4','5','7','22','24','25','27','1;4','7;5',''])+'m'}
+SETS={'sgr':{**BASE,**MODES,**SGR},'base':BASE,'modes':{**BASE,**MODES},'lr':{**BASE,**MODES,**LR},'alt':{**BASE,**MODES,**ALT},'wide':{**BASE,**MODES,**WIDE},'charset':{**BASE,**CHARSET}}
 
 BRIDGE = """
 import os, select, socket, sys, tty
@@ -107,7 +108,7 @@ def minimise(terms,ops):
 		k//=2
 	return cur
 TIME_LIMIT = 60
-MUST_BE_CLEAN = ('base', 'modes')
+MUST_BE_CLEAN = ('sgr', 'base', 'modes')
 
 def run_set(which, seed, terms):
 	found = {}
@@ -142,10 +143,10 @@ def main():
 		env = dict(os.environ, LC_ALL='C.UTF-8', DISPLAY=display, TERM='xterm-256color',
 		           QT_QPA_PLATFORM='offscreen', BSSH_TEST_PTY_HOST='%dx%d' % (COLS, ROWS))
 		terms.append(term('xterm', ['xterm', '-u8', '-ti', 'vt420', '-tn', 'xterm-256color', '-geometry', '%dx%d' % (COLS, ROWS),
-		                            '-sl', '0', '-xrm', 'XTerm*checksumExtension: 55', '-xrm', 'XTerm*allowWindowOps: true',
+		                            '-sl', '0', '-xrm', 'XTerm*checksumExtension: 53', '-xrm', 'XTerm*allowWindowOps: true',
 		                            '-xrm', 'XTerm*decTerminalID: 420', '-e'], env))
 		terms.append(term('bssh', [os.path.join(root, 'build-tests', 'beerssh_test')], env))
-		for which in SETS:
+		for which in (sys.argv[2:] or SETS):
 			count = run_set(which, seed, terms)
 			if which in MUST_BE_CLEAN:
 				failed += count
