@@ -16,6 +16,12 @@ class emulator_test : public QObject {
 	Q_OBJECT
 
 private slots:
+	void the_cursor_lands_where_xterm_puts_it_data();
+	void the_cursor_lands_where_xterm_puts_it();
+	void each_screen_keeps_its_own_saved_cursor();
+	void a_position_report_is_relative_in_origin_mode();
+	void mode_47_is_the_alternate_screen();
+	void a_soft_reset_keeps_the_alternate_screen();
 	void a_terminal_moves_whole_into_another_emulator();
 	void a_moved_terminal_refuses_what_it_cannot_take();
 	void the_kitty_query_reports_only_the_flags_in_force();

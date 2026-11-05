@@ -5,6 +5,8 @@
 #include <QThread>
 #include <QtTest>
 
+#include "pty_host.h"
+
 #include <signal.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -370,6 +372,10 @@ int main(int argc, char *argv[]) {
 
 	bssh_drop_theme_when_offscreen();
 	QApplication app(argc, argv);
+
+	if (qEnvironmentVariableIsSet("BSSH_TEST_PTY_HOST")) {
+		return run_pty_host(qgetenv("BSSH_TEST_PTY_HOST"), argv + 1);
+	}
 
 	if (qEnvironmentVariableIsSet("BSSH_TEST_STORE_WRITER")) {
 		return run_store_writer(qEnvironmentVariable("BSSH_TEST_STORE_WRITER"));

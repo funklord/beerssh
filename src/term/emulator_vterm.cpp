@@ -2648,15 +2648,16 @@ void bssh_emulator::reset_modes() {
 	 * erases the screen, which is exactly the history a reconnect exists
 	 * to keep (sec 5.3).
 	 *
-	 * Everything else is libvterm's now. This used to feed CSI ? 1049 l
-	 * first, because vterm_state_reset() cleared mode.alt_screen by
-	 * assignment and the screen layer was never told -- and it used to
-	 * clear our own mouse, kitty and modifyOtherKeys shadows by hand,
-	 * because nothing announced the reset. vterm-patch/0005 makes the
-	 * reset announce what it clears, so both halves arrive through
-	 * on_set_term_prop and the remote's own RIS or DECSTR is handled by
-	 * the same code as this call. One path, and the workaround is gone.
+	 * What was cleared in silence is libvterm's now: vterm-patch/0005 makes
+	 * the reset announce it, so the mouse, kitty and modifyOtherKeys
+	 * shadows clear through on_set_term_prop and the remote's own RIS or
+	 * DECSTR is handled by the same code as this call.
+	 *
+	 * The alternate screen is left first, by hand. A soft reset keeps it
+	 * (vterm-patch/0022, as xterm does: a program that sends DECSTR goes on
+	 * drawing there), and a new shell after a reconnect is not that program.
 	 */
+	if (alternate_screen()) vterm_input_write(m_private->vt, "\x1b[?1049l", 8);
 	vterm_screen_reset(m_private->vts, 0);
 
 	/*

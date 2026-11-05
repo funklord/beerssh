@@ -1,0 +1,58 @@
+# Sabotages for vterm-patch/0022 (project.md sec 7): each behaviour tool/check-xterm.py
+# found, put back the way libvterm had it.
+
+# Motion runs through a margin the cursor has not passed.
+[[sabotage]]
+name = "CUD ignores the bottom margin"
+file = "vterm/src/state.c"
+find = "  const int limit = state->pos.row > bottom ? state->rows - 1 : bottom;\n"
+replace = "  const int limit = state->rows - 1;\n"
+expect = "the_cursor_lands_where_xterm_puts_it"
+
+# One saved cursor for both screens again.
+[[sabotage]]
+name = "the screens share a saved cursor"
+file = "vterm/src/state.c"
+find = "  state->saved = state->saved_primary;\n  state->saved_primary = other;\n"
+replace = "  (void)other;\n"
+expect = "each_screen_keeps_its_own_saved_cursor"
+
+# CSI s is DECSLRM whatever the mode, so it goes home.
+[[sabotage]]
+name = "CSI s goes home"
+file = "vterm/src/state.c"
+find = "    if(!state->mode.leftrightmargin) {\n      savecursor(state, 1);\n      break;\n    }\n"
+replace = ""
+expect = "the_cursor_lands_where_xterm_puts_it"
+
+# ICH and DCH give up above the margin.
+[[sabotage]]
+name = "DCH needs the vertical margins"
+file = "vterm/src/state.c"
+find = "  return state->pos.col >= SCROLLREGION_LEFT(state) &&\n         state->pos.col < SCROLLREGION_RIGHT(state);\n"
+replace = "  return state->pos.row >= state->scrollregion_top && state->pos.row < SCROLLREGION_BOTTOM(state);\n"
+expect = "the_cursor_lands_where_xterm_puts_it"
+
+# Half a wide glyph stays behind.
+[[sabotage]]
+name = "a split wide glyph is left"
+file = "vterm/src/screen.c"
+find = "  clear_split_glyph(screen, pos.row, pos.col);\n"
+replace = ""
+expect = "the_cursor_lands_where_xterm_puts_it"
+
+# CPR ignores origin mode.
+[[sabotage]]
+name = "CPR is absolute in origin mode"
+file = "vterm/src/state.c"
+find = "state->pos.row + 1 - (state->mode.origin ? state->scrollregion_top : 0),"
+replace = "state->pos.row + 1,"
+expect = "a_position_report_is_relative_in_origin_mode"
+
+# The reconnect's reset no longer leaves the program's screen.
+[[sabotage]]
+name = "a reconnect stays on the alternate screen"
+file = "src/term/emulator_vterm.cpp"
+find = "\tif (alternate_screen()) vterm_input_write(m_private->vt, \"\\x1b[?1049l\", 8);\n"
+replace = ""
+expect = "a_reconnect_hands_the_new_shell_a_clean_terminal"

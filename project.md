@@ -4844,6 +4844,42 @@ it is for selection.
   the widget. On desktop it should also drive the **window title**; that is a
   platform-layer call, not something the emulator knows about.
 
+### 7.0 Checked against xterm
+
+**`make check-xterm`, 2026-11-05.** `tool/check-xterm.py` sends the same
+random sequences to a real xterm on Xvfb and to `bssh_emulator` on a pty
+(`test/pty_host.h`), reads back every cell with DECRQCRA and the cursor with
+CPR, and shrinks a difference to the shortest sequence that shows it. Six op
+sets, up to 2000 sequences each. It exits non-zero only for `base` and
+`modes`, which must have no differences; neither has since
+`vterm-patch/0022`, which the first 2000 sequences of `base` alone showed 61
+distinct ways of needing. esctest was the first choice and could not be run
+from a clone here; the same idea written against the installed xterm needs
+nothing downloaded and compares more, since esctest only knows what its
+authors wrote down. The app itself does not answer DECRQCRA, deliberately:
+it would let a remote read the screen back, so the harness answers from the
+cells.
+
+What programs meet was the point, and `vterm-patch/0022` lists it. The two
+that reach daily use: a saved cursor shared between screens, so a full-screen
+program's DECSC moved the prompt it returned to, and `CSI s`, which went home
+rather than saving, in every script that uses it.
+
+**Left different, on purpose or for now:**
+
+- `CSI 0 T` is xterm's mouse highlight tracking, a quirk; here it scrolls one.
+- Left and right margins (`lr`): DECBI, DECFI, SL and SR are not implemented,
+  and text wraps to column 0 inside DECLRMM. No program this was written for
+  sets them; a real one using them would make this worth doing.
+- DECSC does not save the character sets (`charset`). Saving them means
+  carrying an encoding pointer through the tear-out dump, which needs its own
+  form there. A program that restores line-drawing with DECRC keeps whatever
+  was selected.
+- A second `?1049h` does not clear the alternate screen, and entering by
+  `?47h` clears it where xterm keeps it (`alt`).
+- A few wide-glyph cases with wrapping switched off while a wrap is pending
+  (`wide`). Guarded by `tool/sabotage/xterm-parity.toml`.
+
 ### 7.1 Modern terminal extensions — **[DECIDED to support, tiered]**
 
 VT100/xterm is the floor, not the target. Terminals have moved a long way

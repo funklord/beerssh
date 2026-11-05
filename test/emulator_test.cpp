@@ -17,6 +17,94 @@ static QString row(const bssh_emulator &emulator, int index) {
 	return emulator.screen().to_text().section(QLatin1Char('\n'), index, index);
 }
 
+/*
+ * One case each from what tool/check-xterm.py found (vterm-patch/0022), on
+ * a 20 by 8 screen: what xterm did with the bytes, cursor and top two rows.
+ */
+void emulator_test::the_cursor_lands_where_xterm_puts_it_data() {
+	QTest::addColumn<QByteArray>("bytes");
+	QTest::addColumn<int>("cursor_row");
+	QTest::addColumn<int>("cursor_col");
+	QTest::addColumn<QString>("first");
+	QTest::addColumn<QString>("second");
+
+	const auto add = [](const char *name, const char *bytes, int r, int c, const char *first, const char *second) {
+		QTest::newRow(name) << QByteArray(bytes) << r << c << QString::fromUtf8(first) << QString::fromUtf8(second);
+	};
+	add("CUD stops at the bottom margin", "\x1b[2;7r\x1b[8B", 6, 0, "", "");
+	add("CUU stops at the top margin", "\x1b[3;7r\x1b[5;1H\x1b[8A", 2, 0, "", "");
+	add("CUD past the margin has the screen", "\x1b[2;3r\x1b[5;1H\x1b[8B", 7, 0, "", "");
+	add("VPR ignores the margin", "\x1b[2;3r\x1b[6e", 6, 0, "", "");
+	add("DCH above the margin", "abcd\x1b[2;7r\x1b[1;1H\x1b[2P", 0, 0, "cd", "");
+	add("ICH above the margin", "abcd\x1b[2;7r\x1b[1;1H\x1b[2@", 0, 0, "  abcd", "");
+	add("CSI s and CSI u", "ab\x1b[scd\x1b[uX", 0, 3, "abXd", "");
+	add("CSI s does not go home", "ab\x1b[s", 0, 2, "ab", "");
+	add("REP wraps", "\t\tab\x1b[8;1H\x1b[1;17Hx\x1b[5b", 1, 2, "                xxxx", "xx");
+	add("IL goes to the left margin", "\x1b[3a\x1b[1L", 0, 0, "", "");
+	add("DL goes to the left margin", "\x1b[3a\x1b[1M", 0, 0, "", "");
+	add("ED 1 takes the first cell", "ab\x1b[H\x1b[1J", 0, 0, " b", "");
+	add("invalid DECSTBM changes nothing", "\x1b[4;5H\x1b[4;1r", 3, 4, "", "");
+	add("a one line region is invalid", "\x1b[4;5H\x1b[5;5r", 3, 4, "", "");
+	add("DECALN goes home", "\x1b[3;3H\x1b#8", 0, 0, "EEEEEEEEEEEEEEEEEEEE", "EEEEEEEEEEEEEEEEEEEE");
+	add("DECRC after RIS goes home", "\x1b[3;3H\x1b7\x1b" "c\x1b" "8", 0, 0, "", "");
+	add("DECRC keeps the pending wrap", "\x1b[1;20Hx\x1b" "7\x1b[H\x1b" "8y", 1, 1, "                   x", "y");
+	add("EL cancels the pending wrap", "\x1b[1;20Hx\x1b[Ky", 0, 19, "                   y", "");
+	add("RI that scrolls cancels the pending wrap", "\x1b[1;20Hx\x1bMy", 0, 19, "                   y", "                   x");
+	add("DECSTR keeps the tab stops", "\x1b[3g\x1b[!p\t", 0, 19, "", "");
+	add("a wide glyph at the edge", "\x1b[1;19H\xe6\x97\xa5", 0, 19, "                  \xe6\x97\xa5", "");
+	add("half a wide glyph goes whole", "\xe6\x97\xa5\x1b[1;2Hx", 0, 2, " x", "");
+	add("wide stays on the line with wrap off", "\x1b[?7l\x1b[1;20H\xe6\x97\xa5", 0, 19, "                  \xe6\x97\xa5", "");
+}
+
+void emulator_test::the_cursor_lands_where_xterm_puts_it() {
+	QFETCH(QByteArray, bytes);
+	QFETCH(int, cursor_row);
+	QFETCH(int, cursor_col);
+	QFETCH(QString, first);
+	QFETCH(QString, second);
+
+	bssh_emulator emulator(20, 8);
+	emulator.feed(bytes);
+
+	QCOMPARE(row(emulator, 0).trimmed(), first.trimmed());
+	QCOMPARE(row(emulator, 1).trimmed(), second.trimmed());
+	QCOMPARE(emulator.screen().cursor_row(), cursor_row);
+	QCOMPARE(emulator.screen().cursor_col(), cursor_col);
+}
+
+/* DECSC in a full-screen program leaves the shell's cursor alone. */
+void emulator_test::each_screen_keeps_its_own_saved_cursor() {
+	bssh_emulator emulator(20, 8);
+	emulator.feed(QByteArrayLiteral("abc\x1b[?1049h\x1b[5;5H\x1b" "7\x1b[?1049l"));
+	QCOMPARE(emulator.screen().cursor_row(), 0);
+	QCOMPARE(emulator.screen().cursor_col(), 3);
+}
+
+/* DSR's answer, which only a program can read: relative in origin mode. */
+void emulator_test::a_position_report_is_relative_in_origin_mode() {
+	bssh_emulator emulator(20, 8);
+	emulator.take_output();
+	emulator.feed(QByteArrayLiteral("\x1b[3;7r\x1b[?6h\x1b[2;2H\x1b[6n"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[2;2R"));
+}
+
+void emulator_test::mode_47_is_the_alternate_screen() {
+	bssh_emulator emulator(20, 8);
+	emulator.feed(QByteArrayLiteral("\x1b[?47h"));
+	QVERIFY(emulator.alternate_screen());
+	emulator.feed(QByteArrayLiteral("\x1b[?47l"));
+	QVERIFY(!emulator.alternate_screen());
+}
+
+/* DECSTR from a program keeps its screen; a reconnect's reset does not. */
+void emulator_test::a_soft_reset_keeps_the_alternate_screen() {
+	bssh_emulator emulator(20, 8);
+	emulator.feed(QByteArrayLiteral("\x1b[?1049h\x1b[!p"));
+	QVERIFY(emulator.alternate_screen());
+	emulator.reset_modes();
+	QVERIFY(!emulator.alternate_screen());
+}
+
 void emulator_test::plain_text_lands_on_the_first_row() {
 	bssh_emulator emulator(20, 5);
 	emulator.feed(QByteArrayLiteral("hello"));
