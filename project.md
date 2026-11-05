@@ -18044,6 +18044,16 @@ SFTP and nothing else, inside one directory, to the keys in one file.
   nothing, and a long password is still the answer to that.
   `wrong_passwords_wait_longer_and_longer`,
   `guessing_across_connections_stops_a_right_password_too`.
+- **A connection that says nothing no longer holds a slot, since 2026-11-05.**
+  `ssh_handle_key_exchange` comes before the login deadline and had no limit
+  of its own, so a peer that connected and stayed silent held its slot for
+  ever, and four such sockets from anywhere on the network shut everybody
+  out until Stop. The exchange has 30 s (`exchange_seconds`), taken off
+  again after it or it would end an idle SFTP session. And one address may
+  not take the last slot before it has logged in, so the owner has a way in
+  during those 30 s; those logged in do not count, so a backup tool opening
+  four at once still ends up with four.
+  `silent_connections_do_not_hold_the_server`.
 - **Only regular files are opened, since 2026-11-05.** A named pipe in the
   root waited in `open()` for a writer, on a connection's thread that
   neither the client leaving nor Stop could reach, and Stop joins that

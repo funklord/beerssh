@@ -35,13 +35,14 @@ private slots:
 	void wrong_passwords_wait_longer_and_longer();
 	void guessing_across_connections_stops_a_right_password_too();
 	void a_named_pipe_is_refused_and_holds_nothing_up();
+	void silent_connections_do_not_hold_the_server();
 	void a_key_with_options_is_not_honoured_without_them();
 	void sftp_is_all_it_serves();
 	void scp_finishes_with_a_clean_exit();
 	void a_listener_the_system_takes_away_comes_back_without_spinning();
 
 private:
-	bool start_server();
+	bool start_server(long exchange_seconds = 30);
 	int client(const QString &program, const QStringList &args, const QByteArray &input = QByteArray(),
 	           QByteArray *output = nullptr, const QStringList &environment = QStringList());
 	QStringList client_options(const QString &key) const;

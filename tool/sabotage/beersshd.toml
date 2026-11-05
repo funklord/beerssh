@@ -169,3 +169,19 @@ file = "src/sshd/sftp_handler.cpp"
 find = "mode | O_CLOEXEC | O_NONBLOCK, permissions);"
 replace = "mode | O_CLOEXEC, permissions);"
 expect = "a_named_pipe_is_refused_and_holds_nothing_up"
+
+# A peer that says nothing holds its slot for ever.
+[[sabotage]]
+name = "the key exchange has no limit"
+file = "src/sshd/sshd.cpp"
+find = "\tlong seconds = m_config.exchange_seconds;\n"
+replace = "\tlong seconds = 0;\n"
+expect = "silent_connections_do_not_hold_the_server"
+
+# One address fills every slot before logging in.
+[[sabotage]]
+name = "one address can take every slot"
+file = "src/sshd/sshd.cpp"
+find = "\t\tif (waiting >= m_config.max_connections - 1) {\n"
+replace = "\t\tif (false) {\n"
+expect = "silent_connections_do_not_hold_the_server"

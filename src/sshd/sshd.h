@@ -36,6 +36,12 @@ struct bssh_sshd_config_t {
 
 	/* A connection beyond this is closed at once, before key exchange. */
 	int max_connections = 4;
+
+	/*
+	 * How long a client has to finish the key exchange, in seconds.
+	 * Generous for a phone on bad Wi-Fi; see serve().
+	 */
+	long exchange_seconds = 30;
 };
 
 /*

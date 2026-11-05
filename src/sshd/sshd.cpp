@@ -177,7 +177,7 @@ struct bssh_sshd::connection_t {
 	/* Login state, written by libssh's callbacks on the connection's own thread. */
 	QString peer;
 	QString user;
-	bool authenticated = false;
+	std::atomic<bool> authenticated{false};   /* read by accept_loop too */
 	int attempts = 0;
 	int password_attempts = 0;
 	ssh_channel channel = nullptr;
@@ -489,10 +489,32 @@ void bssh_sshd::accept_loop() {
 			continue;
 		}
 
+		/*
+		 * One address may not take the last slot before it has logged
+		 * in, or anybody on the network shuts the owner out for as long
+		 * as a login may take. Those who have logged in count for
+		 * nothing here: a backup tool opening four at once ends up with
+		 * four, the last as soon as an earlier one is in.
+		 */
+		const QString peer = peer_of(session);
+		int waiting = 0;
+		{
+			std::lock_guard<std::mutex> lock(m_mutex);
+			for (const std::unique_ptr<connection_t> &other : m_connections) {
+				if (!other->done && !other->authenticated && other->peer == peer) ++waiting;
+			}
+		}
+		if (waiting >= m_config.max_connections - 1) {
+			emit logged(QStringLiteral("%1: refused, too many logins waiting").arg(peer));
+			ssh_disconnect(session);
+			ssh_free(session);
+			continue;
+		}
+
 		auto connection = std::make_unique<connection_t>();
 		connection->owner = this;
 		connection->session = session;
-		connection->peer = peer_of(session);
+		connection->peer = peer;
 		connection_t *raw = connection.get();
 
 		emit connections_changed(++m_live);
@@ -526,7 +548,19 @@ void bssh_sshd::serve(connection_t *connection) {
 	connection->channel_callbacks.channel_subsystem_request_function = on_subsystem;
 	ssh_callbacks_init(&connection->channel_callbacks);
 
-	if (ssh_handle_key_exchange(session) == SSH_OK) {
+	/*
+	 * A limit on the exchange, which is before LOGIN_DEADLINE below and
+	 * had none: a peer that connected and said nothing held its slot for
+	 * ever, and four such sockets were every slot there is. Taken off
+	 * again after, or it would end an SFTP session sitting idle.
+	 */
+	long seconds = m_config.exchange_seconds;
+	ssh_options_set(session, SSH_OPTIONS_TIMEOUT, &seconds);
+	const bool exchanged = ssh_handle_key_exchange(session) == SSH_OK;
+	seconds = 0;
+	ssh_options_set(session, SSH_OPTIONS_TIMEOUT, &seconds);
+
+	if (exchanged) {
 		/*
 		 * Login and the request for SFTP, under a deadline: a connection
 		 * that never authenticates must not hold one of the few slots for

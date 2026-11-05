@@ -135,7 +135,7 @@ void sshd_test::the_root_itself_is_never_removed_or_replaced() {
 	QCOMPARE(root.client_view(root.existing("/").real), QByteArray("/"));
 }
 
-bool sshd_test::start_server() {
+bool sshd_test::start_server(long exchange_seconds) {
 	if (!have_openssh()) return false;
 
 	const QString key = m_config + QStringLiteral("/client");
@@ -152,6 +152,7 @@ bool sshd_test::start_server() {
 	config.password_path = m_config + QStringLiteral("/password");
 	config.bind_address = "127.0.0.1";
 	config.port = 0;
+	config.exchange_seconds = exchange_seconds;
 
 	m_server = std::make_unique<bssh_sshd>();
 	QString error;
@@ -499,6 +500,36 @@ void sshd_test::a_named_pipe_is_refused_and_holds_nothing_up() {
 	if (reader >= 0) ::close(reader);
 
 	QCOMPARE(connections, 0);
+}
+
+/*
+ * A connection that says nothing waited in the key exchange for ever,
+ * before any deadline applied, and four of them were every slot there is:
+ * a server meant to be reachable all the time, shut out by four idle
+ * sockets from anywhere on the network until somebody pressed Stop.
+ */
+void sshd_test::silent_connections_do_not_hold_the_server() {
+	if (!start_server(1)) QSKIP("the OpenSSH client is not installed");
+
+	QList<QTcpSocket *> silent;
+	for (int i = 0; i < 4; ++i) {
+		auto *socket = new QTcpSocket(this);
+		socket->connectToHost(QHostAddress::LocalHost, quint16(m_server->port()));
+		QVERIFY(socket->waitForConnected(2000));
+		silent.append(socket);
+	}
+	QTest::qWait(300);
+
+	/* One address cannot take the last slot. */
+	QVERIFY2(m_server->connections() < 4, "one address took every slot");
+
+	/* Past the exchange's limit, the slots are free again. */
+	QElapsedTimer waited;
+	waited.start();
+	while (m_server->connections() != 0 && waited.elapsed() < 4000) QTest::qWait(50);
+	const int held = m_server->connections();
+	qDeleteAll(silent);
+	QCOMPARE(held, 0);
 }
 
 void sshd_test::a_key_with_options_is_not_honoured_without_them() {
