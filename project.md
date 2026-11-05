@@ -16583,6 +16583,28 @@ Folded at 97 per cent of the weekly window; what the next session picks up.
   across a full `make deb`.
 
 ### 12.4 CI
+
+**The `linux` job was red from before 2026-11-01 to 2026-11-05, and nobody
+looked.** Every run failed on the same three tests while the local suite
+stayed green, because Ubuntu 24.04's Qt is 6.4.2 and this machine's 6.8.
+Reproduced under `ubuntu:24.04` with the build tree bind-mounted from
+`/home` and apt's cache on tmpfs, since `/` had under 4 GB, which is cheaper
+on that disk than `make check-ci`:
+
+- **A session in a new pane never heard its size, on Qt 6.4 alone.** This is
+  a defect users of that Qt had: `add_pane_view` adds the frame before it
+  connects `grid_resized`, and Qt 6.4's splitter lays the view out there and
+  then, so the one signal went to nobody and the session stayed 80x24 in a
+  pane of 47. Later Qts lay out afterwards. The session is told once wired.
+- **`bssh_terminal_fields` could not wrap its rows**, unlike every other
+  form here, so a wider face pushed a phone's settings page past its width.
+  `WrapLongRows`, as the siblings have.
+- **`a_typed_command_survives_resizing_under_a_real_shell` assumed TERM**,
+  which a runner does not have. The test names one, as the app does.
+
+Neither source fix can fail on this machine's Qt, so no sabotage spec guards
+them here; the 24.04 job is what does, and it only guards anything if it is
+read. **Look at `gh run list` after pushing.**
 - **[DECIDED 2026-10-22] `check-ci` is kept and no longer run as a gate.**
   The repository went public that day, so GitHub Actions is free again and
   the `build` workflow was switched back on (`gh workflow enable build`):

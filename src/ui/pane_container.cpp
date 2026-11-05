@@ -365,6 +365,18 @@ bssh_terminal_view *bssh_pane_container::add_pane_view(bssh_session *session,
 	});
 
 	/*
+	 * And what it missed. Adding the frame above shows the view and, on
+	 * Qt 6.4, lays it out there and then, so its one grid_resized went
+	 * out before this connection existed: the session stayed 80x24 in a
+	 * pane of 47, drawing its first columns and the rest off the edge,
+	 * until the window next changed size. Later Qts lay it out afterwards.
+	 */
+	if (view->isVisible() && view->width() > 0 && view->height() > 0) {
+		session->emulator()->set_cell_pixels(view->cell_width(), view->cell_height());
+		session->resize(view->cols(), view->rows());
+	}
+
+	/*
 	 * sec 8.3's tap-to-focus. Qt moves the KEYBOARD to a clicked
 	 * pane on its own -- the view takes StrongFocus -- and moved
 	 * nothing else, so the focus border, the status line and what
