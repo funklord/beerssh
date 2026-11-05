@@ -6285,9 +6285,12 @@ and turning the phone upright and back kept both alive with no crash. The
 store view's stacked pair, keyboard up, went to one pane sideways and came back
 whole upright. A phone held upright keeps its stack rather than going to tabs,
 which is the column arrangement `max_panes()` allows and this section's "tabs"
-predates. **Side-by-side panes are a tablet's and a desktop's**, unit-tested
-against `bssh_layout_manager` and not driven on a device; a store view changed
-by hand to `EDGE_RIGHT` opened on the host list, and why was not established.
+predates. **Side-by-side panes are a tablet's and a desktop's**, seen too: the same AVD
+made a tablet with `wm size 1600x2560` and `wm density 240`, two real shells
+side by side; narrowed to 533dp upright, as a fold does, a stacked column;
+widened and turned back, side by side again, both sessions alive. (A store view
+changed by hand to `EDGE_RIGHT` opened on the host list, and why was not
+established; no user path goes there.)
 
 **The 1886 ms frame that same run logged is not this section's**, and that is
 measured rather than assumed. The device reported `Skipped 92 frames` and a
@@ -16587,8 +16590,9 @@ Folded at 97 per cent of the weekly window; what the next session picks up.
 the suite, libvterm and libssh. Text, before and after: `beerssh` 2,380,077 to
 2,265,073 (4.8%); `beersshd` 426,691 to 300,693 (29.5%), libssh's client half
 and the Qt it does not use. **Android gains almost nothing**, 4.8 kB of a 12.5 MB
-`.so`: Qt's Android mkspec and the NDK's toolchain file already do this, so
-`build-deps-android.sh` is left alone. Nothing here is reached only by name or
+`.so`, because the `.so` exports its symbols and each export is a root the
+linker keeps, not because anything collected already, as this first said
+(bbq-predictor measured why, 2026-11-05). `build-deps-android.sh` is left alone. Nothing here is reached only by name or
 section; the suite ran against the collected test program, 945 passing, and
 `make check-windows` against the collected app.
 

@@ -438,7 +438,9 @@ libssh-source: $(LIBSSH_STAMP)
 
 # Patching is idempotent -- a patch already in the tree is recognised and
 # left -- and a patch that no longer applies fails here, naming upstream,
-# rather than compiling a libssh without it. The proof that the set still
+# rather than compiling a libssh without it. The script vterm's series uses,
+# which is what checks the tree came out as the series says: `git apply`
+# inside another repository skips what it thinks is outside it and exits 0. The proof that the set still
 # applies from clean is check-ci's, which builds from the gitlink.
 $(LIBSSH_STAMP): $(LIBSSH_PATCHES)
 	@if [ ! -f $(LIBSSH_DIR)/CMakeLists.txt ]; then \
@@ -456,20 +458,7 @@ $(LIBSSH_STAMP): $(LIBSSH_PATCHES)
 	fi
 	@mkdir -p $(@D)
 	@echo "applying $(words $(LIBSSH_PATCHES)) patch(es) to vendored libssh"
-	@for patch in $(LIBSSH_PATCHES); do \
-		if git -C $(LIBSSH_DIR) apply --check "$(CURDIR)/$$patch" 2>/dev/null; then \
-			git -C $(LIBSSH_DIR) apply "$(CURDIR)/$$patch" || exit 1; \
-			echo "  $$patch: applied"; \
-		elif git -C $(LIBSSH_DIR) apply --reverse --check "$(CURDIR)/$$patch" 2>/dev/null; then \
-			echo "  $$patch: already applied"; \
-		else \
-			echo "  $$patch: DOES NOT APPLY, and is not already applied. Either" >&2; \
-			echo "  upstream changed under it -- rebase the patch -- or the submodule" >&2; \
-			echo "  was partly restored, leaving some of the patch's files patched:" >&2; \
-			echo "  git -C $(LIBSSH_DIR) checkout -- . and build again." >&2; \
-			exit 1; \
-		fi; \
-	done
+	@sh tool/apply-patches.sh $(LIBSSH_DIR) $(addprefix $(CURDIR)/,$(LIBSSH_PATCHES))
 	@touch $@
 
 # FORCE, because only cmake knows whether its sources moved; an unchanged
