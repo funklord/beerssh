@@ -2708,6 +2708,12 @@ void emulator_test::a_typed_command_survives_resizing_under_a_real_shell() {
 	 */
 	if (!QFileInfo::exists(QStringLiteral("/bin/bash"))) QSKIP("no /bin/bash");
 	bssh_pty_session session;
+	/*
+	 * Named, because the app always names one: with no TERM inherited, as
+	 * on a CI runner, readline is on a dumb terminal and scrolls the
+	 * line sideways, which is not the case under test.
+	 */
+	session.set_term(QStringLiteral("xterm-256color"));
 	session.set_shell(QStringLiteral("/bin/bash"));
 	session.set_command({ QStringLiteral("/bin/bash"), QStringLiteral("--norc"), QStringLiteral("--noprofile"), QStringLiteral("-i") });
 	bssh_emulator emulator(80, 24);
