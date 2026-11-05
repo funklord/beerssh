@@ -154,7 +154,7 @@ void bssh_conn_manager::on_session_state_changed() {
 	 */
 	if (m_session->state() == bssh_ssh_session::CONNECTED) {
 		m_attempt = 0;
-		m_reconnecting = false;
+		set_reconnecting(false);
 		m_timer->stop();
 		return;
 	}
@@ -200,13 +200,13 @@ void bssh_conn_manager::schedule_reconnect() {
 	if (m_timer->isActive()) return;
 
 	if (m_attempt >= BSSH_MAX_ATTEMPTS) {
-		m_reconnecting = false;
+		set_reconnecting(false);
 		emit gave_up();
 		return;
 	}
 
 	++m_attempt;
-	m_reconnecting = true;
+	set_reconnecting(true);
 
 	const int delay = backoff_delay_ms(m_attempt, int(QRandomGenerator::global()->bounded(100)));
 	m_timer->start(delay);
@@ -217,7 +217,7 @@ void bssh_conn_manager::schedule_reconnect() {
 void bssh_conn_manager::attempt_reconnect() {
 	if (!m_auto_reconnect || m_user_disconnected || !m_session) return;
 
-	m_reconnecting = true;
+	set_reconnecting(true);
 	emit reconnect_started(m_attempt);
 
 	/*
@@ -232,5 +232,11 @@ void bssh_conn_manager::attempt_reconnect() {
 
 void bssh_conn_manager::cancel() {
 	m_timer->stop();
-	m_reconnecting = false;
+	set_reconnecting(false);
+}
+
+void bssh_conn_manager::set_reconnecting(bool reconnecting) {
+	if (m_reconnecting == reconnecting) return;
+	m_reconnecting = reconnecting;
+	emit reconnecting_changed();
 }

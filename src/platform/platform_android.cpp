@@ -452,10 +452,8 @@ public:
 		return !env.checkAndClearExceptions();
 	}
 
-	void set_session_count(int count) override {
-		m_status = count == 1
-		                   ? QStringLiteral("1 session connected")
-		                   : QStringLiteral("%1 sessions connected").arg(count);
+	void set_session_count(int connected, int connecting) override {
+		m_status = session_status(connected, connecting);
 
 		/* Nothing to update while no service is running. */
 		if (!m_keep_alive) return;

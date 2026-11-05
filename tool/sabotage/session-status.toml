@@ -1,0 +1,19 @@
+# Sabotages for what the notification and the tray say (sec 5.2): the one
+# piece of UI a backgrounded app has. Seen on the Fold, 2026-11-05, with
+# the server frozen: "1 session connected" for each attempt, "0" between.
+
+# Counting a session that is only dialling.
+[[sabotage]]
+name = "a dialling session counts as connected"
+file = "src/model/session_registry.cpp"
+find = "if (session->state() == bssh_ssh_session::CONNECTED) ++connected;"
+replace = "if (session->is_live()) ++connected;"
+expect = "only_a_connected_session_counts_as_connected"
+
+# A drop reaches the registry before the manager has decided to retry, so
+# without this the count stays at what it was when nothing was coming.
+[[sabotage]]
+name = "the manager keeps its decision to itself"
+file = "src/model/conn_manager.cpp"
+find = "	emit reconnecting_changed();"
+expect = "only_a_connected_session_counts_as_connected"

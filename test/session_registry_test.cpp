@@ -165,6 +165,50 @@ void session_registry_test::live_count_ignores_dead_sessions() {
 	QCOMPARE(registry.live_count(), 0);
 }
 
+void session_registry_test::only_a_connected_session_counts_as_connected() {
+	const bssh_factory_reset_t factory_reset;
+	QList<bssh_fake_ssh_session *> fakes;
+	bssh_ssh_session::set_factory([&fakes](QObject *parent) -> bssh_ssh_session * {
+		bssh_fake_ssh_session *fake = new bssh_fake_ssh_session(parent);
+		fakes.append(fake);
+		return fake;
+	});
+
+	bssh_session_registry registry;
+	bssh_session *session = registry.create(profile_for(QStringLiteral("a"), QStringLiteral("a.example")));
+	QCOMPARE(registry.connected_count(), 0);
+	QCOMPARE(registry.connecting_count(), 0);
+
+	/* Dialling is not connected, which is what the Fold's notification said. */
+	session->connect_to_host();
+	QVERIFY(session->is_live());
+	QCOMPARE(registry.connected_count(), 0);
+	QCOMPARE(registry.connecting_count(), 1);
+
+	fakes.at(0)->simulate_key_auth_success();
+	QCOMPARE(registry.connected_count(), 1);
+	QCOMPARE(registry.connecting_count(), 0);
+
+	/*
+	 * Dropped, and waiting out the backoff: no longer live, still on its
+	 * way back. Read from the last `changed`, since that is when a window
+	 * asks: the drop reaches the registry before the manager has decided
+	 * to retry, so the count at the state change alone says nothing is
+	 * coming.
+	 */
+	int connecting_when_told = -1;
+	connect(&registry, &bssh_session_registry::changed, this,
+	        [&] { connecting_when_told = registry.connecting_count(); });
+	fakes.at(0)->simulate_connection_lost();
+	QVERIFY(!session->is_live());
+	QCOMPARE(registry.connected_count(), 0);
+	QCOMPARE(connecting_when_told, 1);
+
+	/* Told to stop retrying, it is on its way nowhere, and that is said too. */
+	session->disconnect_from_host();
+	QCOMPARE(connecting_when_told, 0);
+}
+
 void session_registry_test::title_falls_back_from_osc_to_profile() {
 	bssh_session_registry registry;
 	bssh_session *session = registry.create(profile_for(QStringLiteral("work bastion"),

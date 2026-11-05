@@ -240,12 +240,15 @@ public:
 	virtual void hide_status_bar() {}
 
 	/*
-	 * How many sessions are connected -- notification text on Android,
-	 * the tray tooltip on desktop. Taken from the session registry, never
-	 * from the view state: panes and tabs come and go, sessions are what
-	 * matter (sec 5.2).
+	 * How many sessions are connected, and how many are on their way
+	 * there -- notification text on Android, the tray tooltip on desktop.
+	 * Taken from the session registry, never from the view state: panes
+	 * and tabs come and go, sessions are what matter (sec 5.2).
 	 */
-	virtual void set_session_count(int count) = 0;
+	virtual void set_session_count(int connected, int connecting) = 0;
+
+	/* The words for those two counts, the same on every platform. */
+	static QString session_status(int connected, int connecting);
 
 	/*
 	 * Reports, through `changed`, each time the app's window comes in front

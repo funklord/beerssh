@@ -19,6 +19,7 @@ private slots:
 	void session_outlives_the_view_that_showed_it();
 	void closing_announces_before_destroying();
 	void live_count_ignores_dead_sessions();
+	void only_a_connected_session_counts_as_connected();
 
 	/* Only a CONNECTED session of a keep-awake host asks (sec 5.5, 2026-09-26). */
 	void only_a_connected_keep_awake_host_keeps_the_computer_awake();

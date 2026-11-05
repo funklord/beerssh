@@ -65,6 +65,13 @@ signals:
 	void reconnect_started(int attempt);
 	void gave_up();
 
+	/*
+	 * is_reconnecting() moved. A drop reaches the registry as a state
+	 * change BEFORE this class has decided anything, so a count taken
+	 * then is out of date until this says so.
+	 */
+	void reconnecting_changed();
+
 private slots:
 	void on_session_state_changed();
 	void attempt_reconnect();
@@ -72,6 +79,7 @@ private slots:
 private:
 	void schedule_reconnect();
 	void cancel();
+	void set_reconnecting(bool reconnecting);
 
 	bssh_session *m_session;
 	QTimer *m_timer;

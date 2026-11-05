@@ -159,6 +159,8 @@ void bssh_session_registry::attach(bssh_session *session) {
 	 */
 	bssh_conn_manager *manager = new bssh_conn_manager(session, this);
 	m_managers.insert(session, manager);
+	connect(manager, &bssh_conn_manager::reconnecting_changed,
+	         this, &bssh_session_registry::changed);
 
 	connect(bssh_platform::instance(), &bssh_platform::network_changed,
 	         manager, &bssh_conn_manager::note_network_changed);
@@ -297,6 +299,24 @@ int bssh_session_registry::live_count() const {
 		if (session->is_live()) ++live;
 	}
 	return live;
+}
+
+int bssh_session_registry::connected_count() const {
+	int connected = 0;
+	for (bssh_session *session : m_sessions) {
+		if (session->state() == bssh_ssh_session::CONNECTED) ++connected;
+	}
+	return connected;
+}
+
+int bssh_session_registry::connecting_count() const {
+	int connecting = 0;
+	for (bssh_session *session : m_sessions) {
+		if (session->state() == bssh_ssh_session::CONNECTED) continue;
+		const bssh_conn_manager *manager = m_managers.value(session, nullptr);
+		if (session->is_live() || (manager && manager->is_reconnecting())) ++connecting;
+	}
+	return connecting;
 }
 
 bssh_session *bssh_session_registry::at(int index) const {

@@ -67,6 +67,15 @@ bssh_platform::~bssh_platform() {
  */
 static int bssh_forced_touch = -1;
 
+QString bssh_platform::session_status(int connected, int connecting) {
+	const QString sessions = connected == 1 ? QStringLiteral("1 session connected")
+	                                        : QStringLiteral("%1 sessions connected").arg(connected);
+	if (connecting == 0) return sessions;
+	if (connected > 0) return QStringLiteral("%1, %2 connecting").arg(sessions).arg(connecting);
+	return connecting == 1 ? QStringLiteral("1 session connecting")
+	                       : QStringLiteral("%1 sessions connecting").arg(connecting);
+}
+
 bool bssh_platform::is_touch_primary() const {
 	if (bssh_forced_touch >= 0) return bssh_forced_touch != 0;
 	return platform_is_touch_primary();

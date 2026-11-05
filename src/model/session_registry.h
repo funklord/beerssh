@@ -77,6 +77,17 @@ public:
 	int count() const { return m_sessions.size(); }
 	int live_count() const;
 
+	/*
+	 * What the notification and the tray say (sec 5.2). Connected means
+	 * the state itself: live_count() also holds the sessions dialling,
+	 * so a session retrying a dead host read "1 session connected" for
+	 * each attempt and "0" between them -- seen on the Fold, 2026-11-05.
+	 * Connecting is everything still on its way there, a reconnect waiting
+	 * out its backoff included.
+	 */
+	int connected_count() const;
+	int connecting_count() const;
+
 	bssh_conn_manager *conn_manager_for(bssh_session *session) const;
 
 	/*

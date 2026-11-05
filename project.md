@@ -1088,6 +1088,14 @@ type-specific `FOREGROUND_SERVICE_*` permission, `INTERNET`,
   forward network-change events.
 - Notification should reflect the **`bssh_session_registry`** count, not the view
   state — panes and tabs come and go, sessions are what matter.
+  **Connected means connected, and the rest are named — fixed 2026-11-05, on the
+  Fold.** It counted `is_live()`, which holds the states a reconnect passes
+  through: with the server frozen, a session retrying read "1 session connected"
+  on every attempt and "0" between them, for as long as the host stayed away.
+  Now "1 session connected, 2 connecting", with "connecting" covering a session
+  dialling and one waiting out its backoff, and the tray the same words. The
+  keep-alive follows both counts, so the service no longer stops between two
+  attempts while the window is in front.
 
 ### 5.3 Reconnection state machine (in `bssh_conn_manager`)
 States: `disconnected → resolving → connecting → authenticating → connected →
@@ -1192,7 +1200,17 @@ events from `bssh_platform` (§3) without caring which platform produced them.
   wait on the same build, a session the client closed itself after about
   100 s, not reproduced in the three windows after, nor in ten minutes
   idle in the background on the build after `b1fad8e` (one connection
-  throughout, the host's log silent). The worker threads
+  throughout, the host's log silent).
+  **On the Fold, 2026-11-05** (arm64, One UI, another app in front, a
+  throwaway sshd in a container on the LAN, opened with an `ssh://` link):
+  the server side killed, signed in again **1.3 s** later, on the password
+  typed at the first login. Frozen with `docker pause` for two minutes the
+  session went down within 8 s and retried on its backoff until the host
+  thawed, then came back in 16 s; frozen for 29 s after that it did not go
+  down at all, so **why the first freeze dropped it so fast is not
+  established** -- nothing the client does should notice a frozen peer that
+  soon, the TCP timers being 30 s and up. Same family as the drop above.
+  The worker threads
   were never affected -- a `QThread` gets a plain `QEventDispatcherUNIX`,
   which the stopper does not hold -- which is why sessions *stayed* up.
   And §5.3's own case, a network change in the background: `svc wifi
@@ -1221,6 +1239,9 @@ to make a 24/7 server unreachable at night. Seen on the API 36 emulator,
 both apps: the line shown, the dialog opened, Allow put the app on
 `dumpsys deviceidle whitelist`, and the line was gone (beersshd at once,
 BeerSSH the next time its page is built).
+**On One UI, the Fold, 2026-11-05:** the button opens Android's own dialog
+("Stop optimising battery usage?", `RequestIgnoreBatteryOptimizations`), not a
+vendor page; Allow put beersshd on the list and the line went.
 
 ### 5.5 The desktop equivalent — **[DECIDED, and built]**
 No service, no notification channel, no OS permission: a desktop process that
@@ -18396,8 +18417,10 @@ caught.
   limit is read at start), the `dataSync` build logged `FGS (dataSync)
   timed out` and closed port 8022 about 60 s after Home; the
   `connectedDevice` build, same settings, did not. On API 34 it is accepted
-  (`types=00000010`) and serves in the background. The Fold is still to see
-  it. `onTimeout` and the refusal catch are kept: nothing calls the first
+  (`types=00000010`) and serves in the background. **On the Fold, 2026-11-05**
+  (arm64, Android 15, Wi-Fi, USB power): `types=0x00000010`, and with the limit
+  at 60000 by the same two commands it stayed foreground and answered `sftp`
+  95 s and 2 min after Home, no `FGS timed out` in the log. `onTimeout` and the refusal catch are kept: nothing calls the first
   now, and the second also covers a background start or a missing
   prerequisite (`SecurityException`). The logger asked about (below) was
   for finding how the 6-hour budget is kept; with `dataSync` gone it is

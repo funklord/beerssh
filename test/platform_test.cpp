@@ -144,6 +144,15 @@ void platform_test::keeping_awake_is_asked_only_on_a_change() {
 	QVERIFY(!platform->sleep_inhibited());
 }
 
+void platform_test::session_status_says_what_is_connected_and_what_is_not() {
+	QCOMPARE(bssh_platform::session_status(0, 0), QStringLiteral("0 sessions connected"));
+	QCOMPARE(bssh_platform::session_status(1, 0), QStringLiteral("1 session connected"));
+	QCOMPARE(bssh_platform::session_status(2, 0), QStringLiteral("2 sessions connected"));
+	QCOMPARE(bssh_platform::session_status(0, 1), QStringLiteral("1 session connecting"));
+	QCOMPARE(bssh_platform::session_status(0, 3), QStringLiteral("3 sessions connecting"));
+	QCOMPARE(bssh_platform::session_status(1, 2), QStringLiteral("1 session connected, 2 connecting"));
+}
+
 void platform_test::session_count_and_notify_are_safe_without_a_tray() {
 	bssh_platform *platform = bssh_platform::instance();
 
@@ -153,9 +162,9 @@ void platform_test::session_count_and_notify_are_safe_without_a_tray() {
 	 * dies because the desktop has no notification area is worse than one
 	 * that silently skips the notification.
 	 */
-	platform->set_session_count(3);
+	platform->set_session_count(3, 1);
 	platform->notify(QStringLiteral("BeerSSH"), QStringLiteral("reconnecting"));
-	platform->set_session_count(0);
+	platform->set_session_count(0, 0);
 
 	QVERIFY(true);
 }
