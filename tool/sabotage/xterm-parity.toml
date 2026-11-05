@@ -21,8 +21,8 @@ expect = "each_screen_keeps_its_own_saved_cursor"
 [[sabotage]]
 name = "CSI s goes home"
 file = "vterm/src/state.c"
-find = "    if(!state->mode.leftrightmargin) {\n      savecursor(state, 1);\n      break;\n    }\n"
-replace = ""
+find = "    if(!state->mode.leftrightmargin) {\n"
+replace = "    if(0) {\n"
 expect = "the_cursor_lands_where_xterm_puts_it"
 
 # ICH and DCH give up above the margin.
