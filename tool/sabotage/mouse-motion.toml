@@ -28,6 +28,6 @@ expect = "a_held_key_reaches_the_program_with_the_click"
 [[sabotage]]
 name = "urxvt's 32 is gone"
 file = "vterm/src/mouse.c"
-find = "        (code | modifiers) + 0x20, col + 1, row + 1);\n"
-replace = "        code | modifiers, col + 1, row + 1);\n"
+find = "        (code | modifiers) + 0x20, col + 1, row + 1);"
+replace = "        code | modifiers, col + 1, row + 1);"
 expect = "urxvt_mouse_reports_carry_the_32"
