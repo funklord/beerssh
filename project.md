@@ -13374,19 +13374,25 @@ store is a no-op rather than a silent loss.
     is enrolled. Two probes for that returned empty and were recorded as
     inconclusive rather than negative; the app's own check answered it, which
     is the right instrument asking the right party.
-    **Still unproven: the prompt itself.** Raising it needs a saved password
-    on a real host, and the callback's trip back to the Qt thread is what
-    would be exercised. The capability half is now evidence rather than
-    intention; the release half is not.
+    **The prompt itself: seen, 2026-11-05, on an emulator, which has a
+    fingerprint sensor after all.** API 36, a PIN, a print enrolled with `adb
+    emu finger touch`, and a real password login: desktop beersshd at
+    `10.0.2.2`, which authenticates and then refuses a shell, so `pty-req
+    failed` is the sign of a login that worked. The password remembered and
+    the app restarted, connecting raised the system's `BiometricPrompt`
+    ("Unlock the password for tester@10.0.2.2:18022"). A finger not enrolled
+    left it up and nothing connected; the enrolled one closed it, and the
+    callback reached the Qt thread and the stored password logged in, with no
+    "wrong password" in the server's log. "Use password" fell through to the
+    typed prompt. How One UI draws it is still the phone's to show.
 
     **What is proven and what is not.** The APK builds, the class is in the
     dex and `USE_BIOMETRIC` is in the packaged manifest — all three checked
     with `aapt2` and by searching *every* dex, after a first probe that read
     one of five and a manifest probe that could not read UTF-16 AXML at all.
     Both were caught by running a known-present control rather than by
-    trusting a zero. **That the prompt appears, and that its callback reaches
-    the Qt thread, is not verified**: it needs a device, and nothing off one
-    can exercise it. Two properties are held
+    trusting a zero. That the prompt appears and its callback reaches the Qt
+    thread was seen on an emulator, as above. Two properties are held
     by tests rather than intent: the gate is on the capability **and** the
     flag, so a profile carrying the flag to a machine that cannot ask falls
     through to the typed prompt instead of locking its own password away; and
@@ -17081,11 +17087,8 @@ background).
    outlives the session that raised it. §11 has recorded it as built
    since 2026-08-30, proven on a Galaxy Note 9 at API 29, while this
    summary went on calling it open.
-   **What §11 still calls unproven stays unproven**, and the difference
-   matters: the capability half is evidence, and that the prompt itself
-   appears and its callback reaches the Qt thread needs a saved password
-   on a real host. A summary that promoted that to "built" would be the
-   same error pointing the other way.
+   **The release half is seen too, 2026-11-05**: the prompt, a refused
+   finger, the callback and the stored password's login, on an emulator (§11).
    **The sweep that found it, and what it cost**: §14's claims of
    ABSENCE are the ones that send a reader at work already done, and
    there are three — this, Play asset-pack delivery, and the
