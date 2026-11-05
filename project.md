@@ -4876,6 +4876,9 @@ fault that reached the prompt: Shift or Ctrl on Enter, Tab, Backspace and Escape
 wrote `CSI 13;2u` and the like with no keyboard protocol on, so bash printed
 `;2u`. They are the plain keys now unless kitty or modifyOtherKeys is on, with
 Ctrl swapping Backspace to `^H` as xterm's does, and Shift+Tab always `CSI Z`.
+The printable keys the same way, 156 combinations: Ctrl+Space sent a space,
+Ctrl+/ a slash, Ctrl+Alt+a the M-a it is not. `send_char` carries xterm's table
+now, the digits included, which an older comment had left out as "a decision".
 Left as they are: plain Backspace is DEL where this xterm said `^H`, and what
 xterm kept for itself (Shift+Insert, Shift+PageUp) goes to the remote here.
 

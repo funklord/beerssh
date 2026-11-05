@@ -16,3 +16,19 @@ file = "src/term/emulator_vterm.cpp"
 find = "\t    && m_private->modify_other_keys == 0) {\n"
 replace = "\t    ) {\n"
 expect = "modified_plain_keys_need_a_protocol_for_csi_u"
+
+# Ctrl+Alt loses the control byte, as it did.
+[[sabotage]]
+name = "Ctrl+Alt+letter is M-letter"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\tconst int control = legacy_control_byte(ch);\n"
+replace = "\t\tconst int control = (modifiers & MOD_ALT) ? -1 : legacy_control_byte(ch);\n"
+expect = "ctrl_makes_what_xterm_makes_of_a_character"
+
+# Ctrl+Space is a space again.
+[[sabotage]]
+name = "Ctrl+Space has no byte"
+file = "src/term/emulator_vterm.cpp"
+find = "\tcase U' ': case U'2': return 0x00;\n"
+replace = "\tcase U'2': return 0x00;\n"
+expect = "ctrl_makes_what_xterm_makes_of_a_character"

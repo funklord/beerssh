@@ -163,6 +163,40 @@ void emulator_test::modified_plain_keys_need_a_protocol_for_csi_u() {
 	QVERIFY(asked.take_output() != QByteArrayLiteral("\r"));
 }
 
+void emulator_test::ctrl_makes_what_xterm_makes_of_a_character_data() {
+	QTest::addColumn<uint>("ch");
+	QTest::addColumn<int>("modifiers");
+	QTest::addColumn<QByteArray>("bytes");
+	const int ctrl = bssh_emulator::MOD_CTRL, alt = bssh_emulator::MOD_ALT, shift = bssh_emulator::MOD_SHIFT;
+	const auto add = [](const char *name, char ch, int modifiers, QByteArray bytes) {
+		QTest::newRow(name) << uint(uchar(ch)) << modifiers << bytes;
+	};
+	add("Ctrl+Space", ' ', ctrl, QByteArray(1, '\0'));
+	add("Ctrl+2", '2', ctrl, QByteArray(1, '\0'));
+	add("Ctrl+3", '3', ctrl, "\x1b");
+	add("Ctrl+8", '8', ctrl, "\x7f");
+	add("Ctrl+slash", '/', ctrl, "\x1f");
+	add("Ctrl+grave", '`', ctrl, QByteArray(1, '\0'));
+	add("Ctrl+Shift+brace", '{', ctrl | shift, "\x1b");
+	add("Ctrl+Shift+question", '?', ctrl | shift, "\x7f");
+	add("Ctrl+Alt+a", 'a', ctrl | alt, "\x1b\x01");
+	add("Ctrl+Alt+Space", ' ', ctrl | alt, QByteArray("\x1b\0", 2));
+	add("Ctrl+1 has no byte", '1', ctrl, "1");
+	add("Ctrl+comma has no byte", ',', ctrl, ",");
+	add("Ctrl+Alt+comma keeps Alt", ',', ctrl | alt, "\x1b,");
+	add("Shift+Space", ' ', shift, " ");
+	add("Alt+Shift+Space", ' ', alt | shift, "\x1b ");
+}
+
+void emulator_test::ctrl_makes_what_xterm_makes_of_a_character() {
+	QFETCH(uint, ch);
+	QFETCH(int, modifiers);
+	QFETCH(QByteArray, bytes);
+	bssh_emulator emulator(20, 8);
+	emulator.send_char(char32_t(ch), quint8(modifiers));
+	QCOMPARE(emulator.take_output(), bytes);
+}
+
 void emulator_test::plain_text_lands_on_the_first_row() {
 	bssh_emulator emulator(20, 5);
 	emulator.feed(QByteArrayLiteral("hello"));

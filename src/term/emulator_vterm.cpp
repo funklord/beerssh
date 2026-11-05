@@ -2975,55 +2975,56 @@ bool bssh_emulator::send_key_event(const key_event_t &event) {
 	return true;
 }
 
+/* What Ctrl makes of a character on xterm, or -1 where it makes nothing. */
+static int legacy_control_byte(char32_t ch) {
+	if (ch >= U'@' && ch <= U'~') return int(ch & 0x1f);
+	switch (ch) {
+	case U' ': case U'2': return 0x00;
+	case U'3': return 0x1b;
+	case U'4': return 0x1c;
+	case U'5': return 0x1d;
+	case U'6': return 0x1e;
+	case U'7': case U'/': return 0x1f;
+	case U'8': case U'?': return 0x7f;
+	default: return -1;
+	}
+}
+
 void bssh_emulator::send_char(char32_t ch, quint8 modifiers) {
 	if (m_private->encode_modern_key(ch, modifiers)) return;
 
 	/*
-	 * Legacy Ctrl+letter is the classic control byte, and this is ours to
-	 * decide rather than libvterm's to impose: libvterm emits CSI u
-	 * unconditionally for the ambiguous ones (Ctrl+I, Ctrl+M, Ctrl+[),
-	 * which is right for an editor that always speaks the modern
-	 * protocol and wrong for a terminal talking to whatever is out there.
-	 * A remote that has not enabled a keyboard protocol must get exactly
-	 * what a VT100 would have sent, or it sees a sequence it cannot
-	 * parse.
-	 */
-	if ((modifiers & MOD_CTRL) && !(modifiers & MOD_ALT) && ch < 0x80) {
-		const char32_t upper = (ch >= U'a' && ch <= U'z') ? ch - 32 : ch;
-		if (upper >= U'@' && upper <= U'_') {
-			const char control = char(upper & 0x1f);
-			m_private->reply(QByteArray(1, control));
-			return;
-		}
-	}
-
-	/*
-	 * And the other half of the same rule, which was missing: a
-	 * character with NO control byte -- a comma, a digit, a bracket
-	 * beyond the @ to _ run -- must arrive as itself.
+	 * Legacy Ctrl is the classic control byte, and this is ours to decide
+	 * rather than libvterm's to impose: libvterm emits CSI u unconditionally
+	 * for the ambiguous ones (Ctrl+I, Ctrl+M, Ctrl+[), and for any non-letter
+	 * carrying a modifier, which is right for an editor that always speaks
+	 * the modern protocol and wrong for a terminal talking to whatever is out
+	 * there. Ctrl+comma reached a plain shell as ESC [ 44 ; 5 u and landed on
+	 * its command line as text.
 	 *
-	 * libvterm emits CSI u for any non-letter carrying a modifier,
-	 * whether or not the remote asked for a keyboard protocol, so
-	 * Ctrl+comma reached a plain shell as ESC [ 44 ; 5 u and landed on
-	 * its command line as text. Measured, not supposed: the test next to
-	 * this one failed with exactly those bytes before this existed.
+	 * The table is xterm's, measured key by key (sec 7.0), and Alt prefixes
+	 * ESC to it. This used to stop at @ to _, on the grounds that the rest
+	 * were a keyboard's historical wiring and a decision: that left Ctrl+Space
+	 * sending a space, which is set-mark in Emacs and a common tmux prefix,
+	 * Ctrl+/ a slash where readline and Emacs undo, and Ctrl+Alt+a the M-a
+	 * that C-M-a is not.
 	 *
-	 * Dropping the Ctrl is what a VT100 did with a key it had no code
-	 * for, and Alt is kept so that libvterm still prefixes ESC -- Alt
-	 * alone was never broken, because its own path does not need CSI u.
-	 *
-	 * What is NOT done here, deliberately: xterm additionally maps
-	 * Ctrl+2 to NUL and Ctrl+3 through Ctrl+8 to ESC, FS, GS, RS, US and
-	 * DEL. Those are a keyboard's historical wiring rather than this
-	 * rule, and adding them is a decision rather than a fix.
+	 * A character with no control byte -- a comma, a 1 -- arrives as itself,
+	 * which is what a VT100 did with a key it had no code for. Shift goes
+	 * from Space for the same reason: nothing has asked for CSI 32;2u.
 	 */
 	modifiers &= 0x07;
 	if (modifiers & MOD_CTRL) {
-		const quint8 without_ctrl = quint8(modifiers & ~MOD_CTRL);
-		vterm_keyboard_unichar(m_private->vt, ch,
-		                        static_cast<VTermModifier>(without_ctrl));
-		return;
+		const int control = legacy_control_byte(ch);
+		if (control >= 0) {
+			QByteArray bytes(1, char(control));
+			if (modifiers & MOD_ALT) bytes.prepend('\x1b');
+			m_private->reply(bytes);
+			return;
+		}
+		modifiers &= ~MOD_CTRL;
 	}
+	if (ch == U' ') modifiers &= ~MOD_SHIFT;
 
 	vterm_keyboard_unichar(m_private->vt, ch, static_cast<VTermModifier>(modifiers));
 }

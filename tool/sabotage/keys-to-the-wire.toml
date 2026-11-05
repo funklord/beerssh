@@ -61,8 +61,8 @@ expect = "a_mouse_report_reaches_the_wire"
 [[sabotage]]
 name = "ctrl on a key with no control byte goes back to CSI u"
 file = "src/term/emulator_vterm.cpp"
-find = "\tif (modifiers & MOD_CTRL) {\n\t\tconst quint8 without_ctrl = quint8(modifiers & ~MOD_CTRL);"
-replace = "\tif (false) {\n\t\tconst quint8 without_ctrl = quint8(modifiers & ~MOD_CTRL);"
+find = "\t\tmodifiers &= ~MOD_CTRL;\n\t}\n\tif (ch == U' ')"
+replace = "\t}\n\tif (ch == U' ')"
 expect = "ctrl_punctuation_reaches_a_legacy_shell_as_a_vt100_would"
 
 # Connection Details (sec 5.3) counts what the link carried, so it can

@@ -26,6 +26,8 @@ private slots:
 	void decsc_keeps_the_line_drawing_set();
 	void the_ansi_modes_answer_decrqm();
 	void modified_plain_keys_need_a_protocol_for_csi_u();
+	void ctrl_makes_what_xterm_makes_of_a_character_data();
+	void ctrl_makes_what_xterm_makes_of_a_character();
 	void a_terminal_moves_whole_into_another_emulator();
 	void a_moved_terminal_refuses_what_it_cannot_take();
 	void the_kitty_query_reports_only_the_flags_in_force();
