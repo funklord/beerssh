@@ -1,0 +1,55 @@
+// The session protocol's frames (project.md sec 5.6): what the session host
+// and its client say to each other, on any transport that carries bytes in
+// order. A frame is a type, a length and a body, so a side that does not know
+// a type skips the length and carries on.
+//
+// Offsets are the raw log's, counted from the start of the session.
+
+target buffer;
+endian big;
+
+varint_type bssh_varint {
+	encoding = leb128;
+	max_bits = 64;
+	minimal;
+}
+
+// Kinds, as a plain byte and not an enum: situ refuses a value an enum does not
+// name, and a side must be able to skip a kind only a newer side knows.
+//   1 attach   client: send from this offset, at this size
+//   2 output   host: raw bytes from this offset
+//   3 input    client: bytes for the program
+//   4 ack      client: I hold everything below this offset
+//   5 resize   client: the terminal's size
+//   6 exited   host: the program ended
+//   7 lost     host: nothing older than this offset is held
+//   8 mode     client: live, eventual or serial
+
+struct bssh_frame {
+	u8           kind;
+	bssh_varint  length [max = 65536];
+	u8           body[length];
+}
+
+struct bssh_frame_attach {
+	bssh_varint  offset;
+	u16          columns;
+	u16          rows;
+}
+
+struct bssh_frame_resize {
+	u16  columns;
+	u16  rows;
+}
+
+struct bssh_frame_offset {
+	bssh_varint  offset;
+}
+
+struct bssh_frame_exited {
+	i32  status;
+}
+
+struct bssh_frame_mode {
+	u8  mode [max = 2];  // 0 live, 1 eventual, 2 serial
+}

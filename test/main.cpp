@@ -29,6 +29,7 @@
 #include "conn_manager_test.h"
 #include "output_log_test.h"
 #include "line_gaps_test.h"
+#include "session_host_test.h"
 #include "emulator_bench.h"
 #include "live_ssh_test.h"
 #include "ui_shots.h"
@@ -492,6 +493,7 @@ int main(int argc, char *argv[]) {
 	failures += run_test<conn_manager_test>(argc, argv);
 	failures += run_test<output_log_test>(argc, argv);
 	failures += run_test<line_gaps_test>(argc, argv);
+	failures += run_test<session_host_test>(argc, argv);
 	failures += run_test<conformance_test>(argc, argv);
 	failures += run_test<emulator_test>(argc, argv);
 	failures += run_test<graphics_test>(argc, argv);

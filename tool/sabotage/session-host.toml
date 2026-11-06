@@ -1,0 +1,116 @@
+# The session host and its frames (project.md sec 5.6).
+
+# A dropped client taking the program with it is the fault all this exists
+# to end.
+[[sabotage]]
+name = "losing the client ends the program"
+file = "src/session/session_host.c"
+find = "\tif (host->client >= 0) close(host->client);\n"
+replace = "\tif (host->client >= 0) { close(host->client); kill(host->child, SIGKILL); }\n"
+expect = "a_shell_survives_losing_its_client"
+
+# Output only while attached: the bytes that matter most are lost.
+[[sabotage]]
+name = "nothing is read while detached"
+file = "src/session/session_host.c"
+find = "\t\t\tif (log_room(host)) fds[count].events |= POLLIN;\n"
+replace = "\t\t\tif (log_room(host) && host->attached) fds[count].events |= POLLIN;\n"
+expect = "a_client_too_far_behind_is_told_what_was_lost"
+
+# Skipping quietly: the client draws no gap and joins the text either side.
+[[sabotage]]
+name = "the client is not told what was lost"
+file = "src/session/session_host.c"
+find = "\t\thost->out_used = bssh_wire_put_offset(host->out, sizeof(host->out), BSSH_WIRE_LOST,\n\t\t                                      host->log.start);\n"
+replace = ""
+expect = "a_client_too_far_behind_is_told_what_was_lost"
+
+# The pause: reading on with no room is Live under another name.
+[[sabotage]]
+name = "a faithful mode does not pause the program"
+file = "src/session/session_host.c"
+find = "\tif (!host->log.faithful) return CHUNK;\n"
+replace = "\treturn CHUNK;\n"
+expect = "a_faithful_mode_pauses_the_program_and_loses_nothing"
+
+[[sabotage]]
+name = "the mode is ignored"
+file = "src/session/session_host.c"
+find = "\t\tbssh_output_log_set_faithful(&host->log, mode != BSSH_WIRE_MODE_LIVE);\n"
+replace = ""
+expect = "a_faithful_mode_pauses_the_program_and_loses_nothing"
+
+[[sabotage]]
+name = "an ack is ignored"
+file = "src/session/session_host.c"
+find = "\t\tif (bssh_wire_read_offset(frame, &offset)) return -1;\n\t\tbssh_output_log_ack(&host->log, offset);\n"
+replace = "\t\tif (bssh_wire_read_offset(frame, &offset)) return -1;\n"
+expect = "a_faithful_mode_pauses_the_program_and_loses_nothing"
+
+# Two clients at once: the old one holds the session for nobody.
+[[sabotage]]
+name = "a second client leaves the first attached"
+file = "src/session/session_host.c"
+find = "\tdrop_client(host);\n\thost->client = fd;\n"
+replace = "\thost->client = fd;\n"
+expect = "a_second_client_replaces_the_first"
+
+[[sabotage]]
+name = "the exit is not reported"
+file = "src/session/session_host.c"
+find = "\t\thost->out_used = bssh_wire_put_exited(host->out, sizeof(host->out), host->status);\n"
+replace = ""
+expect = "a_program_ending_is_reported_and_ends_the_host"
+
+# A host nobody returns to must not stay for ever.
+[[sabotage]]
+name = "the linger never ends"
+file = "src/session/session_host.c"
+find = "\t\tif (linger_until && now_ms() >= linger_until) break;\n"
+replace = ""
+expect = "nobody_coming_back_ends_the_host_after_the_linger"
+
+# A stale socket file reads as a session still there.
+[[sabotage]]
+name = "the socket outlives the host"
+file = "src/session/session_host.c"
+find = "\tclose(host->listener);\n\tunlink(options->socket_path);\n\n\tif (host->pty >= 0)"
+replace = "\tclose(host->listener);\n\n\tif (host->pty >= 0)"
+expect = "a_program_ending_is_reported_and_ends_the_host"
+
+# A malformed body read as zeroes rather than refused.
+[[sabotage]]
+name = "a bad attach is taken anyway"
+file = "src/session/session_host.c"
+find = "\t\tif (bssh_wire_read_attach(frame, &offset, &columns, &rows)) return -1;\n"
+replace = "\t\t(void)bssh_wire_read_attach(frame, &offset, &columns, &rows);\n"
+expect = "garbage_loses_the_client_and_not_the_session"
+
+# Garbage that looks unfinished: the reader waits on the peer for ever.
+[[sabotage]]
+name = "an endless length reads as unfinished"
+file = "src/session/wire.c"
+find = "\tif (have > 3 && (data[1] & data[2] & data[3] & 0x80)) return -1;\n"
+replace = ""
+expect = "a_length_past_the_limit_is_refused_at_once"
+
+[[sabotage]]
+name = "a frame past the limit is awaited"
+file = "src/session/wire.c"
+find = "\t\treturn need > BSSH_WIRE_FRAME_MAX ? -1 : 0;\n"
+replace = "\t\treturn 0;\n"
+expect = "a_length_past_the_limit_is_refused_at_once"
+
+[[sabotage]]
+name = "the writer takes a body past the limit"
+file = "src/session/wire.c"
+find = "\tif (len > BSSH_WIRE_BODY_MAX || capacity < 1) return 0;\n"
+replace = "\tif (capacity < 1) return 0;\n"
+expect = "a_length_past_the_limit_is_refused_at_once"
+
+[[sabotage]]
+name = "a second spelling of an output offset is taken"
+file = "src/session/wire.c"
+find = "\tif (!used || used != situ_varint_len(raw)) return -1;\n"
+replace = "\tif (!used) return -1;\n"
+expect = "a_varint_with_a_second_spelling_is_refused"

@@ -203,7 +203,7 @@ COMPLETION = $(TARGET).bash
 # for src/.
 # Every suffix: the session layer is plain C (project.md sec 5.6), and a list
 # of *.cpp alone left a .c edit rebuilding nothing while `make test` passed.
-SOURCES = $(wildcard src/*.cpp src/*/*.cpp src/*/*.c softkeys/src/*.cpp)
+SOURCES = $(wildcard src/*.cpp src/*/*.cpp src/*/*.c src/*/*/*.c softkeys/src/*.cpp)
 HEADERS = $(wildcard src/*.h src/*/*.h softkeys/include/softkeys/*.h)
 
 # --- vendored libvterm ------------------------------------------------------
@@ -764,6 +764,26 @@ $(TEST_BUILD_DIR)/Makefile: test/tests.pro \
 
 $(TEST_BIN): $(VTERM_LIB) $(LIBSSH_LIB) $(TEST_BUILD_DIR)/Makefile $(SOURCES) $(HEADERS) $(wildcard test/*.cpp test/*.h)
 	$(MAKE) -C $(TEST_BUILD_DIR)
+
+
+# The session protocol's bytes are defined by src/session/frame.situ, and what
+# situ generates from it is committed, so building needs no situ. This says
+# whether the two still agree, against situ's committed HEAD: a working tree
+# may be mid-edit, and the check would then describe nothing anybody has. Each
+# run overwrites what the last one left, so it deletes nothing.
+SITU_DIR ?= ../situ
+SCHEMA_DIR = $(TEST_BUILD_DIR)/schema
+.PHONY: schema
+schema:
+	@test -x "$(SITU_DIR)/bin/situc" || { echo "schema: no situc at $(SITU_DIR)/bin"; exit 1; }
+	@mkdir -p "$(SCHEMA_DIR)/situ"
+	@git -C "$(SITU_DIR)" archive HEAD | tar -x -C "$(SCHEMA_DIR)/situ"
+	@python3 "$(SCHEMA_DIR)/situ/bin/situc" build --target c --out "$(SCHEMA_DIR)/out" src/session/frame.situ >/dev/null
+	@cmp "$(SCHEMA_DIR)/out/frame.c" src/session/generated/frame.c
+	@cmp "$(SCHEMA_DIR)/out/frame.h" src/session/generated/frame.h
+	@cmp "$(SCHEMA_DIR)/situ/runtime/c/situ.h" src/session/generated/situ.h
+	@cmp "$(SCHEMA_DIR)/situ/runtime/c/situ.c" src/session/generated/situ.c
+	@echo "schema: generated code matches situ $$(git -C "$(SITU_DIR)" rev-parse --short HEAD)"
 
 # The offscreen QPA plugin is what makes both of these runnable in CI at
 # all -- a GUI that only starts with a display is a GUI CI never exercises.

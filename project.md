@@ -1413,8 +1413,12 @@ holds a socket open simply keeps holding it. What still needs deciding is what
 
 ### 5.6 A session that outlives its connection — **[DESIGN for v2, holder 2026-11-06; being built]**
 
-**Built so far:** the raw log, `src/session/output_log.h`, and the gap map,
-`src/session/line_gaps.h`, tested but linked into nothing yet. `src/session/` is plain C with no Qt, so it can move to fuzznet.
+**Built so far:** the raw log, `src/session/output_log.h`, the gap map,
+`src/session/line_gaps.h`, the frames, `src/session/frame.situ`, and the session
+host, `src/session/session_host.h`, which owns the pty: over real ptys and sockets,
+a shell survives losing its client, output written while detached arrives on
+return, Serial pauses the program and loses nothing, and a client too far behind
+is told what was lost. Tested, and linked into nothing yet. `src/session/` is plain C with no Qt, so it can move to fuzznet.
 
 **This replaces "Mosh in v2".** It is the v2 answer to the gap in §5.3: a
 reconnect is a new remote shell. Plain SSH stays the default and the fallback,
@@ -1587,10 +1591,16 @@ helper, running as the user on the server. Serial and Eventual replay raw bytes
 through libvterm on the client, so they keep today's exposure, and events such as
 OSC 52 need the same care in every mode.
 
-**Proposed tool: situ, the holder's decision.** One schema for both ends, with
-varints and type-length regions, generated C++, and `situc gen-fuzz` for the
-harness. fuzznet's frames are `.situ` schemas already. It would be a new
-dependency here.
+**The schema is situ's**, one for both ends, with varints, bounds-checked
+accessors and a call that says how many bytes a frame still needs. Taken without
+the holder's word, for them to check: what it generates is committed, as fuzznet
+commits its own, so building needs no situ, the format is private to our two ends,
+and it can be replaced. `make schema` checks the committed code against situ's
+HEAD. Two things it taught. Frame kinds are a plain byte, because an enum refuses
+a value it does not name, and a side must skip a kind only a newer side knows. And
+situ generates no varint writer, so writing is `src/session/wire.c` over its
+`situ_varint_put`; reading is all generated, but for one body whose bytes run on
+past its offset.
 
 **Terminal output does not go through fuzznet's `log/`.** The holder asked, and
 the design fits: bounded, numbered, and an answer for "retention took it" kept
