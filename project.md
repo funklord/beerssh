@@ -1411,7 +1411,10 @@ holds a socket open simply keeps holding it. What still needs deciding is what
 
 ---
 
-### 5.6 A session that outlives its connection — **[DESIGN for v2, holder 2026-11-06; nothing built]**
+### 5.6 A session that outlives its connection — **[DESIGN for v2, holder 2026-11-06; being built]**
+
+**Built so far:** the raw log, `src/session/output_log.h`, tested but linked into
+nothing yet. `src/session/` is plain C with no Qt, so it can move to fuzznet.
 
 **This replaces "Mosh in v2".** It is the v2 answer to the gap in §5.3: a
 reconnect is a new remote shell. Plain SSH stays the default and the fallback,
@@ -1482,7 +1485,10 @@ events without anyone being told. BeerSSH has neither hooks nor session logging
 yet (searched 2026-11-06), so this keeps the option open in the protocol, where
 it is cheap to add now.
 
-**Two transports, one protocol, in this order:**
+**Two transports, one protocol.** The direct path over fuzznet is built first:
+most hosts that matter are already on it (holder, 2026-11-06). What it needs from
+fuzznet has been asked in that tree's inbox, and the server process, the log and
+the wire format are the same for both, so that work does not wait.
 
 1. **Over SSH, where we own both ends.** BeerSSH already opens exec channels, so
    the server process can be a helper started by one, speaking this framing
@@ -1504,8 +1510,8 @@ it is cheap to add now.
 | Works where UDP is blocked | yes | no, so it falls back |
 
 The largest gain, a shell that survives, needs no UDP at all, which is why SSH
-comes first, unless most hosts that matter are already on fuzznet (below). Each new login needs a key or a remembered password; without one,
-a person is asked (§11).
+would come first for a host not on fuzznet. Each new login needs a key or a
+remembered password; without one, a person is asked (§11).
 
 **Starting a session, by what the host has:**
 
@@ -1569,6 +1575,18 @@ OSC 52 need the same care in every mode.
 varints and type-length regions, generated C++, and `situc gen-fuzz` for the
 harness. fuzznet's frames are `.situ` schemas already. It would be a new
 dependency here.
+
+**Terminal output does not go through fuzznet's `log/`.** The holder asked, and
+the design fits: bounded, numbered, and an answer for "retention took it" kept
+apart from "not arrived yet". So the raw log copies that design, GONE and ABSENT
+included. The module itself does not fit, for three measured reasons (2026-11-06).
+`yes` through a pty ran at 81 MB/s here, and record bodies stop at 512 bytes, so
+that is about 160,000 records a second against 7,507 Ed25519 signatures of 4 KB,
+with at least 188 bytes of header and signature on each. Signing adds nothing:
+the session already authenticates every frame. And records are made to replicate
+to a user's other hosts, while terminal output holds secrets and must stay with
+its session and die with it. The session's own diagnostics (attached, mode changed,
+lines lost) carry no terminal content, so those can use fuzznet's logger.
 
 **Rejected.** Mosh itself: it drops scrollback and runs its own emulator, and
 it is not ours to extend. Resume offsets alone, as Eternal Terminal does: survives

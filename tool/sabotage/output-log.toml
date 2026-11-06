@@ -1,0 +1,80 @@
+# The raw log of a session's output (project.md sec 5.6).
+
+# One answer for two conditions: a client that fell behind asks for ever.
+[[sabotage]]
+name = "gone reads as absent"
+file = "src/session/output_log.c"
+find = "if (offset < log->start) return BSSH_OUTPUT_LOG_GONE;"
+replace = "if (offset < log->start) return BSSH_OUTPUT_LOG_ABSENT;"
+expect = "says_gone_and_absent_apart"
+
+# Faithful that overwrites promises "every state" and delivers less.
+[[sabotage]]
+name = "faithful evicts like Live"
+file = "src/session/output_log.c"
+find = "\t\tif (taken > room) taken = room;\n"
+replace = ""
+expect = "faithful_never_overwrites_what_the_client_lacks"
+
+# Counting what the client already held reports a loss that never happened.
+[[sabotage]]
+name = "acknowledged bytes count as lost"
+file = "src/session/output_log.c"
+find = "const uint64_t from = log->start > log->acked ? log->start : log->acked;"
+replace = "const uint64_t from = log->start;"
+expect = "live_evicts_the_oldest_and_counts_what_the_client_lost"
+
+# A client acknowledging the future frees bytes it never received.
+[[sabotage]]
+name = "an ack runs past the end"
+file = "src/session/output_log.c"
+find = "\tif (offset > log->end) offset = log->end;\n"
+replace = ""
+expect = "an_ack_never_moves_backwards_or_past_the_end"
+
+[[sabotage]]
+name = "an ack moves backwards"
+file = "src/session/output_log.c"
+find = "if (offset > log->acked) log->acked = offset;"
+replace = "log->acked = offset;"
+expect = "an_ack_never_moves_backwards_or_past_the_end"
+
+# After Live has evicted past the ack, end - acked exceeds the capacity and
+# the room wraps to a huge number: faithful in name, overwriting in fact.
+[[sabotage]]
+name = "moving to faithful keeps a stale ack"
+file = "src/session/output_log.c"
+find = "\tif (log->faithful && log->acked < log->start) log->acked = log->start;\n"
+replace = ""
+expect = "moving_to_faithful_guards_what_is_still_held"
+
+# Only the tail of an oversized write fits; the head would overwrite it.
+[[sabotage]]
+name = "an oversized write keeps its head"
+file = "src/session/output_log.c"
+find = "copy_in(log, log->end + (taken - kept), data + (taken - kept), kept);"
+replace = "copy_in(log, log->end + (taken - kept), data, kept);"
+expect = "a_write_larger_than_the_log_keeps_its_tail"
+
+# The wrap: the second half of a read that crosses the end of the array.
+[[sabotage]]
+name = "a read stops at the end of the array"
+file = "src/session/output_log.c"
+find = "\tmemcpy(out + first, log->bytes, len - first);\n"
+replace = ""
+expect = "reads_back_what_was_written_across_the_wrap"
+
+[[sabotage]]
+name = "a write stops at the end of the array"
+file = "src/session/output_log.c"
+find = "\tmemcpy(log->bytes, data + first, len - first);\n"
+replace = ""
+expect = "reads_back_what_was_written_across_the_wrap"
+
+# A mark per read: 276,000 a second through a pty, and the table holds seconds.
+[[sabotage]]
+name = "marks do not coalesce"
+file = "src/session/output_log.c"
+find = "if (log->marks[last].at_ms == at_ms) return;"
+replace = "(void)last;"
+expect = "marks_coalesce_and_lose_only_the_oldest_timing"

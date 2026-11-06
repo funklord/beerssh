@@ -72,6 +72,7 @@ SOURCES += \
     main.cpp \
     command_line_test.cpp \
     conn_manager_test.cpp \
+    output_log_test.cpp \
     emulator_bench.cpp \
     live_ssh_test.cpp \
     handoff_test.cpp \
@@ -129,6 +130,7 @@ SOURCES += \
     ../src/platform/secret_store_select_desktop.cpp \
     ../src/model/app_settings.cpp \
     ../src/model/conn_manager.cpp \
+    ../src/session/output_log.c \
     ../src/model/command_line.cpp \
     ../src/model/document_path.cpp \
     ../src/model/preset.cpp \
@@ -188,6 +190,7 @@ HEADERS += \
     phone_metrics.h \
     command_line_test.h \
     conn_manager_test.h \
+    output_log_test.h \
     emulator_bench.h \
     live_ssh_test.h \
     handoff_test.h \
@@ -243,6 +246,7 @@ HEADERS += \
     ../src/model/profile.h \
     ../src/model/app_settings.h \
     ../src/model/conn_manager.h \
+    ../src/session/output_log.h \
     ../src/model/command_line.h \
     ../src/model/document_path.h \
     ../src/model/preset.h \

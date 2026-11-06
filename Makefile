@@ -201,7 +201,9 @@ COMPLETION = $(TARGET).bash
 # fails to trigger a rebuild, which is a stale binary and not an error.
 # Sabotage edits softkeys/src/ in place, so it matters here as much as
 # for src/.
-SOURCES = $(wildcard src/*.cpp src/*/*.cpp softkeys/src/*.cpp)
+# Every suffix: the session layer is plain C (project.md sec 5.6), and a list
+# of *.cpp alone left a .c edit rebuilding nothing while `make test` passed.
+SOURCES = $(wildcard src/*.cpp src/*/*.cpp src/*/*.c softkeys/src/*.cpp)
 HEADERS = $(wildcard src/*.h src/*/*.h softkeys/include/softkeys/*.h)
 
 # --- vendored libvterm ------------------------------------------------------
