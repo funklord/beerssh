@@ -1504,8 +1504,33 @@ it is cheap to add now.
 | Works where UDP is blocked | yes | no, so it falls back |
 
 The largest gain, a shell that survives, needs no UDP at all, which is why SSH
-comes first. Each new login needs a key or a remembered password; without one,
+comes first, unless most hosts that matter are already on fuzznet (below). Each new login needs a key or a remembered password; without one,
 a person is asked (§11).
+
+**Starting a session, by what the host has:**
+
+| Host | Connection |
+|---|---|
+| Enrolled in fuzznet | direct over fuzznet, no SSH involved |
+| Helper available, not enrolled | through SSH, as above |
+| Anything else | plain SSH, as today |
+
+The holder's point, 2026-11-06: fuzznet already maintains host keys and
+authentication for other software, so setup is simpler there. Trust is settled
+once per device, not per host, which replaces both the host key prompt and copying
+a key into each `authorized_keys`. Every capability must name a service, so
+"shell" can be a capability of its own, and being enrolled for something else
+never implies it. Revoking a stolen phone covers every host.
+
+It stops short of four things. First contact still happens once, by pairing card
+or by TOFU, and TOFU owes the user an out-of-band check. Android keeps apps' data
+apart and fuzznet lets one process own an identity's mutable state, so BeerSSH
+holds a device identity of its own, or goes through an app that does; a narrow
+search of fuzznet's document found nothing on this. Nothing starts a shell yet: it
+has to run as the right user, and whether `fuzznetd` can host a per-user service
+is not established. And an enrolment system built for other software would now
+guard remote shells, so it needs the scrutiny `sshd` has had, and the shell
+capability is only ever granted explicitly.
 
 **The wire format is binary, and ours.** Both ends are ours, so nothing here
 has to be text. Most of the saving is in what is sent and how often, not in the
@@ -1557,8 +1582,9 @@ with any SFTP client.
 - *How the helper reaches a server*, the holder's: a package, or uploaded on
   first use with the user's consent, which means a build per architecture and an
   executable placed on someone's host. Without it, plain SSH as today.
-- *fuzznet or QUIC for UDP*, the holder's. fuzznet brings revocation of a stolen
-  device and a stack we own; `spool/transfer.c` there has congestion logic, built
+- *fuzznet or QUIC for UDP*, the holder's. The lean is fuzznet: QUIC is only a
+  transport, so its identity, trust and revocation would still have to be built.
+  fuzznet brings those and a stack we own; `spool/transfer.c` there has congestion logic, built
   for transfers. Not established: whether it can send "only with spare bandwidth",
   or carry an interactive stream. Its frame carries 144 bytes of fixed overhead,
   so one keystroke is about 173 bytes with IP and UDP, against an estimated 90-100
@@ -1568,6 +1594,17 @@ with any SFTP client.
   (its §13), so a compact session frame is a request to that project. QUIC brings audited streams and migration, not
   the revocation. Anything fuzznet needs is asked of that project (§3 of its own
   document says who links it), not changed from here.
+- *Where this lives*, the holder's, and it may end up in fuzznet. A shell is
+  generic: fuzznet's other consumers may want one, if only for an occasional
+  command. Two layers separate here. A one-shot command needs a request, its
+  output and an exit status, and no emulator, so it suits fuzznet well. The
+  terminal session, with its emulator, modes and backfill, is heavier, and
+  fuzznet's core says it does not know what messages mean, so it would sit above
+  that core as a service if it moved. So write the session layer to be movable
+  from the start: free of Qt and of BeerSSH's types, its wire format in a schema,
+  and its transport behind a seam. BeerSSH then consumes it either way. The SSH
+  stage depends on nothing in fuzznet, so it need not wait. Extracting it is a
+  deliberate piece of work, not something done in passing.
 - *What the client takes.* BeerSSH would accept cells as well as bytes, and the
   size of that change has not been looked at.
 - *Hooks on the server*, later: matching against the server's emulator would see
