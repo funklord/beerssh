@@ -1507,6 +1507,44 @@ The largest gain, a shell that survives, needs no UDP at all, which is why SSH
 comes first. Each new login needs a key or a remembered password; without one,
 a person is asked (§11).
 
+**The wire format is binary, and ours.** Both ends are ours, so nothing here
+has to be text. Most of the saving is in what is sent and how often, not in the
+encoding. The figures in this list are estimates, not measurements.
+
+- **Meaning, not cells.** An 80x24 snapshot at about 12 bytes a cell is about
+  23 KB; as UTF-8 text with a table of style runs, about 1-3 KB.
+- **Operations.** Scrolling is "scroll 1 line" and the new row.
+- **Batches.** Output goes out in frames of about 20-50 ms: on a phone each
+  packet can wake the radio, so the packet count matters more than its size.
+- **Small numbers.** Varints and deltas in place of 64-bit line numbers and
+  timestamps, and run-length encoding in a gap's line lengths.
+- **Compression for history and raw log batches only.** Each batch decodes
+  alone, since UDP can lose what came before it. Input stays uncompressed, as do
+  live frames that could hold a typed password, because compressed sizes can leak
+  content. Over SSH, SSH's own compression stays off.
+- **Type and length on every message**, about 2 bytes, so an older client skips
+  what a newer helper sends.
+
+**Parsing.** Length-prefixed fields need no scanning, escaping or unescaping, so
+data cannot pose as structure. But a length is attacker-controlled too, as
+Heartbleed showed, so the safety comes from how the parser is made: bounds checks
+generated rather than hand-written, every length held to a maximum before
+anything is allocated, a fuzz harness on the parser, and the authentication tag
+verified before parsing. SSH does that last part in its own layer; over UDP the
+frame must.
+
+Two gains are particular to terminals. Program output is only ever a framed
+payload, so it cannot forge a protocol message. And in Live the client receives
+cells and need not parse escape sequences at all, which moves that parsing to the
+helper, running as the user on the server. Serial and Eventual replay raw bytes
+through libvterm on the client, so they keep today's exposure, and events such as
+OSC 52 need the same care in every mode.
+
+**Proposed tool: situ, the holder's decision.** One schema for both ends, with
+varints and type-length regions, generated C++, and `situc gen-fuzz` for the
+harness. fuzznet's frames are `.situ` schemas already. It would be a new
+dependency here.
+
 **Rejected.** Mosh itself: it drops scrollback and runs its own emulator, and
 it is not ours to extend. Resume offsets alone, as Eternal Terminal does: survives
 drops, but after congestion everything old arrives before the latest. A
@@ -1522,7 +1560,12 @@ with any SFTP client.
 - *fuzznet or QUIC for UDP*, the holder's. fuzznet brings revocation of a stolen
   device and a stack we own; `spool/transfer.c` there has congestion logic, built
   for transfers. Not established: whether it can send "only with spare bandwidth",
-  or carry an interactive stream. QUIC brings audited streams and migration, not
+  or carry an interactive stream. Its frame carries 144 bytes of fixed overhead,
+  so one keystroke is about 173 bytes with IP and UDP, against an estimated 90-100
+  for SSH over TCP and about 60 for a short session header. That is still one
+  packet, and about 12% of a full 1200-byte datagram, so it weighs on the choice
+  without ruling fuzznet out. The capability in every datagram is deliberate
+  (its §13), so a compact session frame is a request to that project. QUIC brings audited streams and migration, not
   the revocation. Anything fuzznet needs is asked of that project (§3 of its own
   document says who links it), not changed from here.
 - *What the client takes.* BeerSSH would accept cells as well as bytes, and the
