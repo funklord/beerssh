@@ -342,6 +342,10 @@ int bssh_session_registry::waiting_count() const {
 	return waiting;
 }
 
+bool bssh_session_registry::has_unfinished_sessions() const {
+	return connected_count() + connecting_count() + waiting_count() > 0;
+}
+
 bssh_session *bssh_session_registry::at(int index) const {
 	if (index < 0 || index >= m_sessions.size()) return nullptr;
 	return m_sessions.at(index);

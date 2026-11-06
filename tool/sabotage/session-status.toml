@@ -94,3 +94,12 @@ file = "src/ui/main_window.cpp"
 find = "\tplatform->set_keep_alive(connected + connecting + waiting > 0 || hidden);\n"
 replace = "\tplatform->set_keep_alive(connected + connecting > 0 || hidden);\n"
 expect = "a_session_out_of_attempts_keeps_the_process_resident"
+
+# Asked as live: 0 between two attempts, so an upgrade's old program quits
+# with the session it could not give (sec 8.4).
+[[sabotage]]
+name = "unfinished means live"
+file = "src/model/session_registry.cpp"
+find = "\treturn connected_count() + connecting_count() + waiting_count() > 0;\n"
+replace = "\treturn live_count() > 0;\n"
+expect = "only_a_connected_session_counts_as_connected"

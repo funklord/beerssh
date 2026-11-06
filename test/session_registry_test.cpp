@@ -191,6 +191,7 @@ void session_registry_test::a_session_out_of_attempts_is_waiting_and_not_connect
 	QVERIFY(!registry.keeps_awake());
 	QVERIFY(!held_when_told.isEmpty());
 	QVERIFY(!held_when_told.contains(0));
+	QVERIFY(registry.has_unfinished_sessions());
 
 	/* The tab's own Reconnect dials now, so it is connecting again. */
 	session->reconnect();
@@ -256,9 +257,14 @@ void session_registry_test::only_a_connected_session_counts_as_connected() {
 	QVERIFY(!held_when_told.isEmpty());
 	QVERIFY(!held_when_told.contains(0));
 
+	/* Not live, and an upgrade's old program must not quit with it. */
+	QCOMPARE(registry.live_count(), 0);
+	QVERIFY(registry.has_unfinished_sessions());
+
 	/* Told to stop retrying, it is on its way nowhere, and that is said too. */
 	session->disconnect_from_host();
 	QCOMPARE(held_when_told.last(), 0);
+	QVERIFY(!registry.has_unfinished_sessions());
 }
 
 void session_registry_test::title_falls_back_from_osc_to_profile() {

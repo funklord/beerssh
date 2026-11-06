@@ -7599,9 +7599,10 @@ window with no name is a blank row in the task switcher.
      **Upgrades:** File > Restart, Keeping Sessions starts this program
      again with `--adopt-from <socket>`; the new one lists the old one's
      connected sessions, takes each, shows them as tabs, and asks it to
-     quit. The old one quits only once nothing live is left in it, so a
-     session it could not give -- one reconnecting, or too busy to stop
-     in time -- keeps it running. The program is restarted from its path on disk with a
+     quit. The old one quits only once no session is left that quitting
+     would lose, so one it could not give -- one reconnecting, between
+     two attempts included, or too busy to stop in time -- keeps it
+     running. The program is restarted from its path on disk with a
      trailing " (deleted)" removed, which is how Linux names a running
      program whose file an upgrade replaced.
      Tests: the payload round trip; a session given by another process

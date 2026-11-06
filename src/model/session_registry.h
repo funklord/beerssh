@@ -92,6 +92,13 @@ public:
 	int connecting_count() const;
 	int waiting_count() const;
 
+	/*
+	 * Any of those three: a session that ending the process would lose.
+	 * live_count() is not this, being 0 between two reconnect attempts,
+	 * so an upgrade's old program quit with the session it could not give.
+	 */
+	bool has_unfinished_sessions() const;
+
 	bssh_conn_manager *conn_manager_for(bssh_session *session) const;
 
 	/*

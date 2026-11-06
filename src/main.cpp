@@ -520,7 +520,7 @@ int main(int argc, char *argv[]) {
 		 * time -- keeps this one running, rather than ending with the
 		 * program. */
 		QObject::connect(handoff, &bssh_handoff_point::quit_requested, &app, [registry] {
-			if (registry->live_count() != 0) return;
+			if (registry->has_unfinished_sessions()) return;
 
 			/*
 			 * Its sessions live on in the program that asked, which keeps
