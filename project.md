@@ -1432,7 +1432,11 @@ connection, for a program few hosts have yet; the holder's automatic negotiation
 is this with the default turned on, once the program can reach hosts. `make
 check-ssh` proves it on the real transport against a real sshd, through a real
 login: a drop during a job comes back to the same shell with the job's output, and
-closing leaves nothing on the host. Not yet tried on Android, or by hand.
+closing leaves nothing on the host. On the API 36 emulator, 2026-11-06, with the
+app in the background and the connection killed from the server: "connecting" for
+about 2 s and back in about 4 with no input, the same shell, and the line a job
+wrote meanwhile on screen. Not tried on a real phone. A password host needs the
+password held or remembered, as any reconnect does.
 
 What the path does: a probe beside the connection (`beerssh-session version`), then
 an exec with no pty, which would rewrite frames, and stderr dropped for the same
@@ -1671,7 +1675,9 @@ with any SFTP client.
   without ruling fuzznet out. The capability in every datagram is deliberate
   (its §13), so a compact session frame is a request to that project. QUIC brings audited streams and migration, not
   the revocation. Anything fuzznet needs is asked of that project (§3 of its own
-  document says who links it), not changed from here.
+  document says who links it), not changed from here. Asked 2026-11-06, and recorded
+  in its §918: the shell and the smaller frame are open with the holder, and
+  netcfgd's work asks the same frame question, so two consumers want it.
 - *Where this lives*, the holder's, and it may end up in fuzznet. A shell is
   generic: fuzznet's other consumers may want one, if only for an occasional
   command. Two layers separate here. A one-shot command needs a request, its

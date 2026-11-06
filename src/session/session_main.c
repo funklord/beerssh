@@ -30,6 +30,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -134,6 +135,9 @@ static int start_and_connect(const char *path) {
 	const pid_t child = fork();
 	if (child < 0) return -1;
 	if (child == 0) become_session(path);
+
+	/* It forks and leaves at once, and nothing else here would reap it. */
+	waitpid(child, NULL, 0);
 
 	for (int waited = 0; waited < START_WAIT_MS; waited += 10) {
 		const int fd = connect_to(path);
