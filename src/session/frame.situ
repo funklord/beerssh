@@ -24,6 +24,7 @@ varint_type bssh_varint {
 //   6 exited   host: the program ended
 //   7 lost     host: nothing older than this offset is held
 //   8 mode     client: live, eventual or serial
+//   9 hello    host: the first bytes on every link, a fixed text
 
 struct bssh_frame {
 	u8           kind;

@@ -25,6 +25,14 @@ private slots:
 	void a_program_ending_is_reported_and_ends_the_host();
 	void nobody_coming_back_ends_the_host_after_the_linger();
 	void garbage_loses_the_client_and_not_the_session();
+	void the_client_delivers_output_split_anywhere();
+	void the_client_never_joins_text_across_a_gap();
+	void the_client_is_told_what_a_lost_frame_took();
+	void the_client_drops_what_it_has_already_seen();
+	void the_client_keeps_its_place_across_a_new_link();
+	void the_client_acknowledges_when_due_and_not_before();
+	void the_client_refuses_a_peer_not_speaking_the_protocol();
+	void a_client_and_a_real_host_agree_from_the_first_byte();
 };
 
 #endif

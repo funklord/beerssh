@@ -134,6 +134,7 @@ SOURCES += \
     ../src/model/conn_manager.cpp \
     ../src/session/output_log.c \
     ../src/session/line_gaps.c \
+    ../src/session/session_client.c \
     ../src/session/session_host.c \
     ../src/session/wire.c \
     ../src/session/generated/frame.c \
@@ -257,6 +258,7 @@ HEADERS += \
     ../src/model/conn_manager.h \
     ../src/session/output_log.h \
     ../src/session/line_gaps.h \
+    ../src/session/session_client.h \
     ../src/session/session_host.h \
     ../src/session/wire.h \
     ../src/model/command_line.h \

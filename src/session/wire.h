@@ -25,7 +25,17 @@ enum {
 	BSSH_WIRE_EXITED = 6,
 	BSSH_WIRE_LOST = 7,
 	BSSH_WIRE_MODE = 8,
+	BSSH_WIRE_HELLO = 9,
 };
+
+/*
+ * The host's first bytes on every link. A length alone cannot tell this
+ * protocol from text: a banner from a chatty .bashrc parses as a frame of an
+ * unknown kind with a long length, and a reader would wait for the rest of it.
+ * So a fixed hello comes first, and anything else means something other than
+ * this protocol is on the far end, at the first byte that differs.
+ */
+#define BSSH_WIRE_HELLO_TEXT "beerssh-session 1"
 
 enum {
 	BSSH_WIRE_MODE_LIVE = 0,
@@ -60,6 +70,7 @@ size_t bssh_wire_put_attach(uint8_t *out, size_t capacity, uint64_t offset, uint
                             uint16_t rows);
 size_t bssh_wire_put_resize(uint8_t *out, size_t capacity, uint16_t columns, uint16_t rows);
 size_t bssh_wire_put_exited(uint8_t *out, size_t capacity, int32_t status);
+size_t bssh_wire_put_hello(uint8_t *out, size_t capacity);
 
 /* Reading a body. Each returns 0, or -1 when the body is not that message. */
 int bssh_wire_read_offset(const bssh_wire_frame_t *frame, uint64_t *offset);

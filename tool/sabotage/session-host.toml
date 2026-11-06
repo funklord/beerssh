@@ -114,3 +114,80 @@ file = "src/session/wire.c"
 find = "\tif (!used || used != situ_varint_len(raw)) return -1;\n"
 replace = "\tif (!used) return -1;\n"
 expect = "a_varint_with_a_second_spelling_is_refused"
+
+# Bytes either side of a hole, fed as one stream.
+[[sabotage]]
+name = "the client joins text across a gap"
+file = "src/session/session_client.c"
+find = "\t\tclient->events.gap(client->events.context, offset - client->next);\n\t\tclient->next = offset;\n\t} else if (offset < client->next) {"
+replace = "\t\tclient->next = offset;\n\t} else if (offset < client->next) {"
+expect = "the_client_never_joins_text_across_a_gap"
+
+[[sabotage]]
+name = "a lost frame is ignored"
+file = "src/session/session_client.c"
+find = "if (frame.kind == BSSH_WIRE_LOST) status = take_lost(client, &frame);"
+replace = "if (frame.kind == BSSH_WIRE_LOST) status = 0;"
+expect = "the_client_is_told_what_a_lost_frame_took"
+
+# A resend drawn twice.
+[[sabotage]]
+name = "what was seen is drawn again"
+file = "src/session/session_client.c"
+find = "\t\tif (seen >= len) return 0;\n\t\tbytes += seen;\n\t\tlen -= (uint32_t)seen;\n"
+replace = "\t\t(void)seen;\n"
+expect = "the_client_drops_what_it_has_already_seen"
+
+# A half frame carried over parses the new link's first bytes as its tail.
+[[sabotage]]
+name = "a new link keeps the old half frame"
+file = "src/session/session_client.c"
+find = "\tclient->in_used = 0;\n"
+replace = "\t(void)client;\n"
+expect = "the_client_keeps_its_place_across_a_new_link"
+
+[[sabotage]]
+name = "acknowledgements come every time"
+file = "src/session/session_client.c"
+find = "\tif (client->next - client->acked < every) return 0;\n"
+replace = ""
+expect = "the_client_acknowledges_when_due_and_not_before"
+
+# Bytes past the first frame in one read, left behind.
+[[sabotage]]
+name = "only the first frame of a read is taken"
+file = "src/session/session_client.c"
+find = "\t\tat += used;\n\t}\n"
+replace = "\t\tat += used;\n\t\tbreak;\n\t}\n"
+expect = "the_client_delivers_output_split_anywhere"
+
+# Without the hello a banner reads as a frame still arriving: the client waits
+# on a host that will never speak this protocol.
+[[sabotage]]
+name = "a peer speaking something else is read anyway"
+file = "src/session/session_client.c"
+find = "\tif (memcmp(client->in, hello, have) != 0) return -1;\n"
+replace = ""
+expect = "the_client_refuses_a_peer_not_speaking_the_protocol"
+
+[[sabotage]]
+name = "a new link need not say hello"
+file = "src/session/session_client.c"
+find = "\tclient->said_hello = 0;\n"
+replace = ""
+expect = "the_client_refuses_a_peer_not_speaking_the_protocol"
+
+[[sabotage]]
+name = "the host says no hello"
+file = "src/session/session_host.c"
+find = "\thost->hello_due = 1;\n"
+replace = ""
+expect = "a_client_and_a_real_host_agree_from_the_first_byte"
+
+# A client that types and goes: what reached the host was typed by somebody.
+[[sabotage]]
+name = "input from a client that left is thrown away"
+file = "src/session/session_host.c"
+find = "\t\t\tdrain_and_drop(host);\n"
+replace = "\t\t\tdrop_client(host);\n"
+expect = "output_written_while_detached_arrives_on_return"

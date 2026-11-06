@@ -1,5 +1,6 @@
 #include "session_host_test.h"
 
+#include "session/session_client.h"
 #include "session/session_host.h"
 #include "session/wire.h"
 
@@ -115,9 +116,14 @@ struct client_t {
 
 	/* The host closes on us: a read says so, and never waits past `ms`. */
 	bool hung_up(int ms = 2000) {
-		pollfd one = { fd, POLLIN, 0 };
-		char byte = 0;
-		return poll(&one, 1, ms) > 0 && read(fd, &byte, 1) == 0;
+		QElapsedTimer timer;
+		timer.start();
+		while (timer.elapsed() < ms) {
+			pollfd one = { fd, POLLIN, 0 };
+			char bytes[256];
+			if (poll(&one, 1, 100) > 0 && read(fd, bytes, sizeof(bytes)) <= 0) return true;
+		}
+		return false;
 	}
 
 	void send_raw(const uint8_t *bytes, size_t len) {
@@ -451,4 +457,194 @@ void session_host_test::garbage_loses_the_client_and_not_the_session() {
 	QVERIFY(client.connect_to(host.path));
 	client.attach(0);
 	QVERIFY(client.wait_for("ready:"));
+}
+
+namespace {
+
+struct received_t {
+	QByteArray text;
+	QList<uint64_t> gaps;
+	int exits = 0;
+	int32_t status = 0;
+	bssh_session_client_t client;
+
+	received_t() {
+		bssh_session_client_events_t events;
+		events.context = this;
+		events.output = [](void *self, const uint8_t *bytes, size_t len) {
+			static_cast<received_t *>(self)->text.append(reinterpret_cast<const char *>(bytes), int(len));
+		};
+		events.gap = [](void *self, uint64_t count) {
+			received_t *me = static_cast<received_t *>(self);
+			me->gaps.append(count);
+			me->text.append('|');
+		};
+		events.exited = [](void *self, int32_t status) {
+			received_t *me = static_cast<received_t *>(self);
+			++me->exits;
+			me->status = status;
+		};
+		bssh_session_client_init(&client, &events);
+		hello();
+	}
+
+	void hello() {
+		uint8_t frame[32];
+		bssh_session_client_feed(&client, frame, bssh_wire_put_hello(frame, sizeof(frame)));
+	}
+
+	int output(uint64_t offset, const char *text_in) {
+		uint8_t frame[256];
+		const size_t len = bssh_wire_put_output(frame, sizeof(frame), offset,
+		                                        reinterpret_cast<const uint8_t *>(text_in), strlen(text_in));
+		return bssh_session_client_feed(&client, frame, len);
+	}
+};
+
+}
+
+void session_host_test::the_client_delivers_output_split_anywhere() {
+	received_t received;
+	uint8_t frames[64];
+	size_t len = bssh_wire_put_output(frames, sizeof(frames), 0, reinterpret_cast<const uint8_t *>("ab"), 2);
+	len += bssh_wire_put_output(frames + len, sizeof(frames) - len, 2, reinterpret_cast<const uint8_t *>("cd"), 2);
+	len += bssh_wire_put_exited(frames + len, sizeof(frames) - len, 9);
+
+	for (size_t i = 0; i < len; ++i) QCOMPARE(bssh_session_client_feed(&received.client, frames + i, 1), 0);
+	QCOMPARE(received.text, QByteArray("abcd"));
+	QCOMPARE(received.exits, 1);
+	QCOMPARE(received.status, 9);
+	QCOMPARE(received.client.next, uint64_t(4));
+
+	/* And all at once, which is how a busy connection delivers them. */
+	received_t together;
+	QCOMPARE(bssh_session_client_feed(&together.client, frames, len), 0);
+	QCOMPARE(together.text, QByteArray("abcd"));
+	QCOMPARE(together.exits, 1);
+}
+
+void session_host_test::the_client_never_joins_text_across_a_gap() {
+	received_t received;
+	QCOMPARE(received.output(0, "ab"), 0);
+	QCOMPARE(received.output(7, "cd"), 0);
+
+	QCOMPARE(received.text, QByteArray("ab|cd"));
+	QCOMPARE(received.gaps, QList<uint64_t>{ 5 });
+	QCOMPARE(received.client.next, uint64_t(9));
+}
+
+void session_host_test::the_client_is_told_what_a_lost_frame_took() {
+	received_t received;
+	received.output(0, "ab");
+
+	uint8_t frame[16];
+	const size_t len = bssh_wire_put_offset(frame, sizeof(frame), BSSH_WIRE_LOST, 100);
+	QCOMPARE(bssh_session_client_feed(&received.client, frame, len), 0);
+	QCOMPARE(received.gaps, QList<uint64_t>{ 98 });
+	QCOMPARE(received.client.next, uint64_t(100));
+
+	/* Told again of what it already knows, it adds nothing. */
+	QCOMPARE(bssh_session_client_feed(&received.client, frame, len), 0);
+	QCOMPARE(received.gaps.size(), 1);
+
+	/* And output from there joins up with no second gap. */
+	received.output(100, "cd");
+	QCOMPARE(received.text, QByteArray("ab|cd"));
+}
+
+void session_host_test::the_client_drops_what_it_has_already_seen() {
+	received_t received;
+	received.output(0, "abcd");
+
+	received.output(2, "cdef");
+	QCOMPARE(received.text, QByteArray("abcdef"));
+
+	received.output(1, "bc");
+	QCOMPARE(received.text, QByteArray("abcdef"));
+	QCOMPARE(received.client.next, uint64_t(6));
+}
+
+void session_host_test::the_client_keeps_its_place_across_a_new_link() {
+	received_t received;
+	received.output(0, "abcd");
+
+	/* Half a frame, and then the connection goes. */
+	uint8_t frame[32];
+	const size_t len = bssh_wire_put_output(frame, sizeof(frame), 4, reinterpret_cast<const uint8_t *>("efgh"), 4);
+	QCOMPARE(bssh_session_client_feed(&received.client, frame, 3), 0);
+	bssh_session_client_reset_link(&received.client);
+	QCOMPARE(received.client.next, uint64_t(4));
+
+	/* The new link proves itself, and starts from where the old one was. */
+	received.hello();
+	QCOMPARE(bssh_session_client_feed(&received.client, frame, len), 0);
+	QCOMPARE(received.text, QByteArray("abcdefgh"));
+}
+
+void session_host_test::the_client_acknowledges_when_due_and_not_before() {
+	received_t received;
+	received.output(0, "abc");
+
+	uint8_t out[16];
+	QCOMPARE(bssh_session_client_ack_due(&received.client, 4, out, sizeof(out)), size_t(0));
+
+	received.output(3, "d");
+	const size_t len = bssh_session_client_ack_due(&received.client, 4, out, sizeof(out));
+	QVERIFY(len > 0);
+
+	bssh_wire_frame_t frame;
+	uint32_t used = 0;
+	QCOMPARE(bssh_wire_take(out, uint32_t(len), &frame, &used), 1);
+	uint64_t offset = 0;
+	QCOMPARE(bssh_wire_read_offset(&frame, &offset), 0);
+	QCOMPARE(offset, uint64_t(4));
+
+	QCOMPARE(bssh_session_client_ack_due(&received.client, 4, out, sizeof(out)), size_t(0));
+}
+
+void session_host_test::the_client_refuses_a_peer_not_speaking_the_protocol() {
+	/* A .bashrc's banner, printed ahead of the program on the far end. */
+	received_t received;
+	bssh_session_client_reset_link(&received.client);
+	const QByteArray banner("Welcome to the host, this is not a frame at all\r\n");
+	QCOMPARE(bssh_session_client_feed(&received.client, reinterpret_cast<const uint8_t *>(banner.constData()),
+	                                  size_t(banner.size())),
+	         -1);
+	QVERIFY(received.text.isEmpty());
+
+	/* Refused at the first wrong byte, without waiting for more. */
+	bssh_session_client_reset_link(&received.client);
+	const uint8_t wrong[] = { BSSH_WIRE_OUTPUT };
+	QCOMPARE(bssh_session_client_feed(&received.client, wrong, 1), -1);
+
+	/* And a hello that stops short is only not finished. */
+	bssh_session_client_reset_link(&received.client);
+	uint8_t hello[32];
+	const size_t len = bssh_wire_put_hello(hello, sizeof(hello));
+	QCOMPARE(bssh_session_client_feed(&received.client, hello, len - 1), 0);
+	QCOMPARE(bssh_session_client_feed(&received.client, hello + len - 1, 1), 0);
+	QCOMPARE(received.client.said_hello, 1);
+}
+
+void session_host_test::a_client_and_a_real_host_agree_from_the_first_byte() {
+	host_process_t host("echo from-the-program; read wait");
+	client_t link;
+	QVERIFY(link.connect_to(host.path));
+	link.attach(0);
+
+	received_t received;
+	bssh_session_client_reset_link(&received.client);
+
+	QElapsedTimer timer;
+	timer.start();
+	while (!received.text.contains("from-the-program") && timer.elapsed() < 3000) {
+		pollfd one = { link.fd, POLLIN, 0 };
+		if (poll(&one, 1, 100) <= 0) continue;
+
+		uint8_t chunk[4096];
+		const ssize_t got = read(link.fd, chunk, sizeof(chunk));
+		QVERIFY(got > 0);
+		QCOMPARE(bssh_session_client_feed(&received.client, chunk, size_t(got)), 0);
+	}
+	QVERIFY(received.text.contains("from-the-program"));
 }

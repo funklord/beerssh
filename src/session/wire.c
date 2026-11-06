@@ -98,6 +98,11 @@ size_t bssh_wire_put_exited(uint8_t *out, size_t capacity, int32_t status) {
 	return bssh_wire_put(out, capacity, BSSH_WIRE_EXITED, body, sizeof(body));
 }
 
+size_t bssh_wire_put_hello(uint8_t *out, size_t capacity) {
+	return bssh_wire_put(out, capacity, BSSH_WIRE_HELLO, BSSH_WIRE_HELLO_TEXT,
+	                     sizeof(BSSH_WIRE_HELLO_TEXT) - 1);
+}
+
 /* A view over a body, which situ's accessors bound by what really arrived. */
 static int body_message(const bssh_wire_frame_t *frame, situ_msg_t *msg) {
 	situ_msg_init(msg, (uint8_t *)(uintptr_t)frame->body, frame->body_len);

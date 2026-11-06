@@ -28,6 +28,7 @@ typedef struct host {
 	pid_t child;
 	int status;
 
+	int hello_due;        /* a new link has not had its first bytes */
 	int attached;         /* the client has said where to start */
 	uint64_t sent;        /* next offset to send */
 
@@ -84,6 +85,7 @@ static int listen_on(const char *path) {
 static void drop_client(host_t *host) {
 	if (host->client >= 0) close(host->client);
 	host->client = -1;
+	host->hello_due = 0;
 	host->attached = 0;
 	host->in_used = 0;
 	host->out_used = 0;
@@ -104,6 +106,7 @@ static void accept_client(host_t *host) {
 
 	drop_client(host);
 	host->client = fd;
+	host->hello_due = 1;
 }
 
 static void set_size(host_t *host, uint16_t columns, uint16_t rows) {
@@ -198,8 +201,30 @@ static void take_frames(host_t *host) {
 	}
 }
 
+/*
+ * The peer has gone. What it sent first is still in the socket, and input that
+ * reached this far is applied: somebody typed it. Reading ends with EOF, or
+ * with a read that brought nothing.
+ */
+static void drain_and_drop(host_t *host) {
+	while (host->client >= 0) {
+		const uint32_t before = host->in_used;
+
+		read_client(host);
+		if (host->client >= 0 && host->in_used == before) break;
+		take_frames(host);
+	}
+	drop_client(host);
+}
+
 static void fill_out(host_t *host) {
-	if (!host->attached || host->out_used) return;
+	if (host->out_used) return;
+	if (host->hello_due) {
+		host->out_used = bssh_wire_put_hello(host->out, sizeof(host->out));
+		host->hello_due = 0;
+		return;
+	}
+	if (!host->attached) return;
 
 	uint8_t chunk[CHUNK];
 	size_t len = 0;
@@ -228,7 +253,7 @@ static void write_client(host_t *host) {
 		                           host->out_used - host->out_done, MSG_NOSIGNAL);
 		if (wrote < 0) {
 			if (errno == EAGAIN || errno == EINTR) return;
-			drop_client(host);
+			drain_and_drop(host);
 			return;
 		}
 		host->out_done += (size_t)wrote;
@@ -316,7 +341,7 @@ int bssh_session_host_run(const bssh_session_host_options_t *options) {
 			fds[count].fd = host->client;
 			fds[count].events = 0;
 			if (host->in_used < sizeof(host->in)) fds[count].events |= POLLIN;
-			if (host->out_used || (host->attached && host->sent < host->log.end)
+			if (host->out_used || host->hello_due || (host->attached && host->sent < host->log.end)
 			    || (host->attached && host->pty < 0))
 				fds[count].events |= POLLOUT;
 			++count;

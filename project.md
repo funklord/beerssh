@@ -1422,7 +1422,18 @@ is told what was lost. `beerssh-session` (`make session`) is the program a host
 runs, a static binary of about 1 MB: `version` is the probe, `attach NAME` what an
 exec channel runs. `make check-session` proves it over a real sshd: with the
 connection killed during a job, the next one finds the same shell and all 5000
-lines written meanwhile, in order. BeerSSH's own client does not speak it yet. `src/session/` is plain C with no Qt, so it can move to fuzznet.
+lines written meanwhile, in order. `src/session/session_client.h` is the client's
+half, for both transports: it keeps its place across links and never joins text
+across a gap. It is tested, and BeerSSH does not use it yet. Wiring it into the
+SSH path means an exec with no pty (a pty would mangle frames), a probe on every
+connection, and a reconnect that keeps modes, so it waits on how the helper
+reaches a host: until then the probe would cost every connection for nothing.
+
+The host's first bytes on a link are a fixed hello. A length alone cannot tell
+this protocol from text: a banner from a chatty `.bashrc`, the fault that breaks
+`scp`, parses as a frame of an unknown kind with a long length, and the client
+would wait for the rest of it. With the hello, anything else is refused at the
+first wrong byte, and that is the cue for plain SSH. `src/session/` is plain C with no Qt, so it can move to fuzznet.
 
 **This replaces "Mosh in v2".** It is the v2 answer to the gap in §5.3: a
 reconnect is a new remote shell. Plain SSH stays the default and the fallback,
