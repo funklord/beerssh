@@ -43,3 +43,12 @@ file = "src/model/session_registry.cpp"
 find = "if (session->profile().keep_awake && on_its_way(session)) return true;"
 replace = "if (session->profile().keep_awake && session->is_live()) return true;"
 expect = "only_a_connected_keep_awake_host_keeps_the_computer_awake"
+
+# The retry dialling beside a connection already under way: two connections,
+# two host key dialogs and two password prompts from one cold ssh:// link.
+[[sabotage]]
+name = "a due retry dials over a live session"
+file = "src/model/conn_manager.cpp"
+find = "\tif (m_session->is_live()) {\n\t\tset_reconnecting(false);\n\t\treturn;\n\t}\n"
+replace = ""
+expect = "a_retry_due_on_a_live_session_does_not_dial_again"

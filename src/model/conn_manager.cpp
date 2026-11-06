@@ -221,6 +221,20 @@ void bssh_conn_manager::schedule_reconnect() {
 void bssh_conn_manager::attempt_reconnect() {
 	if (!m_auto_reconnect || m_user_disconnected || !m_session) return;
 
+	/*
+	 * Asked again when the timer fires, because the answer can have
+	 * changed in the second it waited. A network event at start-up lands
+	 * while the first dial is still queued and the session does not look
+	 * live yet; dialling then opened a second connection beside the first,
+	 * so a cold ssh:// link asked for the host key twice and the password
+	 * twice, and one of the two answers went to a connection already gone.
+	 * An attempt in flight is left to finish, and reports back if it fails.
+	 */
+	if (m_session->is_live()) {
+		set_reconnecting(false);
+		return;
+	}
+
 	set_reconnecting(true);
 	emit reconnect_started(m_attempt);
 

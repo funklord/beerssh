@@ -136,6 +136,40 @@ void conn_manager_test::a_failing_reconnect_does_not_reset_its_own_backoff() {
 	bssh_ssh_session::set_factory(nullptr);
 }
 
+void conn_manager_test::a_retry_due_on_a_live_session_does_not_dial_again() {
+	const bssh_factory_reset_t factory_reset;
+	int dialled = 0;
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&](QObject *parent) -> bssh_ssh_session * {
+		++dialled;
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+
+	bssh_session session(host(QStringLiteral("cold")));
+	bssh_conn_manager manager(&session);
+	session.connect_to_host();
+	fake->simulate_key_auth_success();
+	fake->simulate_connection_lost();
+	QCOMPARE(dialled, 1);
+
+	/*
+	 * A retry is armed, and a connection gets going before it is due: the
+	 * cold start's order, a network event ahead of the first dial, with the
+	 * same result. Left to the timer, it dialled a second one beside it.
+	 */
+	session.reconnect();
+	QCOMPARE(dialled, 2);
+	QVERIFY(session.is_live());
+
+	QSignalSpy started(&manager, &bssh_conn_manager::reconnect_started);
+	QVERIFY(!started.wait(2500));
+	QCOMPARE(dialled, 2);
+	QVERIFY(!manager.is_reconnecting());
+
+	bssh_ssh_session::set_factory(nullptr);
+}
+
 void conn_manager_test::giving_up_still_waits_for_the_network() {
 	const bssh_factory_reset_t factory_reset;
 	bssh_fake_ssh_session *fake = nullptr;

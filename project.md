@@ -1214,6 +1214,14 @@ events from `bssh_platform` (§3) without caring which platform produced them.
   beersshd sets the same flag (§19.6). On the Fold One UI's battery
   management never got in the way: what stopped it was ours, below.
 
+- **[FIXED 2026-11-06, found on the Fold] A cold `ssh://` link dialled twice.**
+  One launch, two connections a second apart at the server: the host key
+  asked twice, the password twice, one answer going to a dead connection, and
+  the prompt drawn twice on screen. A network event at start-up arrives
+  while the first dial is queued and the session does not look live, so a
+  retry was armed, and `attempt_reconnect()` dialled without asking again.
+  It asks now; three cold opens on API 36, one connection each. The link's
+  first test passed because a dialog answered quickly hid it.
 - **[FIXED 2026-11-06, found on the Fold] One drop in the background ended the
   session for good.** `bssh_session_registry` was connected to `state_changed`
   before the manager, so a window heard of a drop first, counted nothing
@@ -17694,17 +17702,19 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
 - **What is left of the Fold run (2026-11-06).** Seen there: beersshd's
   `types=0x10`, serving past a 60 s limit, One UI's battery dialog, and
   BeerSSH's background reconnect (§5.3, which found the worst fault of the
-  run; §5.4; §19.6). **Not seen on the phone: the reboot.** The holder took
-  it up before it could be done, so it is seen on an API 36 emulator with a
-  PIN instead (§19.6). What only the Fold can add is One UI's boot, with
-  beersshd left ticked and exempt for it: reboot, unlock, serving with no
-  tap. For the record of how to run it: `make android-sshd
-  ANDROID_ABI=arm64-v8a`, and `device_config set_sync_disabled_for_tests
-  until_reboot` FIRST, then `put` (§19.6). Restore both with `delete` and
-  `set_sync_disabled_for_tests none`: the limit is system-wide.
-  Also seen once on the Fold, on a cold `ssh://` open just after an
-  install: the password prompt drawn twice, a stale copy at the top of the
-  window for as long as the prompt stood. Not on the emulator; not chased.
+  run; §5.4; §19.6). **The Fold is not rebooted -- the holder, 2026-11-06:
+  "you can test reboot on another phone but not on the fold."** Boot stands
+  as seen on an API 36 emulator with a PIN (§19.6) until another phone is on
+  adb. **Still to measure there: screen-off.** BeerSSH holds no wake lock, so
+  whether its 60 s keepalive and its backoff keep running in deep sleep is
+  unknown, and an emulator's CPU does not suspend. Capture on the server side
+  (tcpdump in a throwaway sshd container) and read `dumpsys meminfo`'s Uptime
+  against Realtime for the time slept. If timers stall, "Keep the computer
+  awake" on Android is the candidate, against sec 16's recorded "not on
+  Android", and that call is the holder's. For a run that shortens the
+  limit: `device_config set_sync_disabled_for_tests until_reboot` FIRST, then
+  `put` (§19.6), and restore with `delete` and `set_sync_disabled_for_tests
+  none`: the limit is system-wide.
 
 **Decided, and kept here so they are not reopened:**
 

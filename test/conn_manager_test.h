@@ -22,6 +22,7 @@ private slots:
 	void a_network_flap_staggers_the_sessions_rather_than_dialling_them();
 	void a_failing_reconnect_does_not_reset_its_own_backoff();
 	void giving_up_still_waits_for_the_network();
+	void a_retry_due_on_a_live_session_does_not_dial_again();
 	void an_exited_shell_is_not_reopened();
 	void a_dropped_connection_is_still_retried();
 	void a_user_disconnect_is_not_retried();
