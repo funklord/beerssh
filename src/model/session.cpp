@@ -396,7 +396,12 @@ void bssh_session::wire_transport() {
 	 */
 	connect(m_emulator, &bssh_emulator::output_ready, this, [this] {
 		const QByteArray reply = m_emulator->take_output();
-		if (!reply.isEmpty()) send_out(reply);
+
+		/*
+		 * Replaying a log into a new screen, whose questions were asked long
+		 * ago and answered then: an answer now is typed into the live shell.
+		 */
+		if (!reply.isEmpty() && !m_resume_replaying) send_out(reply);
 	});
 
 	/* Where a dropped file goes, and the copy (sec 6.4). */
@@ -469,6 +474,13 @@ void bssh_session::wire_transport() {
 			 * opened first, there would be a plain shell to throw away.
 			 */
 			if (wants_resume()) {
+				/*
+				 * Named before anything is asked, and the state change below
+				 * gets it saved with the layout: a process killed after this
+				 * can still find its shell.
+				 */
+				if (m_resume_name.isEmpty())
+					m_resume_name = QUuid::createUuid().toByteArray(QUuid::Id128);
 				m_resume = RESUME_PROBING;
 				m_transport->run_on_the_side(QLatin1String(BSSH_RESUME_PROGRAM " version"));
 			} else {
@@ -544,9 +556,6 @@ void bssh_session::answer_resume_probe(const QByteArray &output) {
 		return;
 	}
 
-	if (m_resume_name.isEmpty())
-		m_resume_name = QUuid::createUuid().toByteArray(QUuid::Id128);
-
 	if (!m_resume_client) {
 		m_resume_client = std::make_shared<bssh_session_client_t>();
 		bssh_session_client_events_t events;
@@ -567,11 +576,20 @@ void bssh_session::answer_resume_probe(const QByteArray &output) {
 			session->m_emulator->reset_modes();
 			session->m_emulator->feed(QByteArrayLiteral("\r\n[a new shell: the old one has gone]\r\n"));
 		};
+		events.caught_up = [](void *self) {
+			static_cast<bssh_session *>(self)->m_resume_replaying = false;
+		};
 		bssh_session_client_init(m_resume_client.get(), &events);
 	}
 	bssh_session_client_reset_link(m_resume_client.get());
 
+	/*
+	 * From the start of the log, for a name a saved layout gave back: the shell
+	 * has been running all along and this is a new screen. So it is replayed
+	 * in silence, and its on-connect command has run already.
+	 */
 	const bool first = !m_resume_client->next;
+	m_resume_replaying = first && m_resume_restored;
 	m_resume = RESUME_ACTIVE;
 	m_transport->set_raw_channel(true);
 	m_transport->set_command({ QLatin1String(BSSH_RESUME_PROGRAM), QStringLiteral("attach"),
@@ -586,7 +604,7 @@ void bssh_session::answer_resume_probe(const QByteArray &output) {
 	                                                      uint16_t(m_cols), uint16_t(m_rows)))));
 
 	/* The same shell on a return, which has run this already. */
-	if (first) {
+	if (first && !m_resume_restored) {
 		const QString command = m_settings.value(QStringLiteral("on_connect_command")).toString();
 		if (!command.isEmpty()) send_out(command.toUtf8() + '\n');
 	}

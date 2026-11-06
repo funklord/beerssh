@@ -97,6 +97,7 @@ static int take_frames(bssh_session_client_t *client) {
 		else if (frame.kind == BSSH_WIRE_LOST) status = take_lost(client, &frame);
 		else if (frame.kind == BSSH_WIRE_EXITED) status = take_exited(client, &frame);
 		else if (frame.kind == BSSH_WIRE_RESTARTED) status = take_restarted(client, &frame);
+		else if (frame.kind == BSSH_WIRE_CAUGHT_UP) client->events.caught_up(client->events.context);
 		if (status) return -1;
 
 		at += used;

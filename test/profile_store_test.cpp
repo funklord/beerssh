@@ -921,6 +921,28 @@ void profile_store_test::both_editors_carry_the_keep_scrollback_choice() {
 	QVERIFY(!editor.profile().keep_scrollback);
 }
 
+void profile_store_test::a_layout_remembers_which_shell_each_host_kept() {
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("test.db")));
+
+	const int first = store.save(make_profile(QStringLiteral("a"), QStringLiteral("a.example")));
+	const int gone = store.save(make_profile(QStringLiteral("b"), QStringLiteral("b.example")));
+	const int last = store.save(make_profile(QStringLiteral("c"), QStringLiteral("c.example")));
+
+	bssh_profile_store::layout_state_t layout;
+	layout.profile_ids = { first, gone, last };
+	layout.kept_names = { QStringLiteral("name-a"), QStringLiteral("name-b"), QString() };
+	QVERIFY(store.save_layout(layout));
+
+	QCOMPARE(store.layout().kept_names, QStringList({ QStringLiteral("name-a"), QStringLiteral("name-b"), QString() }));
+
+	/* A host deleted takes its own name with it, and moves no other. */
+	store.remove(gone);
+	const bssh_profile_store::layout_state_t after = store.layout();
+	QCOMPARE(after.profile_ids, QList<int>({ first, last }));
+	QCOMPARE(after.kept_names, QStringList({ QStringLiteral("name-a"), QString() }));
+}
+
 void profile_store_test::keeping_the_shell_is_offered_by_both_editors() {
 	QTemporaryDir dir;
 	bssh_profile_store store(dir.filePath(QStringLiteral("test.db")));

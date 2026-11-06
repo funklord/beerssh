@@ -221,6 +221,19 @@ public:
 	int connections() const { return m_connections; }
 
 	/*
+	 * Which shell on the server is this session's (sec 5.6), for the saved
+	 * layout. Empty for a session with none. Given back to a session restored
+	 * from a layout, it finds that shell again: Android ends an app without
+	 * asking, and a name kept only here would leave the shell running there,
+	 * reachable from nothing, for ever.
+	 */
+	QByteArray kept_name() const { return m_resume_name; }
+	void restore_kept_name(const QByteArray &name) {
+		m_resume_name = name;
+		m_resume_restored = !name.isEmpty();
+	}
+
+	/*
 	 * Whether anything has ever asked this session to connect. Not the
 	 * same as having connected: a host tapped while offline was asked and
 	 * failed, and is worth retrying when the network returns; a restored
@@ -413,6 +426,8 @@ private:
 	void take_resume_bytes(const QByteArray &bytes);
 	resume_t m_resume = RESUME_NONE;
 	QByteArray m_resume_name;
+	bool m_resume_restored = false;
+	bool m_resume_replaying = false;
 
 	/* Here, not on the transport: it is the place in the stream, and a
 	 * reconnect makes a new transport. */

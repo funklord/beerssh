@@ -5199,6 +5199,81 @@ struct keep_sessions_on_close_t {
 
 }
 
+void layout_test::a_window_left_saves_the_shell_a_restart_will_look_for() {
+	const bssh_factory_reset_t factory_reset;
+	/*
+	 * sec 5.6: Android ends an app without closing anything, and the name is
+	 * all that leads back to a shell kept on a server. A phone saved its
+	 * layout in closeEvent() alone, which it hardly ever gets.
+	 */
+	bssh_ssh_session::set_factory([](QObject *parent) -> bssh_ssh_session * {
+		return new bssh_fake_ssh_session(parent);
+	});
+	bssh_profile_store *store = bssh_profile_store::shared();
+
+	bssh_profile_t host = named(QStringLiteral("kept-host"));
+	host.host = QStringLiteral("kept.example");
+	host.id = 0;
+	host.id = store->save(host);
+	QVERIFY(host.id > 0);
+
+	{
+		bssh_main_window window;
+		window.resize(1000, 700);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		bssh_session_registry *registry = window.registry();
+		const registry_left_as_found_t tidy(registry);
+
+		bssh_session *session = registry->create(host);
+		window.adopt_session(session);
+		session->restore_kept_name("the-name");
+
+		/* Left, as a phone is, with nothing closed. */
+		bssh_platform::force_application_active(0);
+		bssh_platform::force_application_active(-1);
+		QVERIFY2(store->layout().kept_names.contains(QStringLiteral("the-name")),
+		          "left without saving the way back to the shell");
+	}
+
+	{
+		bssh_main_window window;
+		const registry_left_as_found_t tidy(window.registry());
+		window.restore_layout();
+
+		bool found = false;
+		for (bssh_session *session : window.registry()->sessions())
+			found = found || session->kept_name() == "the-name";
+		QVERIFY2(found, "a restored tab does not know its shell");
+	}
+
+	/*
+	 * On touch: no blank tab, and the name waits for the host to be tapped,
+	 * surviving a save in between.
+	 */
+	{
+		const forced_touch_t touch(1);
+		bssh_main_window window;
+		const registry_left_as_found_t tidy(window.registry());
+		window.restore_layout();
+		QVERIFY2(!window.has_sessions(), "a phone restored a blank tab");
+
+		bssh_platform::force_application_active(0);
+		bssh_platform::force_application_active(-1);
+		QVERIFY2(store->layout().kept_names.contains(QStringLiteral("the-name")),
+		          "a save before the tap lost the way back to the shell");
+
+		QVERIFY(QMetaObject::invokeMethod(&window, "open_profile", Qt::DirectConnection,
+		                                  Q_ARG(bssh_profile_t, host)));
+		bool found = false;
+		for (bssh_session *session : window.registry()->sessions())
+			found = found || session->kept_name() == "the-name";
+		QVERIFY2(found, "tapping the host did not find its shell");
+	}
+
+	store->remove(host.id);
+}
+
 void layout_test::a_session_out_of_attempts_keeps_the_process_resident() {
 	const bssh_factory_reset_t factory_reset;
 	/*

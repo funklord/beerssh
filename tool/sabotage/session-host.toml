@@ -244,8 +244,8 @@ expect = "a_reconnect_returns_to_the_same_place_with_modes_kept"
 [[sabotage]]
 name = "a reconnect starts a new session name"
 file = "src/model/session.cpp"
-find = "\tif (m_resume_name.isEmpty())\n\t\tm_resume_name ="
-replace = "\tm_resume_name ="
+find = "\t\t\t\tif (m_resume_name.isEmpty())\n\t\t\t\t\tm_resume_name ="
+replace = "\t\t\t\tm_resume_name ="
 expect = "a_reconnect_returns_to_the_same_place_with_modes_kept"
 
 [[sabotage]]
@@ -321,3 +321,92 @@ file = "src/ui/session_dialog.cpp"
 find = "\tif (m_resume_session) profile.resume_session = m_resume_session->isChecked();\n"
 replace = ""
 expect = "keeping_the_shell_is_offered_by_both_editors"
+
+# Answers to questions from the log, typed into the live shell.
+[[sabotage]]
+name = "a replay answers what the log asks"
+file = "src/model/session.cpp"
+find = "\tm_resume_replaying = first && m_resume_restored;\n"
+replace = ""
+expect = "a_restored_session_finds_its_shell_and_replays_in_silence"
+
+# Silent for ever: a program asking the terminal now is never answered.
+[[sabotage]]
+name = "a replay never ends"
+file = "src/model/session.cpp"
+find = "\t\t\tstatic_cast<bssh_session *>(self)->m_resume_replaying = false;\n"
+replace = ""
+expect = "a_restored_session_finds_its_shell_and_replays_in_silence"
+
+[[sabotage]]
+name = "the host never says it has caught up"
+file = "src/session/session_host.c"
+find = "\t\thost->caught_up_due = 1;\n"
+replace = ""
+expect = "a_client_is_told_when_it_has_caught_up"
+
+# Named after the probe: a process killed in between has lost its shell.
+[[sabotage]]
+name = "a session is named late"
+file = "src/model/session.cpp"
+find = "\t\t\t\tm_resume = RESUME_PROBING;\n"
+replace = "\t\t\t\tm_resume_name.clear();\n\t\t\t\tm_resume = RESUME_PROBING;\n"
+expect = "a_session_is_named_before_it_is_asked_anything"
+
+[[sabotage]]
+name = "a deleted host moves the other names"
+file = "src/model/profile_store.cpp"
+find = "\t\tstate.kept_names.append(kept.value(i));\n"
+replace = "\t\tstate.kept_names.append(kept.value(state.kept_names.size()));\n"
+expect = "a_layout_remembers_which_shell_each_host_kept"
+
+[[sabotage]]
+name = "the layout does not save the names"
+file = "src/model/profile_store.cpp"
+find = "\t\tfile.setValue(QStringLiteral(\"kept\"), layout.kept_names.join(QLatin1Char(',')));\n"
+replace = "\t\t{}\n"
+expect = "a_layout_remembers_which_shell_each_host_kept"
+
+# A phone that saves only on a close it never gets: the shell is orphaned.
+[[sabotage]]
+name = "leaving saves nothing"
+file = "src/ui/main_window.cpp"
+find = "\t\t\tif (!platform->is_application_active() && !m_closing) save_layout();\n"
+replace = "\t\t\tQ_UNUSED(platform);\n"
+expect = "a_window_left_saves_the_shell_a_restart_will_look_for"
+
+[[sabotage]]
+name = "the layout does not hold the name"
+file = "src/ui/main_window.cpp"
+find = "\t\tlayout.kept_names.append(QString::fromLatin1(session->kept_name()));\n"
+replace = ""
+expect = "a_window_left_saves_the_shell_a_restart_will_look_for"
+
+[[sabotage]]
+name = "a restored tab forgets its shell"
+file = "src/ui/main_window.cpp"
+find = "\t\tif (session) session->restore_kept_name(layout.kept_names.value(i).toLatin1());\n"
+replace = "\t\tQ_UNUSED(session);\n"
+expect = "a_window_left_saves_the_shell_a_restart_will_look_for"
+
+# A blank terminal and a keyboard, with nothing to say what it is.
+[[sabotage]]
+name = "a phone restores blank tabs"
+file = "src/ui/main_window.cpp"
+find = "\tif (bssh_platform::instance() && bssh_platform::instance()->is_touch_primary()) {\n\t\tfor (int i = 0; i < layout.profile_ids.size(); ++i) {"
+replace = "\tif (false) {\n\t\tfor (int i = 0; i < layout.profile_ids.size(); ++i) {"
+expect = "a_window_left_saves_the_shell_a_restart_will_look_for"
+
+[[sabotage]]
+name = "a save forgets names not yet claimed"
+file = "src/ui/main_window.cpp"
+find = "\t\tlayout.kept_names.append(QString::fromLatin1(kept.second));\n"
+replace = "\t\tlayout.kept_names.append(QString());\n"
+expect = "a_window_left_saves_the_shell_a_restart_will_look_for"
+
+[[sabotage]]
+name = "tapping a host does not find its shell"
+file = "src/ui/main_window.cpp"
+find = "\t\tsession->restore_kept_name(m_unclaimed_kept.takeAt(i).second);\n"
+replace = "\t\tm_unclaimed_kept.takeAt(i);\n"
+expect = "a_window_left_saves_the_shell_a_restart_will_look_for"

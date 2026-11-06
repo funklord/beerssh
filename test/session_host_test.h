@@ -42,6 +42,9 @@ private slots:
 	void a_banner_ahead_of_the_program_falls_back_on_the_same_connection();
 	void closing_a_kept_session_hangs_it_up();
 	void a_new_shell_after_a_reboot_is_shown_and_said();
+	void a_client_is_told_when_it_has_caught_up();
+	void a_restored_session_finds_its_shell_and_replays_in_silence();
+	void a_session_is_named_before_it_is_asked_anything();
 };
 
 #endif

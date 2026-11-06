@@ -65,6 +65,7 @@ private slots:
 	void both_editors_carry_the_keep_scrollback_choice();
 
 	/* Folders for organising the host list only (sec 10.5, 2026-09-26). */
+	void a_layout_remembers_which_shell_each_host_kept();
 	void keeping_the_shell_is_offered_by_both_editors();
 	void hosts_are_grouped_by_folder_the_same_everywhere();
 	void a_folder_heading_folds_its_hosts_and_opens_nothing();

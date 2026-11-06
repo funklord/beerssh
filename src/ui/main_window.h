@@ -581,6 +581,10 @@ private:
 
 	void save_layout();
 	void note_arrangement_changed();
+	QByteArray m_kept_names;
+
+	/* Shells on servers, by host, that no session has claimed since a restart. */
+	QList<QPair<int, QByteArray>> m_unclaimed_kept;
 	QTimer *m_layout_timer = nullptr;
 	bool m_closing = false;
 

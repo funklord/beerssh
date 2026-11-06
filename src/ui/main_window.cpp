@@ -766,7 +766,24 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	if (bssh_platform *platform = bssh_platform::instance()) {
 		connect(platform, &bssh_platform::application_active_changed,
 		         this, &bssh_main_window::update_residency);
+
+		/* Now, not a second from now: a backgrounded app can end at any time. */
+		connect(platform, &bssh_platform::application_active_changed, this, [this, platform] {
+			if (!platform->is_application_active() && !m_closing) save_layout();
+		});
 	}
+
+	/*
+	 * A session is named when it connects, which is no change to the tabs, and
+	 * a process killed before the next save would lose the way back to it.
+	 */
+	connect(m_registry, &bssh_session_registry::changed, this, [this] {
+		QByteArray names;
+		for (bssh_session *session : m_registry->sessions()) names += session->kept_name();
+		if (names == m_kept_names) return;
+		m_kept_names = names;
+		note_arrangement_changed();
+	});
 
 	/*
 	 * A host row changing has to reach the sessions already open on it.
@@ -1492,6 +1509,16 @@ bssh_session *bssh_main_window::prepare_profile(const bssh_profile_t &profile) {
 	 * to draw in.
 	 */
 	session->set_settings(resolved_settings(profile));
+
+	/*
+	 * A shell this host left on its server, from before the app was ended.
+	 * Taken by the first session of the host, one each if there were several.
+	 */
+	for (int i = 0; i < m_unclaimed_kept.size(); ++i) {
+		if (m_unclaimed_kept.at(i).first != profile.id) continue;
+		session->restore_kept_name(m_unclaimed_kept.takeAt(i).second);
+		break;
+	}
 
 	show_session(session);
 	return session;
@@ -5239,11 +5266,13 @@ void bssh_main_window::on_registry_changed() {
  * a window closes: nothing is closed at a logout or a shutdown, where the
  * session manager ends the process, nor in a crash -- and those are the
  * starts worth bringing windows back for. Measured with real windows:
- * killed, they left whatever they had been restored from. Desktop only,
- * where a layout is a window's; a phone saves when it is left.
+ * killed, they left whatever they had been restored from. A phone most of
+ * all: Android ends an app without closing anything, and until 2026-11-06
+ * this was desktop only, and a phone saved in closeEvent() alone, so it
+ * hardly ever saved. A shell kept on a server then had nothing to find it by.
  */
 void bssh_main_window::note_arrangement_changed() {
-	if (m_closing || !bssh_handoff_point::instance()) return;
+	if (m_closing) return;
 	if (!m_layout_timer) {
 		m_layout_timer = new QTimer(this);
 		m_layout_timer->setSingleShot(true);
@@ -5271,6 +5300,13 @@ void bssh_main_window::save_layout() {
 
 		if (session == m_current) layout.active_index = layout.profile_ids.size();
 		layout.profile_ids.append(id);
+		layout.kept_names.append(QString::fromLatin1(session->kept_name()));
+	}
+
+	/* Not reopened yet, and still the only way back to those shells. */
+	for (const QPair<int, QByteArray> &kept : m_unclaimed_kept) {
+		layout.profile_ids.append(kept.first);
+		layout.kept_names.append(QString::fromLatin1(kept.second));
 	}
 
 	layout.pane_count = qMax(1, m_layout ? m_layout->visible_panes().size() : 1);
@@ -5336,6 +5372,22 @@ void bssh_main_window::restore_layout() {
 	}
 
 	/*
+	 * On touch the front door is the host list, and a tab that is not connected
+	 * is a blank screen and a keyboard, with Connect a menu away and nothing on
+	 * it to say so: seen on the emulator, 2026-11-06, the first time a phone's
+	 * layout was saved at all. So nothing comes back as a tab. What matters survives
+	 * as a name, and tapping the host finds its shell: a tap, so no prompt
+	 * arrives unasked either.
+	 */
+	if (bssh_platform::instance() && bssh_platform::instance()->is_touch_primary()) {
+		for (int i = 0; i < layout.profile_ids.size(); ++i) {
+			const QByteArray name = layout.kept_names.value(i).toLatin1();
+			if (!name.isEmpty()) m_unclaimed_kept.append({ layout.profile_ids.at(i), name });
+		}
+		return;
+	}
+
+	/*
 	 * Every remembered host comes back as a tab, and **not one of them
 	 * connects** (sec 8.4).
 	 *
@@ -5359,15 +5411,17 @@ void bssh_main_window::restore_layout() {
 	 * own menu (sec 8.3) -- which is a click the user makes knowing which
 	 * host it is for.
 	 */
-	for (int id : layout.profile_ids) {
-		const bssh_profile_t profile = m_profile_store->profile(id);
+	for (int i = 0; i < layout.profile_ids.size(); ++i) {
+		const bssh_profile_t profile = m_profile_store->profile(layout.profile_ids.at(i));
 
 		/*
 		 * A host deleted since the last run simply does not come back.
 		 * Its id is left in the saved layout rather than repaired here:
 		 * the next save writes what is actually open.
 		 */
-		if (profile.is_valid()) prepare_profile(profile);
+		if (!profile.is_valid()) continue;
+		bssh_session *session = prepare_profile(profile);
+		if (session) session->restore_kept_name(layout.kept_names.value(i).toLatin1());
 	}
 
 	if (m_shown.isEmpty()) return;

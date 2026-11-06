@@ -1445,7 +1445,22 @@ reason. The offset lives in `bssh_session`, because a reconnect makes a new
 transport. A reconnect keeps the terminal's modes, since it is the same program
 still running. The on-connect command runs once, on the first attach. A session
 kept this way is not handed to another process, because nothing carries its place
-in the stream yet. Closing sends `hangup`: without it every closed tab would leave
+in the stream yet.
+
+**A kept shell outlives the app as well.** Android ends an app without asking, and
+a name held only in memory leaves a shell on the server that nothing can reach. So
+the name is saved with the layout (`kept=` in `layout.ini`) from the moment the
+session is named. A restart attaches from offset 0, which rebuilds the screen from
+the raw log, and `caught_up` says when that is done: until then the emulator's
+answers are held back, since the log's questions were answered long ago and an
+answer now would be typed into the live shell. Measured on the API 36 emulator: signed
+in, force-stopped, one tap and the password, the same shell with its screen back.
+A phone saved its layout only in `closeEvent()`, which Android hardly ever delivers;
+it now saves on leaving and on naming. Touch restores no tabs, since a tab not
+connected is a blank screen and a keyboard with nothing to say what it is; the name
+waits for the host to be tapped, which also keeps §8.4's rule that a restore raises
+no prompt. **Still open, the holder's:** a tab closed without ever reconnecting
+leaves its shell running, and a detached shell has no time limit. Closing sends `hangup`: without it every closed tab would leave
 a shell on the server for ever. A client asking past the end of a session is told
 `restarted`, because after a reboot its offset belongs to a session that has gone,
 and quietly clamped, what the new shell wrote would be taken for bytes already

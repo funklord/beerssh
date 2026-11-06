@@ -27,6 +27,7 @@ varint_type bssh_varint {
 //   9 hello    host: the first bytes on every link, a fixed text
 //  10 restarted host: not the session asked for; a new one, from this offset
 //  11 hangup   client: the user closed it, end the program
+//  12 caught_up host: what was written before this attach has all been sent
 
 struct bssh_frame {
 	u8           kind;

@@ -36,6 +36,8 @@ typedef struct bssh_session_client_events {
 	void (*exited)(void *context, int32_t status);
 	/* The session asked for is gone and this is a new one: a reboot, say. */
 	void (*restarted)(void *context);
+	/* What was written before this attach has all been delivered. */
+	void (*caught_up)(void *context);
 } bssh_session_client_events_t;
 
 typedef struct bssh_session_client {

@@ -110,6 +110,9 @@ public:
 	 */
 	struct layout_state_t {
 		QList<int> profile_ids;  /* tab order */
+
+		/* Beside profile_ids: the shell each keeps on its server, or empty. */
+		QStringList kept_names;
 		int pane_count;          /* how many of the first N were split */
 		int active_index;
 

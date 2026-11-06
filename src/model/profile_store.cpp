@@ -1199,6 +1199,8 @@ bool bssh_profile_store::save_layout(const layout_state_t &layout) {
 
 	file.beginGroup(QStringLiteral("layout"));
 	file.setValue(QStringLiteral("hosts"), ids.join(QLatin1Char(',')));
+	if (!layout.kept_names.join(QString()).isEmpty())
+		file.setValue(QStringLiteral("kept"), layout.kept_names.join(QLatin1Char(',')));
 	file.setValue(QStringLiteral("panes"), layout.pane_count);
 	file.setValue(QStringLiteral("active"), layout.active_index);
 	if (!layout.shape.isEmpty()) file.setValue(QStringLiteral("shape"), layout.shape);
@@ -1224,6 +1226,7 @@ bssh_profile_store::layout_state_t bssh_profile_store::layout() const {
 
 	const QStringList ids = file.value(QStringLiteral("hosts")).toString()
 	                                .split(QLatin1Char(','), Qt::SkipEmptyParts);
+	const QStringList kept = file.value(QStringLiteral("kept")).toString().split(QLatin1Char(','));
 	const int panes = file.value(QStringLiteral("panes"), 1).toInt();
 	const int active = file.value(QStringLiteral("active"), 0).toInt();
 	state.shape = file.value(QStringLiteral("shape")).toString();
@@ -1235,9 +1238,11 @@ bssh_profile_store::layout_state_t bssh_profile_store::layout() const {
 	 * a host the user deleted -- that would be the store second-guessing
 	 * them.
 	 */
-	for (const QString &raw : ids) {
-		const int id = raw.toInt();
-		if (profile(id).is_valid()) state.profile_ids.append(id);
+	for (int i = 0; i < ids.size(); ++i) {
+		const int id = ids.at(i).toInt();
+		if (!profile(id).is_valid()) continue;
+		state.profile_ids.append(id);
+		state.kept_names.append(kept.value(i));
 	}
 
 	state.pane_count = qBound(1, panes, qMax(1, int(state.profile_ids.size())));

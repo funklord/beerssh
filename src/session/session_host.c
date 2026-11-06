@@ -33,6 +33,7 @@ typedef struct host {
 	int attached;         /* the client has said where to start */
 	int restarted_due;    /* it asked past the end: not the session it knew */
 	int hung_up;          /* the user closed it: nobody is coming back */
+	int caught_up_due;    /* say so when what the attach asked for has gone */
 	uint64_t sent;        /* next offset to send */
 
 	uint8_t in[BSSH_WIRE_FRAME_MAX];
@@ -157,6 +158,7 @@ static int handle_frame(host_t *host, const bssh_wire_frame_t *frame) {
 		 */
 		host->restarted_due = offset > host->log.end;
 		host->sent = host->restarted_due ? host->log.start : offset;
+		host->caught_up_due = 1;
 		bssh_output_log_ack(&host->log, host->sent);
 		set_size(host, columns, rows);
 		return 0;
@@ -260,6 +262,9 @@ static void fill_out(host_t *host) {
 	} else if (answer == BSSH_OUTPUT_LOG_OK) {
 		host->out_used = bssh_wire_put_output(host->out, sizeof(host->out), host->sent, chunk, len);
 		host->sent += len;
+	} else if (host->caught_up_due) {
+		host->out_used = bssh_wire_put(host->out, sizeof(host->out), BSSH_WIRE_CAUGHT_UP, NULL, 0);
+		host->caught_up_due = 0;
 	} else if (host->pty < 0 && !host->told_exit) {
 		host->out_used = bssh_wire_put_exited(host->out, sizeof(host->out), host->status);
 		host->told_exit = 1;
@@ -374,7 +379,8 @@ int bssh_session_host_run(const bssh_session_host_options_t *options) {
 			fds[count].fd = host->client;
 			fds[count].events = 0;
 			if (host->in_used < sizeof(host->in)) fds[count].events |= POLLIN;
-			if (host->out_used || host->hello_due || (host->attached && host->sent < host->log.end)
+			if (host->out_used || host->hello_due || host->caught_up_due
+			    || (host->attached && host->sent < host->log.end)
 			    || (host->attached && host->pty < 0))
 				fds[count].events |= POLLOUT;
 			++count;

@@ -85,7 +85,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 	}
 
 	static bssh_session_client_t client;
-	const bssh_session_client_events_t events = { NULL, on_output, on_gap, on_exited, on_restarted };
+	const bssh_session_client_events_t events = { NULL,         on_output,    on_gap,
+	                                              on_exited,    on_restarted, on_restarted };
 	bssh_session_client_init(&client, &events);
 
 	uint8_t hello[32];

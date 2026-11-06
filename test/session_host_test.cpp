@@ -471,6 +471,7 @@ struct received_t {
 	QList<uint64_t> gaps;
 	int exits = 0;
 	int restarts = 0;
+	int caught_up = 0;
 	int32_t status = 0;
 	bssh_session_client_t client;
 
@@ -491,6 +492,7 @@ struct received_t {
 			me->status = status;
 		};
 		events.restarted = [](void *self) { ++static_cast<received_t *>(self)->restarts; };
+		events.caught_up = [](void *self) { ++static_cast<received_t *>(self)->caught_up; };
 		bssh_session_client_init(&client, &events);
 		hello();
 	}
@@ -684,6 +686,33 @@ void session_host_test::a_client_asking_past_the_end_is_told_it_is_a_new_session
 	QVERIFY(received.gaps.isEmpty());
 }
 
+void session_host_test::a_client_is_told_when_it_has_caught_up() {
+	host_process_t host("echo written-before; read wait");
+	client_t link;
+
+	/* Long enough for the line to be in the log before anyone asks. */
+	QTest::qSleep(300);
+	QVERIFY(link.connect_to(host.path));
+	link.attach(0);
+
+	received_t received;
+	bssh_session_client_reset_link(&received.client);
+
+	QElapsedTimer timer;
+	timer.start();
+	while (!received.caught_up && timer.elapsed() < 3000) {
+		pollfd one = { link.fd, POLLIN, 0 };
+		if (poll(&one, 1, 100) <= 0) continue;
+
+		uint8_t chunk[4096];
+		const ssize_t got = read(link.fd, chunk, sizeof(chunk));
+		QVERIFY(got > 0);
+		QCOMPARE(bssh_session_client_feed(&received.client, chunk, size_t(got)), 0);
+	}
+	QCOMPARE(received.caught_up, 1);
+	QVERIFY2(received.text.contains("written-before"), "said before what it was to deliver");
+}
+
 void session_host_test::a_hangup_ends_the_program_and_the_host() {
 	host_process_t host(ECHO_SHELL, 4096, 60000);
 	client_t link;
@@ -710,7 +739,7 @@ struct kept_t {
 	bssh_session_registry registry;
 	bssh_session *session = nullptr;
 
-	explicit kept_t(bool wanted = true) {
+	explicit kept_t(bool wanted = true, const QByteArray &restored = QByteArray()) {
 		bssh_ssh_session::set_factory([this](QObject *parent) -> bssh_ssh_session * {
 			bssh_fake_ssh_session *fake = new bssh_fake_ssh_session(parent);
 			fakes.append(fake);
@@ -724,6 +753,7 @@ struct kept_t {
 		profile.resume_session = wanted;
 		session = registry.create(profile);
 		registry.conn_manager_for(session)->set_auto_reconnect(false);
+		session->restore_kept_name(restored);
 		session->connect_to_host();
 		fakes.last()->simulate_key_auth_success();
 	}
@@ -901,4 +931,36 @@ void session_host_test::a_new_shell_after_a_reboot_is_shown_and_said() {
 
 	QVERIFY(kept.screen().contains(QStringLiteral("a new shell")));
 	QVERIFY(kept.screen().contains(QStringLiteral("new-shell")));
+}
+
+void session_host_test::a_restored_session_finds_its_shell_and_replays_in_silence() {
+	kept_t kept(true, "from-the-saved-layout");
+	QCOMPARE(kept.session->kept_name(), QByteArray("from-the-saved-layout"));
+	kept.answer_probe();
+
+	QCOMPARE(kept.fake()->command().value(2), QStringLiteral("from-the-saved-layout"));
+	QCOMPARE(kept.attached_at(), uint64_t(0));
+
+	/* A question from the log, long since answered: DA, which draws nothing. */
+	kept.fake()->clear_written();
+	kept.host_says(kept.hello() + kept.output(0, "from-before\033[c"));
+	QVERIFY(kept.screen().contains(QStringLiteral("from-before")));
+	QVERIFY2(kept.fake()->written().isEmpty(), "answered a question from the log into the live shell");
+
+	/* Caught up, the same question is a program asking now. */
+	uint8_t frame[4];
+	const size_t len = bssh_wire_put(frame, sizeof(frame), BSSH_WIRE_CAUGHT_UP, nullptr, 0);
+	kept.host_says(QByteArray(reinterpret_cast<const char *>(frame), int(len)));
+	kept.host_says(kept.output(14, "\033[c"));
+	QVERIFY(kept.kinds_written().contains(BSSH_WIRE_INPUT));
+}
+
+void session_host_test::a_session_is_named_before_it_is_asked_anything() {
+	/* A name that came after the probe could be lost with the process. */
+	kept_t kept;
+	QVERIFY(!kept.session->kept_name().isEmpty());
+	QCOMPARE(kept.fake()->shells_opened(), 0);
+
+	kept_t not_asked(false);
+	QVERIFY(not_asked.session->kept_name().isEmpty());
 }
