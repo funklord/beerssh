@@ -366,9 +366,14 @@ QWidget *bssh_session_dialog::build_session_page() {
 	        "Where the host has beerssh-session, a dropped connection comes back to "
 	        "the same shell with everything it printed. Elsewhere it makes no "
 	        "difference."));
-	keeps->addWidget(m_resume_session);
 	keeps->addStretch(1);
 	destination->addRow(keeps);
+
+	/*
+	 * A row of its own: beside the other two it took the dialog to 834 pixels
+	 * in the runner's fonts, past the 800 it must fit, with height to spare.
+	 */
+	destination->addRow(m_resume_session);
 
 	bssh_attach_notes(destination);
 	layout->addLayout(destination);
