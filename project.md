@@ -1418,7 +1418,11 @@ holds a socket open simply keeps holding it. What still needs deciding is what
 host, `src/session/session_host.h`, which owns the pty: over real ptys and sockets,
 a shell survives losing its client, output written while detached arrives on
 return, Serial pauses the program and loses nothing, and a client too far behind
-is told what was lost. Tested, and linked into nothing yet. `src/session/` is plain C with no Qt, so it can move to fuzznet.
+is told what was lost. `beerssh-session` (`make session`) is the program a host
+runs, a static binary of about 1 MB: `version` is the probe, `attach NAME` what an
+exec channel runs. `make check-session` proves it over a real sshd: with the
+connection killed during a job, the next one finds the same shell and all 5000
+lines written meanwhile, in order. BeerSSH's own client does not speak it yet. `src/session/` is plain C with no Qt, so it can move to fuzznet.
 
 **This replaces "Mosh in v2".** It is the v2 answer to the gap in §5.3: a
 reconnect is a new remote shell. Plain SSH stays the default and the fallback,

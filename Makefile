@@ -766,6 +766,25 @@ $(TEST_BIN): $(VTERM_LIB) $(LIBSSH_LIB) $(TEST_BUILD_DIR)/Makefile $(SOURCES) $(
 	$(MAKE) -C $(TEST_BUILD_DIR)
 
 
+
+# The program a host runs for a session that outlives its connection (sec
+# 5.6). A helper, so it has its own target and a bare `make` leaves it alone.
+# Static, so that one file runs on any Linux of this architecture.
+SESSION_BIN = $(BUILD_DIR)/beerssh-session
+SESSION_SRCS = src/session/session_main.c src/session/session_host.c src/session/output_log.c \
+               src/session/wire.c src/session/generated/frame.c src/session/generated/situ.c
+.PHONY: session check-session
+session: $(SESSION_BIN)
+
+# A real sshd in a throwaway container, so it needs docker.
+check-session: $(SESSION_BIN)
+	tool/check-session.sh $(SESSION_BIN)
+
+$(SESSION_BIN): $(SESSION_SRCS) $(wildcard src/session/*.h src/session/generated/*.h)
+	@mkdir -p $(BUILD_DIR)
+	$(CC) -std=gnu11 -Os -ffunction-sections -fdata-sections -Wl,--gc-sections -static -Isrc \
+	      -o $@ $(filter %.c,$^)
+
 # The session protocol's bytes are defined by src/session/frame.situ, and what
 # situ generates from it is committed, so building needs no situ. This says
 # whether the two still agree, against situ's committed HEAD: a working tree
