@@ -20,8 +20,8 @@ Linux desktop. On the phone it keeps sessions running in the background, in
 the foreground service Android requires for it, and a session that logged in
 with a key reconnects by itself when the network comes back, since it holds
 no password it would have to ask for. A dropped connection still starts a new
-remote shell, as plain SSH must -- Mosh's UDP protocol, which avoids that, is
-not implemented. It rewraps text when the screen changes size rather than
+remote shell, as plain SSH must; a session that outlives its connection is
+the aim of the next version. It rewraps text when the screen changes size rather than
 cutting it, and its keyboard carries the keys a shell needs, with Ctrl and Alt
 held by one finger while another types. On the desktop it is an ordinary
 terminal that also opens SSH sessions directly and takes xterm's and
@@ -203,8 +203,8 @@ you asked for is never retried.
 
 **A reconnect is a new remote shell.** Plain SSH cannot resume one, so the
 running program and working directory are gone; only the local scrollback
-survives. Attaching to `tmux` on connect is the available answer until
-Mosh is considered in v2.
+survives. Attaching to `tmux` on connect is the available answer until a
+session can outlive its connection (`project.md` §5.6).
 
 `Ctrl+Alt+Left`/`Right` move focus between panes, and the status line
 reports reconnection as it happens rather than leaving a silent terminal
@@ -222,7 +222,7 @@ rather than pretending to have restored anything.
 
 Not built yet: general key remapping (`project.md` §6.1), a user-composed
 key row (§6.2), reopening every remembered host at once (§8.4), and the
-shared glyph atlas (§9.5). SFTP, port forwarding and Mosh are deliberate v1
+shared glyph atlas (§9.5). SFTP, port forwarding and session resume are deliberate v1
 non-goals rather than omissions — §1 says why, and §5.3 says what plain SSH
 cannot promise about a resumed shell.
 

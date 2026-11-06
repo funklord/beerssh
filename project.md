@@ -162,7 +162,7 @@ run.
   2026-10-06 that it is **beersshd, a separate package with no other
   features** (§19), which can ask for all-files access as its whole purpose
   without the terminal carrying that permission.
-- Mosh protocol (note as a future resilience option in §5).
+- Mosh protocol. v2 aims further: a session that outlives its connection (§5.6).
 - ~~Local terminal / on-device shell~~ — **this non-goal was reversed
   deliberately.** It read: "this is an SSH client, not Termux and not a desktop
   terminal emulator. Tempting on desktop, where a local PTY is right there;
@@ -1152,9 +1152,8 @@ events from `bssh_platform` (§3) without caring which platform produced them.
   fire N simultaneous reconnects. Stagger with per-session jitter.
 - **Session continuity gap:** plain SSH cannot resume a dropped shell — a reconnect
   starts a *new* remote shell; scrollback is preserved locally but remote state
-  (running program, cwd) is lost. Document this clearly. **Mosh** is the only real
-  fix and is a **v2** consideration (adds a UDP protocol + server-side `mosh-server`
-  dependency). For v1, offer optional integration with `tmux`/`screen` guidance in
+  (running program, cwd) is lost. Document this clearly. The real fix needs a
+  process on the server, and is the **v2** design in §5.6. For v1, offer optional integration with `tmux`/`screen` guidance in
   the UI/help instead — and note that a preset's **on-connect command** (§10.2) is
   the natural place to auto-attach tmux.
 - **[BUILT 2026-10-12] Connection Details**, in the terminal menu's Terminal
@@ -1411,6 +1410,126 @@ holds a socket open simply keeps holding it. What still needs deciding is what
   moment where being careful is a choice.
 
 ---
+
+### 5.6 A session that outlives its connection — **[DESIGN for v2, holder 2026-11-06; nothing built]**
+
+**This replaces "Mosh in v2".** It is the v2 answer to the gap in §5.3: a
+reconnect is a new remote shell. Plain SSH stays the default and the fallback,
+because every host has `sshd` and almost none will have this.
+
+**The argument, from the holder.** A terminal is usually treated as a reliable
+serial stream, but under congestion its needs are closer to media streaming:
+send the latest output first, backfill when the congestion ends, and draw what
+is missing as missing. That beats a terminal that never catches up, or that
+times out with the latest output stuck behind the backlog.
+
+**Why it needs a server-side process.** Terminal bytes cannot be sent out of
+order: each means something only after every earlier one has been applied. Video
+has the same problem and solves it with keyframes, so a process on the server
+owns the pty, keeps reading it whatever the network does, and runs an emulator
+to produce them. Running the same patched libvterm there keeps the two ends
+from disagreeing.
+
+Three streams, all from that process:
+
+- **Raw log:** every byte from the pty, numbered and timestamped, kept in every
+  mode up to a limit. It is the ground truth.
+- **Live screen:** snapshots and diffs, where a newer one replaces an older one.
+- **History:** lines that have left the top of the screen, numbered from the
+  start of the session. Such a line rarely changes, and as rendered cells it
+  stands alone, so it is the unit of backfill.
+
+Input is a fourth, the other way: reliable, in order, top priority. Events that
+are not lines (bell, title, OSC 52) travel reliably on their own, tagged with
+where they happened, and a stale clipboard write is dropped rather than applied.
+
+**The shape of a gap.** A snapshot names the line number at the top of the
+screen, so the client knows exactly how many lines it lacks. Sending each missing
+line's length (about 2 bytes) lets placeholders keep their height through a
+resize. Backfill follows the reader: scrolling into a gap sends those lines first.
+Copy and search must show a gap, never join the text on either side of it. The
+limit turns what falls off into a permanent "N lines lost" marker.
+
+**Three modes, named for what they guarantee:**
+
+| Mode | Setting | Guarantee | At the limit |
+|---|---|---|---|
+| Serial | `serial` | every state, in order, as it happens; stalls on a bad link | pause the program |
+| Eventual | `eventual` | latest first, every state arrives later | pause the program |
+| Live | `live` | latest first, every line's final text arrives later, skipped states dropped | "N lines lost" |
+
+Live saves bandwidth because it never sends the states between. Scripts are why
+the other two exist: some hook intermediate states, such as an ncurses screen or
+cursor overwrites, and Live would make them miss those. A hook that only watches
+can be late, so Eventual serves it, through a hidden emulator on the client
+working through the raw log behind the visible screen. A hook that **replies**
+needs Serial: an answer to a prompt seen ten seconds ago lands on whatever the
+program shows now. Pausing the program at the limit is what makes "every state"
+true; dropping there would promise something not delivered. During replay only
+the server's emulator answers terminal queries, and side effects do not fire.
+
+**Modes switch on the fly.** A switch is a control message that takes effect at
+a named offset in the raw log, and needs no reconnect. Moving down is immediate.
+Moving up is faithful as far back as the log still reaches, which is why the log
+is kept in Live too; the client is told where that begins, and earlier states
+stay missing rather than being implied. A replying hook acts only once the client
+has caught up to the present.
+
+The setting is per host, through the layered settings, with a per-session
+override. Default Live. Turning on a watching hook or a session log raises the
+session to at least Eventual, and a replying hook to Serial, so a hook cannot miss
+events without anyone being told. BeerSSH has neither hooks nor session logging
+yet (searched 2026-11-06), so this keeps the option open in the protocol, where
+it is cheap to add now.
+
+**Two transports, one protocol, in this order:**
+
+1. **Over SSH, where we own both ends.** BeerSSH already opens exec channels, so
+   the server process can be a helper started by one, speaking this framing
+   inside the SSH connection. No open port, and SSH's login and encryption
+   unchanged.
+2. **Over UDP**, started through SSH as Mosh does: log in, start the per-user
+   process unprivileged, hand it a session key, leave. No root and no new login
+   system, but it needs an open UDP port.
+
+| | Over SSH | Over UDP |
+|---|---|---|
+| Shell survives a drop, re-attach later | yes | yes |
+| Program keeps running, Ctrl-C acts during a stall | yes, once the keystroke arrives | yes |
+| Stale screens never queued | yes, while little is in flight | yes |
+| Latest overtakes what is already sent | no: TCP delivers what it holds, in order | yes |
+| Backfill only with spare bandwidth | approximate, by rate limit | yes, if the transport can |
+| Network change without reconnecting | no: new TCP, new SSH login | yes |
+| Resume after Android kills the process | needs a new login | yes, if the key is stored |
+| Works where UDP is blocked | yes | no, so it falls back |
+
+The largest gain, a shell that survives, needs no UDP at all, which is why SSH
+comes first. Each new login needs a key or a remembered password; without one,
+a person is asked (§11).
+
+**Rejected.** Mosh itself: it drops scrollback and runs its own emulator, and
+it is not ours to extend. Resume offsets alone, as Eternal Terminal does: survives
+drops, but after congestion everything old arrives before the latest. A
+replacement for SSH: `sshd` is everywhere and has decades of review, where a fault
+here is a remote shell for an attacker. Moving beersshd: its value is working
+with any SFTP client.
+
+**Open, and whose.**
+
+- *How the helper reaches a server*, the holder's: a package, or uploaded on
+  first use with the user's consent, which means a build per architecture and an
+  executable placed on someone's host. Without it, plain SSH as today.
+- *fuzznet or QUIC for UDP*, the holder's. fuzznet brings revocation of a stolen
+  device and a stack we own; `spool/transfer.c` there has congestion logic, built
+  for transfers. Not established: whether it can send "only with spare bandwidth",
+  or carry an interactive stream. QUIC brings audited streams and migration, not
+  the revocation. Anything fuzznet needs is asked of that project (§3 of its own
+  document says who links it), not changed from here.
+- *What the client takes.* BeerSSH would accept cells as well as bytes, and the
+  size of that change has not been looked at.
+- *Hooks on the server*, later: matching against the server's emulator would see
+  every state in real time at almost no bandwidth, even in Live, at the price of
+  putting scripts on the server.
 
 ## 6. Keyboard & input (the hardest UX problem)
 
@@ -17519,7 +17638,7 @@ expensive if it wasn't.
 | libssh LGPL linking obligations | Medium (legal) | Dynamic linking, or switch to BSD-licensed libssh2; decide before ship. |
 | Preset propagation surprises users | Medium | "Used by N hosts" warning; per-field override badges with revert. |
 | OEM battery killers stop the service | Medium | Battery-opt whitelist prompt; document; robust reconnect. |
-| No SSH session resume on reconnect | Medium | Document; tmux/screen via preset on-connect command; Mosh in v2. |
+| No SSH session resume on reconnect | Medium | Document; tmux/screen via preset on-connect command; §5.6 in v2. |
 | `qtermwidget` doesn't fit Android/no PTY | Medium | Use libvterm/custom emulator over the SSH channel, not a PTY — and don't take it as a desktop-only shortcut (§7). |
 | Native dep cross-compile pain | Medium | Pin versions; scripted reproducible NDK builds; start at M0. |
 | Play target-SDK churn | Low/Med | Re-check API-level + FGS rules at build time. |
