@@ -1463,6 +1463,20 @@ option set in the phone's own editor; a connection killed from the server with t
 app in the background, signed in again 2 s later with no input; the app force-stopped
 during a job, then the normal host list, one tap and the password, the same shell
 with its whole screen and the line the job wrote while no app existed.
+
+**Open fault, found on the Fold the same day, not reproduced.** Off USB, with the app
+25 minutes in the background and the holder in another app, a connection killed from
+the server was not redialled. The phone answered the FIN within 100 ms and held no
+socket to the server afterwards, so the worker saw the drop, but 12 minutes later it
+had not dialled, the notification still read "1 session connected", and the process
+and its foreground service were alive. The killed connection was a bare FIN, so it
+was not the clean-exit path. The same sequence on the API 36 emulator came back in 3 s,
+and so did a drop on the Fold on USB 2 s after Home. Being restored is therefore not
+the cause. Five of the six Qt threads named for the main loop sat in `futex_wait`, which
+suggests the main thread was not handling the worker's signal, though
+`background_running` is set. The experiment that decides it: bring the app to the
+front and see whether it dials at once. Deep sleep itself is still unmeasured: the
+phone was in use, and slept 270 s of 30 minutes.
 A phone saved its layout only in `closeEvent()`, which Android hardly ever delivers;
 it now saves on leaving and on naming. Touch restores no tabs, since a tab not
 connected is a blank screen and a keyboard with nothing to say what it is; the name
