@@ -215,6 +215,16 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 		body->addWidget(m_biometric);
 	}
 
+	/* A phone is where a connection drops, so this is where it matters most. */
+	m_resume_session = new QCheckBox(QStringLiteral("Keep the shell on the server"), this);
+	m_resume_session->setObjectName(QStringLiteral("resume_session"));
+	m_resume_session->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
+	body->addWidget(m_resume_session);
+	body->addWidget(bssh_wrapped_note(
+	        QStringLiteral("Where the host has beerssh-session, a dropped connection comes back "
+	                        "to the same shell. Elsewhere it makes no difference."),
+	        this));
+
 	/* Per host and off unless asked for; see bssh_kept_scrollback. */
 	m_keep_scrollback = new QCheckBox(QStringLiteral("Keep this host's scrollback after closing"),
 	                                  this);
@@ -377,6 +387,7 @@ void bssh_host_editor::set_profile(const bssh_profile_t &profile) {
 	m_jump->setText(profile.proxy_jump);
 	if (m_biometric) m_biometric->setChecked(profile.require_biometric);
 	m_keep_scrollback->setChecked(profile.keep_scrollback);
+	m_resume_session->setChecked(profile.resume_session);
 
 	const QJsonObject resolved = resolved_settings();
 
@@ -515,6 +526,7 @@ bssh_profile_t bssh_host_editor::profile() const {
 	 */
 	if (m_biometric) edited.require_biometric = m_biometric->isChecked();
 	edited.keep_scrollback = m_keep_scrollback->isChecked();
+	edited.resume_session = m_resume_session->isChecked();
 
 	/*
 	 * Sparse appearance overrides, computed by the same function the

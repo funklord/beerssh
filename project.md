@@ -1422,7 +1422,8 @@ is told what was lost. `beerssh-session` (`make session`) is the program a host
 runs, a static binary of about 1 MB: `version` is the probe, `attach NAME` what an
 exec channel runs. `make check-session` proves it over a real sshd: with the
 connection killed during a job, the next one finds the same shell and all 5000
-lines written meanwhile, in order. `src/session/session_client.h` is the client's
+lines written meanwhile, in order. `make fuzz-session` drives the frame readers and
+the client under ASan and UBSan. `src/session/session_client.h` is the client's
 half, for both transports: it keeps its place across links and never joins text
 across a gap.
 

@@ -776,6 +776,23 @@ SESSION_SRCS = src/session/session_main.c src/session/session_host.c src/session
 .PHONY: session check-session
 session: $(SESSION_BIN)
 
+# What the network can say to a session, under libFuzzer, ASan and UBSan. Its
+# own directory, since none of this may reach a normal object file. Bounded by
+# FUZZ_SECONDS, and by a memory limit, whatever it finds.
+FUZZ_SECONDS ?= 60
+FUZZ_DIR = build-fuzz
+FUZZ_BIN = $(FUZZ_DIR)/session_fuzz
+FUZZ_SRCS = test/fuzz/session_fuzz.c src/session/session_client.c src/session/wire.c \
+            src/session/generated/frame.c src/session/generated/situ.c
+.PHONY: fuzz-session
+$(FUZZ_BIN): $(FUZZ_SRCS) $(wildcard src/session/*.h src/session/generated/*.h)
+	@mkdir -p $(FUZZ_DIR)/corpus
+	clang -std=gnu11 -g -O1 -UNDEBUG -fsanitize=fuzzer,address,undefined -fno-sanitize-recover=undefined \
+	      -Isrc -o $@ $(filter %.c,$^)
+fuzz-session: $(FUZZ_BIN)
+	$(FUZZ_BIN) -max_total_time=$(FUZZ_SECONDS) -rss_limit_mb=1024 -max_len=140000 -timeout=10 \
+	            -print_final_stats=1 -artifact_prefix=$(FUZZ_DIR)/ $(FUZZ_DIR)/corpus
+
 # A real sshd in a throwaway container, so it needs docker.
 check-session: $(SESSION_BIN)
 	tool/check-session.sh $(SESSION_BIN)

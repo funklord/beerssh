@@ -921,6 +921,33 @@ void profile_store_test::both_editors_carry_the_keep_scrollback_choice() {
 	QVERIFY(!editor.profile().keep_scrollback);
 }
 
+void profile_store_test::keeping_the_shell_is_offered_by_both_editors() {
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("test.db")));
+
+	bssh_profile_t host = make_profile(QStringLiteral("kept"), QStringLiteral("kept.example"));
+	host.resume_session = true;
+
+	/*
+	 * The phone first, since it is where a connection drops. It went out with
+	 * the desktop dialog's box alone, and that inside the test for keeping a
+	 * computer awake, which a phone answers no: no phone could turn this on.
+	 */
+	bssh_host_editor editor;
+	editor.set_profile(host);
+	QCheckBox *touch = editor.findChild<QCheckBox *>(QStringLiteral("resume_session"));
+	QVERIFY(touch && touch->isChecked());
+	touch->setChecked(false);
+	QVERIFY(!editor.profile().resume_session);
+
+	bssh_session_dialog dialog(&store);
+	dialog.set_current_profile(host);
+	QCheckBox *desktop = dialog.findChild<QCheckBox *>(QStringLiteral("resume_session"));
+	QVERIFY(desktop && desktop->isChecked());
+	desktop->setChecked(false);
+	QVERIFY(!dialog.current_profile().resume_session);
+}
+
 void profile_store_test::hosts_are_grouped_by_folder_the_same_everywhere() {
 	QTemporaryDir dir;
 	bssh_profile_store store(dir.filePath(QStringLiteral("test.db")));

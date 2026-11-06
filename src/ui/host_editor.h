@@ -98,6 +98,7 @@ private:
 	 */
 	QCheckBox *m_biometric;
 	QCheckBox *m_keep_scrollback = nullptr;
+	QCheckBox *m_resume_session = nullptr;
 	QLineEdit *m_host;
 	QLineEdit *m_user;
 	QSpinBox *m_port;

@@ -357,15 +357,16 @@ QWidget *bssh_session_dialog::build_session_page() {
 		m_keep_awake->setToolTip(QStringLiteral(
 		        "While this host is connected, the computer does not go to sleep."));
 		keeps->addWidget(m_keep_awake);
-
-		m_resume_session = new QCheckBox(QStringLiteral("Keep the shell on the server"), page);
-		m_resume_session->setObjectName(QStringLiteral("resume_session"));
-		m_resume_session->setToolTip(QStringLiteral(
-		        "Where the host has beerssh-session, a dropped connection comes back to "
-		        "the same shell with everything it printed. Elsewhere it makes no "
-		        "difference."));
-		keeps->addWidget(m_resume_session);
 	}
+
+	/* Outside that test: whether a host keeps a shell is nothing to do with sleep. */
+	m_resume_session = new QCheckBox(QStringLiteral("Keep the shell on the server"), page);
+	m_resume_session->setObjectName(QStringLiteral("resume_session"));
+	m_resume_session->setToolTip(QStringLiteral(
+	        "Where the host has beerssh-session, a dropped connection comes back to "
+	        "the same shell with everything it printed. Elsewhere it makes no "
+	        "difference."));
+	keeps->addWidget(m_resume_session);
 	keeps->addStretch(1);
 	destination->addRow(keeps);
 

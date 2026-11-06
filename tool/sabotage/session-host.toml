@@ -299,3 +299,25 @@ file = "src/model/session.cpp"
 find = "\t\t\tsession->m_emulator->feed(QByteArrayLiteral(\"\\r\\n[a new shell: the old one has gone]\\r\\n\"));\n"
 replace = ""
 expect = "a_new_shell_after_a_reboot_is_shown_and_said"
+
+# On the phone, which is where a connection drops.
+[[sabotage]]
+name = "the touch editor forgets the box"
+file = "src/ui/host_editor.cpp"
+find = "\tedited.resume_session = m_resume_session->isChecked();\n"
+replace = ""
+expect = "keeping_the_shell_is_offered_by_both_editors"
+
+[[sabotage]]
+name = "the touch editor does not show what is set"
+file = "src/ui/host_editor.cpp"
+find = "\tm_resume_session->setChecked(profile.resume_session);\n"
+replace = ""
+expect = "keeping_the_shell_is_offered_by_both_editors"
+
+[[sabotage]]
+name = "the desktop dialog forgets the box"
+file = "src/ui/session_dialog.cpp"
+find = "\tif (m_resume_session) profile.resume_session = m_resume_session->isChecked();\n"
+replace = ""
+expect = "keeping_the_shell_is_offered_by_both_editors"
