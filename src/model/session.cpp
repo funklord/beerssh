@@ -603,6 +603,9 @@ void bssh_session::answer_resume_probe(const QByteArray &output) {
 	                             int(bssh_wire_put_attach(frame, sizeof(frame), m_resume_client->next,
 	                                                      uint16_t(m_cols), uint16_t(m_rows)))));
 
+	/* Every attach: a host started anew knows nothing of the last one's. */
+	send_output_mode();
+
 	/* The same shell on a return, which has run this already. */
 	if (first && !m_resume_restored) {
 		const QString command = m_settings.value(QStringLiteral("on_connect_command")).toString();
@@ -611,6 +614,18 @@ void bssh_session::answer_resume_probe(const QByteArray &output) {
 
 	m_mux_listing = false;
 	list_multiplexers();
+}
+
+void bssh_session::send_output_mode() {
+	const uint8_t mode = m_keep_every_update ? BSSH_WIRE_MODE_SERIAL : BSSH_WIRE_MODE_LIVE;
+	uint8_t frame[8];
+	m_transport->send(QByteArray(reinterpret_cast<const char *>(frame),
+	                             int(bssh_wire_put(frame, sizeof(frame), BSSH_WIRE_MODE, &mode, 1))));
+}
+
+void bssh_session::set_keeps_every_update(bool keep) {
+	m_keep_every_update = keep;
+	if (m_resume == RESUME_ACTIVE && m_transport) send_output_mode();
 }
 
 void bssh_session::take_resume_bytes(const QByteArray &bytes) {

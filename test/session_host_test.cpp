@@ -964,3 +964,44 @@ void session_host_test::a_session_is_named_before_it_is_asked_anything() {
 	kept_t not_asked(false);
 	QVERIFY(not_asked.session->kept_name().isEmpty());
 }
+
+void session_host_test::keeping_every_update_switches_during_a_session() {
+	kept_t kept;
+	QVERIFY(!kept.session->is_kept());
+	kept.answer_probe();
+	QVERIFY(kept.session->is_kept());
+
+	const auto modes_sent = [&kept] {
+		QByteArray bytes = kept.fake()->written();
+		QList<int> modes;
+		for (;;) {
+			bssh_wire_frame_t frame;
+			uint32_t used = 0;
+			if (bssh_wire_take(reinterpret_cast<uint8_t *>(bytes.data()), uint32_t(bytes.size()), &frame,
+			                   &used) != 1)
+				return modes;
+			uint8_t mode = 0;
+			if (frame.kind == BSSH_WIRE_MODE && !bssh_wire_read_mode(&frame, &mode)) modes.append(mode);
+			bytes.remove(0, int(used));
+		}
+	};
+
+	/* On the same connection, at once. */
+	QCOMPARE(modes_sent(), QList<int>{ BSSH_WIRE_MODE_LIVE });
+	kept.session->set_keeps_every_update(true);
+	QCOMPARE(modes_sent(), QList<int>({ BSSH_WIRE_MODE_LIVE, BSSH_WIRE_MODE_SERIAL }));
+	QVERIFY(kept.session->keeps_every_update());
+
+	/* And it holds across a drop, for a host that may have started anew. */
+	kept.fake()->simulate_connection_lost();
+	kept.session->reconnect();
+	kept.fake()->simulate_key_auth_success();
+	kept.answer_probe();
+	QCOMPARE(modes_sent(), QList<int>{ BSSH_WIRE_MODE_SERIAL });
+}
+
+void session_host_test::a_mode_set_with_nothing_kept_waits_for_the_attach() {
+	kept_t kept;
+	kept.session->set_keeps_every_update(true);
+	QVERIFY2(kept.fake()->written().isEmpty(), "a frame reached a shell that is not this protocol");
+}

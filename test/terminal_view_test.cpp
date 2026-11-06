@@ -5019,6 +5019,9 @@ void terminal_view_test::a_session_can_be_closed_without_a_tab_bar() {
 	          "a session that is not live has no way to connect: after a restore "
 	          "that is a dead end on any device with no tab bar");
 
+	/* Nothing on a server to keep: an option that does nothing is not offered. */
+	QVERIFY(!menu->findChild<QAction *>(QStringLiteral("terminal_keep_every_update")));
+
 	delete menu;
 }
 

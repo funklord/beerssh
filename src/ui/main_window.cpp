@@ -6410,6 +6410,21 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 	}
 
 	/*
+	 * sec 5.6's modes, switched during a session. Two for now: Eventual means
+	 * latest first, and until the live screen exists it would be Serial by
+	 * another name. Absent where there is nothing on a server to keep.
+	 */
+	if (m_current && m_current->is_kept()) {
+		QAction *every = session_menu->addAction(QStringLiteral("Keep Every &Update"));
+		every->setObjectName(QStringLiteral("terminal_keep_every_update"));
+		every->setCheckable(true);
+		every->setChecked(m_current->keeps_every_update());
+		every->setToolTip(QStringLiteral(
+		        "For scripts that watch the output. A program that outruns the connection "
+		        "is paused rather than losing anything."));
+	}
+
+	/*
 	 * Not on touch: there New Tab opens the host list, which the menu's
 	 * own Sessions and Hosts entry already does -- the same door twice
 	 * (the holder, 2026-10-22).
@@ -6694,6 +6709,13 @@ void bssh_main_window::act_on_terminal_menu(QMenu *menu, const QAction *chosen,
 	        menu->findChild<QAction *>(QStringLiteral("terminal_connect"));
 	if (connect_now && chosen == connect_now) {
 		if (m_current) m_current->connect_to_host();
+		return;
+	}
+
+	const QAction *every =
+	        menu->findChild<QAction *>(QStringLiteral("terminal_keep_every_update"));
+	if (every && chosen == every) {
+		if (m_current) m_current->set_keeps_every_update(every->isChecked());
 		return;
 	}
 

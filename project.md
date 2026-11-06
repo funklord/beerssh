@@ -1529,6 +1529,11 @@ program shows now. Pausing the program at the limit is what makes "every state"
 true; dropping there would promise something not delivered. During replay only
 the server's emulator answers terminal queries, and side effects do not fire.
 
+**Built so far of the modes:** Live and Serial, switched from the Session menu's
+*Keep Every Update* while a session is kept, and re-sent on every attach. Eventual
+waits for the live screen: until latest-first exists it would be Serial by another
+name. The hooks that would raise a mode by themselves do not exist yet.
+
 **Modes switch on the fly.** A switch is a control message that takes effect at
 a named offset in the raw log, and needs no reconnect. Moving down is immediate.
 Moving up is faithful as far back as the log still reaches, which is why the log

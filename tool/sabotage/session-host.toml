@@ -410,3 +410,32 @@ file = "src/ui/main_window.cpp"
 find = "\t\tsession->restore_kept_name(m_unclaimed_kept.takeAt(i).second);\n"
 replace = "\t\tm_unclaimed_kept.takeAt(i);\n"
 expect = "a_window_left_saves_the_shell_a_restart_will_look_for"
+
+[[sabotage]]
+name = "a mode change waits for the next connection"
+file = "src/model/session.cpp"
+find = "\tif (m_resume == RESUME_ACTIVE && m_transport) send_output_mode();\n"
+replace = ""
+expect = "keeping_every_update_switches_during_a_session"
+
+[[sabotage]]
+name = "a host started anew is not told the mode"
+file = "src/model/session.cpp"
+find = "\t/* Every attach: a host started anew knows nothing of the last one's. */\n\tsend_output_mode();\n"
+replace = ""
+expect = "keeping_every_update_switches_during_a_session"
+
+# A frame into a plain shell is typed at its prompt.
+[[sabotage]]
+name = "a mode frame goes to a plain shell"
+file = "src/model/session.cpp"
+find = "\tif (m_resume == RESUME_ACTIVE && m_transport) send_output_mode();\n"
+replace = "\tif (m_transport) send_output_mode();\n"
+expect = "a_mode_set_with_nothing_kept_waits_for_the_attach"
+
+[[sabotage]]
+name = "the menu offers it with nothing kept"
+file = "src/ui/main_window.cpp"
+find = "\tif (m_current && m_current->is_kept()) {\n\t\tQAction *every ="
+replace = "\tif (m_current) {\n\t\tQAction *every ="
+expect = "a_session_can_be_closed_without_a_tab_bar"

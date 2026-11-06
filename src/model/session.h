@@ -228,6 +228,16 @@ public:
 	 * reachable from nothing, for ever.
 	 */
 	QByteArray kept_name() const { return m_resume_name; }
+
+	/*
+	 * Whether this session's shell is kept on the server now, and whether the
+	 * host keeps every update for it (sec 5.6's Serial) or may drop the oldest
+	 * when its log is full (Live). Switched during a session, with no reconnect.
+	 * Serial pauses the program rather than lose anything.
+	 */
+	bool is_kept() const { return m_resume == RESUME_ACTIVE; }
+	bool keeps_every_update() const { return m_keep_every_update; }
+	void set_keeps_every_update(bool keep);
 	void restore_kept_name(const QByteArray &name) {
 		m_resume_name = name;
 		m_resume_restored = !name.isEmpty();
@@ -428,6 +438,8 @@ private:
 	QByteArray m_resume_name;
 	bool m_resume_restored = false;
 	bool m_resume_replaying = false;
+	bool m_keep_every_update = false;
+	void send_output_mode();
 
 	/* Here, not on the transport: it is the place in the stream, and a
 	 * reconnect makes a new transport. */
