@@ -1,5 +1,7 @@
 #include "ui/session_dialog.h"
 
+#include "ui/host_editor.h"
+
 #include <QCloseEvent>
 #include <QSignalBlocker>
 #include <QToolButton>
@@ -360,8 +362,8 @@ QWidget *bssh_session_dialog::build_session_page() {
 	}
 
 	/* Outside that test: whether a host keeps a shell is nothing to do with sleep. */
-	m_resume_session = new QCheckBox(QStringLiteral("Keep the shell on the server"), page);
-	m_resume_session->setObjectName(QStringLiteral("resume_session"));
+	m_resume_session = new QComboBox(page);
+	bssh_fill_resume_choice(m_resume_session);
 	m_resume_session->setToolTip(QStringLiteral(
 	        "Where the host has beerssh-session, a dropped connection comes back to "
 	        "the same shell with everything it printed. Elsewhere it makes no "
@@ -373,7 +375,7 @@ QWidget *bssh_session_dialog::build_session_page() {
 	 * A row of its own: beside the other two it took the dialog to 834 pixels
 	 * in the runner's fonts, past the 800 it must fit, with height to spare.
 	 */
-	destination->addRow(m_resume_session);
+	destination->addRow(QStringLiteral("Keep the shell on the server:"), m_resume_session);
 
 	bssh_attach_notes(destination);
 	layout->addLayout(destination);
@@ -614,7 +616,7 @@ bssh_profile_t bssh_session_dialog::current_profile() const {
 	profile.proxy_jump = m_jump->text().trimmed();
 	profile.keep_scrollback = m_keep_scrollback->isChecked();
 	if (m_keep_awake) profile.keep_awake = m_keep_awake->isChecked();
-	if (m_resume_session) profile.resume_session = m_resume_session->isChecked();
+	profile.resume_choice = bssh_profile_t::resume_choice_t(m_resume_session->currentData().toInt());
 	profile.folder = m_folder->currentText().trimmed();
 
 	/*
@@ -697,7 +699,7 @@ void bssh_session_dialog::set_current_profile(const bssh_profile_t &profile) {
 	m_jump->setText(profile.proxy_jump);
 	m_keep_scrollback->setChecked(profile.keep_scrollback);
 	if (m_keep_awake) m_keep_awake->setChecked(profile.keep_awake);
-	if (m_resume_session) m_resume_session->setChecked(profile.resume_session);
+	m_resume_session->setCurrentIndex(m_resume_session->findData(int(profile.resume_choice)));
 	m_folder->setCurrentText(profile.folder);
 
 	if (m_font_picker) {

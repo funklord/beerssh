@@ -946,7 +946,7 @@ void live_ssh_test::a_kept_session_comes_back_to_the_same_shell()
 	profile.port = test_port();
 	profile.user = qEnvironmentVariable("USER");
 	profile.identity_file = test_key();
-	profile.resume_session = true;
+	profile.resume_choice = bssh_profile_t::RESUME_ALWAYS;
 
 	bssh_session session(profile);
 	connect(&session, &bssh_session::host_key_unknown, &session,

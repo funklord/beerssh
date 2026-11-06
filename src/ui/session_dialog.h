@@ -153,7 +153,7 @@ private:
 	QLineEdit *m_jump;
 	QCheckBox *m_keep_scrollback = nullptr;
 	QCheckBox *m_keep_awake = nullptr;
-	QCheckBox *m_resume_session = nullptr;
+	QComboBox *m_resume_session = nullptr;
 	QLineEdit *m_session_name;
 	QListWidget *m_sessions;
 

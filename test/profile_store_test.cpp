@@ -265,7 +265,7 @@ void profile_store_test::a_hosts_choices_are_written_to_disk() {
 		bssh_profile_t host = make_profile(QStringLiteral("zoomed"), QStringLiteral("z.example"));
 		host.font_zoom = -4;
 		host.keep_awake = true;
-		host.resume_session = true;
+		host.resume_choice = bssh_profile_t::RESUME_ALWAYS;
 		host.keep_scrollback = true;
 		host.folder = QStringLiteral("Work");
 		id = store.save(host);
@@ -276,7 +276,7 @@ void profile_store_test::a_hosts_choices_are_written_to_disk() {
 	bssh_profile_store reopened(path);
 	QCOMPARE(reopened.profile(id).font_zoom, -4);
 	QVERIFY(reopened.profile(id).keep_awake);
-	QVERIFY(reopened.profile(id).resume_session);
+	QCOMPARE(reopened.profile(id).resume_choice, bssh_profile_t::RESUME_ALWAYS);
 	QVERIFY(reopened.profile(id).keep_scrollback);
 	QCOMPARE(reopened.profile(id).folder, QStringLiteral("Work"));
 }
@@ -948,7 +948,7 @@ void profile_store_test::keeping_the_shell_is_offered_by_both_editors() {
 	bssh_profile_store store(dir.filePath(QStringLiteral("test.db")));
 
 	bssh_profile_t host = make_profile(QStringLiteral("kept"), QStringLiteral("kept.example"));
-	host.resume_session = true;
+	host.resume_choice = bssh_profile_t::RESUME_ALWAYS;
 
 	/*
 	 * The phone first, since it is where a connection drops. It went out with
@@ -957,17 +957,57 @@ void profile_store_test::keeping_the_shell_is_offered_by_both_editors() {
 	 */
 	bssh_host_editor editor;
 	editor.set_profile(host);
-	QCheckBox *touch = editor.findChild<QCheckBox *>(QStringLiteral("resume_session"));
-	QVERIFY(touch && touch->isChecked());
-	touch->setChecked(false);
-	QVERIFY(!editor.profile().resume_session);
+	QComboBox *touch = editor.findChild<QComboBox *>(QStringLiteral("resume_session"));
+	QVERIFY(touch);
+	QCOMPARE(touch->currentData().toInt(), int(bssh_profile_t::RESUME_ALWAYS));
+	touch->setCurrentIndex(touch->findData(int(bssh_profile_t::RESUME_NEVER)));
+	QCOMPARE(editor.profile().resume_choice, bssh_profile_t::RESUME_NEVER);
 
 	bssh_session_dialog dialog(&store);
 	dialog.set_current_profile(host);
-	QCheckBox *desktop = dialog.findChild<QCheckBox *>(QStringLiteral("resume_session"));
-	QVERIFY(desktop && desktop->isChecked());
-	desktop->setChecked(false);
-	QVERIFY(!dialog.current_profile().resume_session);
+	QComboBox *desktop = dialog.findChild<QComboBox *>(QStringLiteral("resume_session"));
+	QVERIFY(desktop);
+	QCOMPARE(desktop->currentData().toInt(), int(bssh_profile_t::RESUME_ALWAYS));
+	desktop->setCurrentIndex(desktop->findData(int(bssh_profile_t::RESUME_FOLLOW_DEFAULT)));
+	QCOMPARE(dialog.current_profile().resume_choice, bssh_profile_t::RESUME_FOLLOW_DEFAULT);
+
+	/* It says what the default means today. */
+	QVERIFY(desktop->currentText().startsWith(QStringLiteral("Default (")));
+}
+
+void profile_store_test::keeping_the_shell_is_a_choice_and_not_a_value() {
+	QTemporaryDir dir;
+	const QString path = dir.filePath(QStringLiteral("test.db"));
+
+	/*
+	 * When the default flips, a host left alone must follow it and a host set
+	 * to off must not. A saved bare value could say neither (sec 5.6).
+	 */
+	int follows = 0;
+	int never = 0;
+	int always = 0;
+	{
+		bssh_profile_store store(path);
+		bssh_profile_t host = make_profile(QStringLiteral("a"), QStringLiteral("a.example"));
+		follows = store.save(host);
+
+		host = make_profile(QStringLiteral("b"), QStringLiteral("b.example"));
+		host.resume_choice = bssh_profile_t::RESUME_NEVER;
+		never = store.save(host);
+
+		host = make_profile(QStringLiteral("c"), QStringLiteral("c.example"));
+		host.resume_choice = bssh_profile_t::RESUME_ALWAYS;
+		always = store.save(host);
+	}
+
+	bssh_profile_store reopened(path);
+	QCOMPARE(reopened.profile(follows).resume_choice, bssh_profile_t::RESUME_FOLLOW_DEFAULT);
+	QCOMPARE(reopened.profile(never).resume_choice, bssh_profile_t::RESUME_NEVER);
+	QCOMPARE(reopened.profile(always).resume_choice, bssh_profile_t::RESUME_ALWAYS);
+
+	QCOMPARE(reopened.profile(follows).resume_session(), bssh_profile_t::resume_by_default());
+	QVERIFY(!reopened.profile(never).resume_session());
+	QVERIFY(reopened.profile(always).resume_session());
 }
 
 void profile_store_test::hosts_are_grouped_by_folder_the_same_everywhere() {

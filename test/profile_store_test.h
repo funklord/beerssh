@@ -67,6 +67,7 @@ private slots:
 	/* Folders for organising the host list only (sec 10.5, 2026-09-26). */
 	void a_layout_remembers_which_shell_each_host_kept();
 	void keeping_the_shell_is_offered_by_both_editors();
+	void keeping_the_shell_is_a_choice_and_not_a_value();
 	void hosts_are_grouped_by_folder_the_same_everywhere();
 	void a_folder_heading_folds_its_hosts_and_opens_nothing();
 	void the_desktop_list_folds_and_files_hosts_too();

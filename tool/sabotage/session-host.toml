@@ -197,7 +197,7 @@ expect = "output_written_while_detached_arrives_on_return"
 [[sabotage]]
 name = "every host is probed"
 file = "src/model/session.cpp"
-find = "\treturn m_profile.resume_session && !m_profile.local && m_profile.command.isEmpty()\n"
+find = "\treturn m_profile.resume_session() && !m_profile.local && m_profile.command.isEmpty()\n"
 replace = "\treturn !m_profile.local && m_profile.command.isEmpty()\n"
 expect = "a_host_not_asked_is_not_probed"
 
@@ -304,21 +304,21 @@ expect = "a_new_shell_after_a_reboot_is_shown_and_said"
 [[sabotage]]
 name = "the touch editor forgets the box"
 file = "src/ui/host_editor.cpp"
-find = "\tedited.resume_session = m_resume_session->isChecked();\n"
+find = "\tedited.resume_choice = bssh_profile_t::resume_choice_t(m_resume_session->currentData().toInt());\n"
 replace = ""
 expect = "keeping_the_shell_is_offered_by_both_editors"
 
 [[sabotage]]
 name = "the touch editor does not show what is set"
 file = "src/ui/host_editor.cpp"
-find = "\tm_resume_session->setChecked(profile.resume_session);\n"
+find = "\tm_resume_session->setCurrentIndex(m_resume_session->findData(int(profile.resume_choice)));\n"
 replace = ""
 expect = "keeping_the_shell_is_offered_by_both_editors"
 
 [[sabotage]]
 name = "the desktop dialog forgets the box"
 file = "src/ui/session_dialog.cpp"
-find = "\tif (m_resume_session) profile.resume_session = m_resume_session->isChecked();\n"
+find = "\tprofile.resume_choice = bssh_profile_t::resume_choice_t(m_resume_session->currentData().toInt());\n"
 replace = ""
 expect = "keeping_the_shell_is_offered_by_both_editors"
 
@@ -439,3 +439,18 @@ file = "src/ui/main_window.cpp"
 find = "\tif (m_current && m_current->is_kept()) {\n\t\tQAction *every ="
 replace = "\tif (m_current) {\n\t\tQAction *every ="
 expect = "a_session_can_be_closed_without_a_tab_bar"
+
+# A bare value: the default's change would override what somebody chose.
+[[sabotage]]
+name = "off is saved as nothing"
+file = "src/model/profile_store.cpp"
+find = "\t\tif (profile.resume_choice == bssh_profile_t::RESUME_FOLLOW_DEFAULT) {\n"
+replace = "\t\tif (profile.resume_choice != bssh_profile_t::RESUME_ALWAYS) {\n"
+expect = "keeping_the_shell_is_a_choice_and_not_a_value"
+
+[[sabotage]]
+name = "the default is saved as a value"
+file = "src/model/profile_store.cpp"
+find = "\t\tif (profile.resume_choice == bssh_profile_t::RESUME_FOLLOW_DEFAULT) {\n"
+replace = "\t\tif (false) {\n"
+expect = "keeping_the_shell_is_a_choice_and_not_a_value"

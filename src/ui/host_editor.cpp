@@ -33,6 +33,15 @@
 
 static const int BSSH_BUTTON_HEIGHT_DP = 56;
 
+void bssh_fill_resume_choice(QComboBox *box) {
+	box->setObjectName(QStringLiteral("resume_session"));
+	box->addItem(QStringLiteral("Default (%1)").arg(bssh_profile_t::resume_by_default()
+	                                                         ? QStringLiteral("on") : QStringLiteral("off")),
+	             int(bssh_profile_t::RESUME_FOLLOW_DEFAULT));
+	box->addItem(QStringLiteral("On"), int(bssh_profile_t::RESUME_ALWAYS));
+	box->addItem(QStringLiteral("Off"), int(bssh_profile_t::RESUME_NEVER));
+}
+
 bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
     : QWidget(parent),
       m_store(store),
@@ -216,8 +225,9 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 	}
 
 	/* A phone is where a connection drops, so this is where it matters most. */
-	m_resume_session = new QCheckBox(QStringLiteral("Keep the shell on the server"), this);
-	m_resume_session->setObjectName(QStringLiteral("resume_session"));
+	body->addWidget(new QLabel(QStringLiteral("Keep the shell on the server"), this));
+	m_resume_session = new QComboBox(this);
+	bssh_fill_resume_choice(m_resume_session);
 	m_resume_session->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
 	body->addWidget(m_resume_session);
 	body->addWidget(bssh_wrapped_note(
@@ -387,7 +397,7 @@ void bssh_host_editor::set_profile(const bssh_profile_t &profile) {
 	m_jump->setText(profile.proxy_jump);
 	if (m_biometric) m_biometric->setChecked(profile.require_biometric);
 	m_keep_scrollback->setChecked(profile.keep_scrollback);
-	m_resume_session->setChecked(profile.resume_session);
+	m_resume_session->setCurrentIndex(m_resume_session->findData(int(profile.resume_choice)));
 
 	const QJsonObject resolved = resolved_settings();
 
@@ -526,7 +536,7 @@ bssh_profile_t bssh_host_editor::profile() const {
 	 */
 	if (m_biometric) edited.require_biometric = m_biometric->isChecked();
 	edited.keep_scrollback = m_keep_scrollback->isChecked();
-	edited.resume_session = m_resume_session->isChecked();
+	edited.resume_choice = bssh_profile_t::resume_choice_t(m_resume_session->currentData().toInt());
 
 	/*
 	 * Sparse appearance overrides, computed by the same function the

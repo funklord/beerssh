@@ -750,7 +750,7 @@ struct kept_t {
 		profile.name = QStringLiteral("kept");
 		profile.host = QStringLiteral("kept.example");
 		profile.user = QStringLiteral("nabbe");
-		profile.resume_session = wanted;
+		profile.resume_choice = wanted ? bssh_profile_t::RESUME_ALWAYS : bssh_profile_t::RESUME_NEVER;
 		session = registry.create(profile);
 		registry.conn_manager_for(session)->set_auto_reconnect(false);
 		session->restore_kept_name(restored);

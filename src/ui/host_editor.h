@@ -19,6 +19,9 @@ class bssh_terminal_fields;
 class QToolButton;
 class bssh_profile_store;
 
+/* The three answers to keeping a shell, for both host editors (sec 5.6). */
+void bssh_fill_resume_choice(QComboBox *box);
+
 /*
  * bssh_host_editor -- adding or editing a host, on touch (project.md
  * sec 8.5).
@@ -98,7 +101,7 @@ private:
 	 */
 	QCheckBox *m_biometric;
 	QCheckBox *m_keep_scrollback = nullptr;
-	QCheckBox *m_resume_session = nullptr;
+	QComboBox *m_resume_session = nullptr;
 	QLineEdit *m_host;
 	QLineEdit *m_user;
 	QSpinBox *m_port;

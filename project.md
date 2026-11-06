@@ -1430,14 +1430,17 @@ across a gap.
 **BeerSSH uses it over SSH, per host, off by default**: *Keep the shell on the
 server*, `resume_session`. Off because the probe is a round trip on every
 connection, for a program few hosts have yet; the holder's automatic negotiation
-is this with the default turned on, once the program can reach hosts. `make
+is this with the default turned on, once the program can reach hosts. So it is a
+choice and not a value: `Default (off)`, `On`, `Off`, with a key written only for
+a pinned choice. When the default flips, a host left alone follows it and a host
+set to Off stays off, which a saved bare value could not have told apart. `make
 check-ssh` proves it on the real transport against a real sshd, through a real
 login: a drop during a job comes back to the same shell with the job's output, and
 closing leaves nothing on the host. On the API 36 emulator, 2026-11-06, with the
 app in the background and the connection killed from the server: "connecting" for
 about 2 s and back in about 4 with no input, the same shell, and the line a job
-wrote meanwhile on screen. Not tried on a real phone. A password host needs the
-password held or remembered, as any reconnect does.
+wrote meanwhile on screen. A password host needs the password held or remembered,
+as any reconnect does.
 
 What the path does: a probe beside the connection (`beerssh-session version`), then
 an exec with no pty, which would rewrite frames, and stderr dropped for the same
@@ -1455,6 +1458,11 @@ the raw log, and `caught_up` says when that is done: until then the emulator's
 answers are held back, since the log's questions were answered long ago and an
 answer now would be typed into the live shell. Measured on the API 36 emulator: signed
 in, force-stopped, one tap and the password, the same shell with its screen back.
+**On the Fold, 2026-11-06** (SM-F926B, Android 15, Wi-Fi, USB power, `53383df`): the
+option set in the phone's own editor; a connection killed from the server with the
+app in the background, signed in again 2 s later with no input; the app force-stopped
+during a job, then the normal host list, one tap and the password, the same shell
+with its whole screen and the line the job wrote while no app existed.
 A phone saved its layout only in `closeEvent()`, which Android hardly ever delivers;
 it now saves on leaving and on naming. Touch restores no tabs, since a tab not
 connected is a blank screen and a keyboard with nothing to say what it is; the name

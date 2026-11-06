@@ -127,10 +127,19 @@ struct bssh_profile_t {
 
 	/*
 	 * Keep the shell on the server across a drop, where the host runs
-	 * beerssh-session (sec 5.6). Off by default: the probe is a round trip on
-	 * every connection, for a program few hosts have yet.
+	 * beerssh-session (sec 5.6). A choice and not a value, because this default
+	 * is meant to change: off today, since the probe is a round trip on every
+	 * connection for a program few hosts have yet, and on once hosts can get
+	 * it. A host left on the default then follows, and one set to off stays
+	 * off. Only a pinned choice is written down.
 	 */
-	bool resume_session;
+	enum resume_choice_t { RESUME_FOLLOW_DEFAULT, RESUME_ALWAYS, RESUME_NEVER };
+	resume_choice_t resume_choice;
+
+	static bool resume_by_default() { return false; }
+	bool resume_session() const {
+		return resume_choice == RESUME_FOLLOW_DEFAULT ? resume_by_default() : resume_choice == RESUME_ALWAYS;
+	}
 
 	/*
 	 * The folder this host is listed under, or empty for none -- for
@@ -189,7 +198,7 @@ struct bssh_profile_t {
 
 	bssh_profile_t()
 	    : id(0), port(22), has_stored_password(false), require_biometric(false),
-	      font_zoom(0), keep_scrollback(false), keep_awake(false), resume_session(false), preset_id(0), local(false),
+	      font_zoom(0), keep_scrollback(false), keep_awake(false), resume_choice(RESUME_FOLLOW_DEFAULT), preset_id(0), local(false),
 	      hold(false) {}
 
 	/*

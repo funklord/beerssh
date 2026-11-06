@@ -493,7 +493,7 @@ void bssh_session::wire_transport() {
 }
 
 bool bssh_session::wants_resume() const {
-	return m_profile.resume_session && !m_profile.local && m_profile.command.isEmpty()
+	return m_profile.resume_session() && !m_profile.local && m_profile.command.isEmpty()
 	       && m_mux_command.isEmpty() && m_resume != RESUME_REFUSED;
 }
 
