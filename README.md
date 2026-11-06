@@ -203,8 +203,11 @@ you asked for is never retried.
 
 **A reconnect is a new remote shell.** Plain SSH cannot resume one, so the
 running program and working directory are gone; only the local scrollback
-survives. Attaching to `tmux` on connect is the available answer until a
-session can outlive its connection (`project.md` §5.6).
+survives, and attaching to `tmux` on connect is one answer. The better one is
+a host's *Keep the shell on the server* option: where the host has
+`beerssh-session` on its PATH (`make session` builds it), a dropped connection
+comes back to the same shell with everything it printed meanwhile, and closing
+the tab ends it. Elsewhere the option changes nothing (`project.md` §5.6).
 
 `Ctrl+Alt+Left`/`Right` move focus between panes, and the status line
 reports reconnection as it happens rather than leaving a silent terminal
@@ -220,11 +223,8 @@ remembered across restarts. The connections are not — plain SSH cannot
 resume a shell — so the front door reopens with the last host selected
 rather than pretending to have restored anything.
 
-Not built yet: general key remapping (`project.md` §6.1), a user-composed
-key row (§6.2), reopening every remembered host at once (§8.4), and the
-shared glyph atlas (§9.5). SFTP, port forwarding and session resume are deliberate v1
-non-goals rather than omissions — §1 says why, and §5.3 says what plain SSH
-cannot promise about a resumed shell.
+SFTP browsing and port forwarding are deliberate v1 non-goals rather than
+omissions — `project.md` §1 says why.
 
 A password can be remembered per host — off by default, and only for a
 saved host, since the secret is keyed to it. Remembered passwords are

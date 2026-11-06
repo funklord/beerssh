@@ -499,6 +499,7 @@ void bssh_profile_store::load_profiles() {
 		profile.keep_scrollback =
 		        file.value(QStringLiteral("keep_scrollback"), false).toBool();
 		profile.keep_awake = file.value(QStringLiteral("keep_awake"), false).toBool();
+		profile.resume_session = file.value(QStringLiteral("resume_session"), false).toBool();
 		profile.folder = file.value(QStringLiteral("folder")).toString().trimmed();
 		profile.preset_id = id_for_slug(file.value(QStringLiteral("preset")).toString());
 
@@ -710,6 +711,11 @@ bool bssh_profile_store::write_profiles() {
 		}
 		if (profile.keep_scrollback) {
 			file.setValue(QStringLiteral("keep_scrollback"), true);
+		}
+		if (profile.resume_session) {
+			file.setValue(QStringLiteral("resume_session"), true);
+		} else {
+			file.remove(QStringLiteral("resume_session"));
 		}
 		if (profile.keep_awake) {
 			file.setValue(QStringLiteral("keep_awake"), true);

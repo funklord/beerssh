@@ -33,6 +33,15 @@ private slots:
 	void the_client_acknowledges_when_due_and_not_before();
 	void the_client_refuses_a_peer_not_speaking_the_protocol();
 	void a_client_and_a_real_host_agree_from_the_first_byte();
+	void a_client_asking_past_the_end_is_told_it_is_a_new_session();
+	void a_hangup_ends_the_program_and_the_host();
+	void a_host_not_asked_is_not_probed();
+	void a_host_without_the_program_gets_a_plain_shell();
+	void a_host_with_the_program_gets_a_kept_session();
+	void a_reconnect_returns_to_the_same_place_with_modes_kept();
+	void a_banner_ahead_of_the_program_falls_back_on_the_same_connection();
+	void closing_a_kept_session_hangs_it_up();
+	void a_new_shell_after_a_reboot_is_shown_and_said();
 };
 
 #endif

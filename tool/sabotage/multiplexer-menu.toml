@@ -59,8 +59,8 @@ expect = "tmux_and_screen_are_offered_on_connect"
 [[sabotage]]
 name = "a listing lost with its connection blocks the next"
 file = "src/model/session.cpp"
-find = "\t\t\tm_mux_listing = false;\n\n\t\t\t/*\n\t\t\t * tmux and screen (sec 10.2a): what is running"
-replace = "\t\t\t/*\n\t\t\t * tmux and screen (sec 10.2a): what is running"
+find = "\tm_mux_listing = false;\n\n\t/*\n\t * tmux and screen (sec 10.2a): what is running"
+replace = "\t/*\n\t * tmux and screen (sec 10.2a): what is running"
 expect = "tmux_and_screen_are_offered_on_connect"
 
 [[sabotage]]
@@ -90,8 +90,8 @@ expect = "tmux_and_screen_are_offered_on_connect"
 [[sabotage]]
 name = "a reconnect forgets what was chosen"
 file = "src/model/session.cpp"
-find = "\t\t\tif (!m_mux_command.isEmpty() && m_profile.command.isEmpty())\n"
-replace = "\t\t\tif (false)\n"
+find = "\tif (!m_mux_command.isEmpty() && m_profile.command.isEmpty())\n"
+replace = "\tif (false)\n"
 expect = "tmux_and_screen_are_offered_on_connect"
 
 # A fresh listing, and the drawer no longer says which one the tab shows.

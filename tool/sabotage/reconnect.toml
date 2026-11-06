@@ -37,5 +37,5 @@ expect = "a_reconnect_keeps_the_history_and_drops_the_modes"
 [[sabotage]]
 name = "reconnect never asks for the reset"
 file = "src/model/session.cpp"
-find = "\tif (m_emulator) m_emulator->reset_modes();"
+find = "\tif (m_emulator && m_resume != RESUME_ACTIVE) m_emulator->reset_modes();"
 expect = "a_reconnect_hands_the_new_shell_a_clean_terminal"

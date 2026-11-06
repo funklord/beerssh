@@ -43,6 +43,16 @@ static int take_lost(bssh_session_client_t *client, const bssh_wire_frame_t *fra
 	return 0;
 }
 
+static int take_restarted(bssh_session_client_t *client, const bssh_wire_frame_t *frame) {
+	uint64_t offset = 0;
+
+	if (bssh_wire_read_offset(frame, &offset)) return -1;
+	client->next = offset;
+	client->acked = offset;
+	client->events.restarted(client->events.context);
+	return 0;
+}
+
 static int take_exited(bssh_session_client_t *client, const bssh_wire_frame_t *frame) {
 	int32_t status = 0;
 
@@ -86,6 +96,7 @@ static int take_frames(bssh_session_client_t *client) {
 		if (frame.kind == BSSH_WIRE_OUTPUT) status = take_output(client, &frame);
 		else if (frame.kind == BSSH_WIRE_LOST) status = take_lost(client, &frame);
 		else if (frame.kind == BSSH_WIRE_EXITED) status = take_exited(client, &frame);
+		else if (frame.kind == BSSH_WIRE_RESTARTED) status = take_restarted(client, &frame);
 		if (status) return -1;
 
 		at += used;

@@ -7,6 +7,8 @@
 #include <QSet>
 #include <QString>
 
+#include <memory>
+
 #include "model/multiplexer.h"
 #include "model/profile.h"
 #include "ssh/ssh_session.h"
@@ -402,6 +404,19 @@ private:
 	QList<bssh_mux_session_t> m_mux_pending;
 	bool m_mux_answered = false;
 	bool m_mux_listing = false;
+
+	/* A session kept on the server (sec 5.6). */
+	enum resume_t { RESUME_NONE, RESUME_PROBING, RESUME_ACTIVE, RESUME_REFUSED };
+	bool wants_resume() const;
+	void open_remote_shell();
+	void answer_resume_probe(const QByteArray &output);
+	void take_resume_bytes(const QByteArray &bytes);
+	resume_t m_resume = RESUME_NONE;
+	QByteArray m_resume_name;
+
+	/* Here, not on the transport: it is the place in the stream, and a
+	 * reconnect makes a new transport. */
+	std::shared_ptr<struct bssh_session_client> m_resume_client;
 	bool m_uploading = false;
 	bool m_finding_directory = false;
 	QString m_upload_directory;

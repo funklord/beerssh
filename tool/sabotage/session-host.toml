@@ -191,3 +191,111 @@ file = "src/session/session_host.c"
 find = "\t\t\tdrain_and_drop(host);\n"
 replace = "\t\t\tdrop_client(host);\n"
 expect = "output_written_while_detached_arrives_on_return"
+
+# Asked of every host: a round trip and a failed exec on each connection, for
+# a program few have.
+[[sabotage]]
+name = "every host is probed"
+file = "src/model/session.cpp"
+find = "\treturn m_profile.resume_session && !m_profile.local && m_profile.command.isEmpty()\n"
+replace = "\treturn !m_profile.local && m_profile.command.isEmpty()\n"
+expect = "a_host_not_asked_is_not_probed"
+
+# The probe can delay a shell and must never prevent one.
+[[sabotage]]
+name = "no program means no shell"
+file = "src/model/session.cpp"
+find = "\t\tm_resume = RESUME_NONE;\n\t\topen_remote_shell();\n\t\treturn;\n"
+replace = "\t\tm_resume = RESUME_NONE;\n\t\treturn;\n"
+expect = "a_host_without_the_program_gets_a_plain_shell"
+
+# A pty rewrites what crosses it, and a frame stops being a frame.
+[[sabotage]]
+name = "a kept session asks for a pty"
+file = "src/model/session.cpp"
+find = "\tm_transport->set_raw_channel(true);\n"
+replace = ""
+expect = "a_host_with_the_program_gets_a_kept_session"
+
+# Typing that goes as bytes reads as garbage at the host, and loses the client.
+[[sabotage]]
+name = "input is not framed"
+file = "src/model/session.cpp"
+find = "\tif (m_resume != RESUME_ACTIVE) {\n\t\tm_transport->send(bytes);\n\t\treturn;\n\t}\n"
+replace = "\tm_transport->send(bytes);\n\treturn;\n"
+expect = "a_host_with_the_program_gets_a_kept_session"
+
+[[sabotage]]
+name = "a resize is not framed"
+file = "src/model/session.cpp"
+find = "\tif (m_resume == RESUME_ACTIVE) {\n\t\tuint8_t frame[16];\n\t\tm_transport->send(QByteArray(reinterpret_cast<const char *>(frame),\n\t\t                             int(bssh_wire_put_resize("
+replace = "\tif (false) {\n\t\tuint8_t frame[16];\n\t\tm_transport->send(QByteArray(reinterpret_cast<const char *>(frame),\n\t\t                             int(bssh_wire_put_resize("
+expect = "a_host_with_the_program_gets_a_kept_session"
+
+# The same shell, still inside its editor, with its modes wiped.
+[[sabotage]]
+name = "a reconnect resets a kept session's modes"
+file = "src/model/session.cpp"
+find = "\tif (m_emulator && m_resume != RESUME_ACTIVE) m_emulator->reset_modes();\n"
+replace = "\tif (m_emulator) m_emulator->reset_modes();\n"
+expect = "a_reconnect_returns_to_the_same_place_with_modes_kept"
+
+# A place in the stream lost: everything sent again, or a shell of its own.
+[[sabotage]]
+name = "a reconnect starts a new session name"
+file = "src/model/session.cpp"
+find = "\tif (m_resume_name.isEmpty())\n\t\tm_resume_name ="
+replace = "\tm_resume_name ="
+expect = "a_reconnect_returns_to_the_same_place_with_modes_kept"
+
+[[sabotage]]
+name = "a banner leaves the channel raw"
+file = "src/model/session.cpp"
+find = "\t\tm_transport->set_raw_channel(false);\n"
+replace = ""
+expect = "a_banner_ahead_of_the_program_falls_back_on_the_same_connection"
+
+[[sabotage]]
+name = "a banner is tried again next connection"
+file = "src/model/session.cpp"
+find = "\t\tm_resume = RESUME_REFUSED;\n"
+replace = "\t\tm_resume = RESUME_NONE;\n"
+expect = "a_banner_ahead_of_the_program_falls_back_on_the_same_connection"
+
+# Every closed tab leaving a shell on the server, for ever.
+[[sabotage]]
+name = "closing does not hang up"
+file = "src/model/session.cpp"
+find = "\tif (m_resume == RESUME_ACTIVE && m_transport) {\n\t\tuint8_t frame[4];\n"
+replace = "\tif (false) {\n\t\tuint8_t frame[4];\n"
+expect = "closing_a_kept_session_hangs_it_up"
+
+[[sabotage]]
+name = "a hangup does not end the program"
+file = "src/session/session_host.c"
+find = "\t\tif (host->pty >= 0) kill(host->child, SIGHUP);\n"
+replace = ""
+expect = "a_hangup_ends_the_program_and_the_host"
+
+# Clamped quietly: what a new shell writes is taken for what was already seen.
+[[sabotage]]
+name = "a new session is not said to be new"
+file = "src/session/session_host.c"
+find = "\t\thost->restarted_due = offset > host->log.end;\n"
+replace = "\t\thost->restarted_due = 0;\n\t\tif (offset > host->log.end) offset = host->log.end;\n"
+expect = "a_client_asking_past_the_end_is_told_it_is_a_new_session"
+
+[[sabotage]]
+name = "a new session keeps the old place"
+file = "src/session/session_client.c"
+find = "\tclient->next = offset;\n\tclient->acked = offset;\n"
+replace = ""
+expect = "a_client_asking_past_the_end_is_told_it_is_a_new_session"
+
+# Modes of a shell that has gone, on the new one.
+[[sabotage]]
+name = "a new shell is not said on screen"
+file = "src/model/session.cpp"
+find = "\t\t\tsession->m_emulator->feed(QByteArrayLiteral(\"\\r\\n[a new shell: the old one has gone]\\r\\n\"));\n"
+replace = ""
+expect = "a_new_shell_after_a_reboot_is_shown_and_said"

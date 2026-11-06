@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <pty.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
@@ -30,6 +31,8 @@ typedef struct host {
 
 	int hello_due;        /* a new link has not had its first bytes */
 	int attached;         /* the client has said where to start */
+	int restarted_due;    /* it asked past the end: not the session it knew */
+	int hung_up;          /* the user closed it: nobody is coming back */
 	uint64_t sent;        /* next offset to send */
 
 	uint8_t in[BSSH_WIRE_FRAME_MAX];
@@ -144,9 +147,22 @@ static int handle_frame(host_t *host, const bssh_wire_frame_t *frame) {
 	case BSSH_WIRE_ATTACH:
 		if (bssh_wire_read_attach(frame, &offset, &columns, &rows)) return -1;
 		host->attached = 1;
-		host->sent = offset < host->log.end ? offset : host->log.end;
+
+		/*
+		 * An offset this session never reached means the one the client knew
+		 * is gone: a reboot, and the attach started this one. Answered with
+		 * the output so far and said to be new. Clamped quietly, a client
+		 * would take what follows for bytes it has already seen, and the new
+		 * shell would stay invisible.
+		 */
+		host->restarted_due = offset > host->log.end;
+		host->sent = host->restarted_due ? host->log.start : offset;
 		bssh_output_log_ack(&host->log, host->sent);
 		set_size(host, columns, rows);
+		return 0;
+	case BSSH_WIRE_HANGUP:
+		host->hung_up = 1;
+		if (host->pty >= 0) kill(host->child, SIGHUP);
 		return 0;
 	case BSSH_WIRE_INPUT:
 		memcpy(host->to_program, frame->body, frame->body_len);
@@ -225,6 +241,12 @@ static void fill_out(host_t *host) {
 		return;
 	}
 	if (!host->attached) return;
+	if (host->restarted_due) {
+		host->out_used = bssh_wire_put_offset(host->out, sizeof(host->out), BSSH_WIRE_RESTARTED,
+		                                      host->sent);
+		host->restarted_due = 0;
+		return;
+	}
 
 	uint8_t chunk[CHUNK];
 	size_t len = 0;
@@ -273,7 +295,17 @@ static size_t log_room(const host_t *host) {
 static void program_gone(host_t *host) {
 	close(host->pty);
 	host->pty = -1;
-	waitpid(host->child, &host->status, 0);
+
+	/*
+	 * The pty ending is every slave closed, and a program can do that and live
+	 * on. Waiting for it here would hold the session for as long as it runs.
+	 */
+	for (int tries = 0; tries < 20; ++tries) {
+		if (waitpid(host->child, &host->status, WNOHANG) != 0) return;
+
+		const struct timespec pause = { 0, 5 * 1000 * 1000 };
+		nanosleep(&pause, NULL);
+	}
 }
 
 static void read_program(host_t *host) {
@@ -325,6 +357,7 @@ int bssh_session_host_run(const bssh_session_host_options_t *options) {
 
 	int64_t linger_until = 0;
 	for (;;) {
+		if (host->pty < 0 && host->hung_up) break;
 		if (host->pty < 0 && !linger_until) linger_until = now_ms() + options->linger_ms;
 		if (host->told_exit && !host->out_used) break;
 		if (linger_until && now_ms() >= linger_until) break;

@@ -126,6 +126,13 @@ struct bssh_profile_t {
 	bool keep_awake;
 
 	/*
+	 * Keep the shell on the server across a drop, where the host runs
+	 * beerssh-session (sec 5.6). Off by default: the probe is a round trip on
+	 * every connection, for a program few hosts have yet.
+	 */
+	bool resume_session;
+
+	/*
 	 * The folder this host is listed under, or empty for none -- for
 	 * organising the host list only (sec 10.5; the holder's answer of
 	 * 2026-09-26). It carries no settings: presets are the one way a host
@@ -182,7 +189,7 @@ struct bssh_profile_t {
 
 	bssh_profile_t()
 	    : id(0), port(22), has_stored_password(false), require_biometric(false),
-	      font_zoom(0), keep_scrollback(false), keep_awake(false), preset_id(0), local(false),
+	      font_zoom(0), keep_scrollback(false), keep_awake(false), resume_session(false), preset_id(0), local(false),
 	      hold(false) {}
 
 	/*

@@ -223,6 +223,7 @@ public slots:
 	void do_set_keepalive(int seconds);
 	void do_set_term(const QString &term);
 	void do_set_command(const QStringList &command);
+	void do_set_raw_channel(bool raw) { m_raw_channel = raw; }
 	void do_run_on_the_side(const QString &command);
 	void do_find_working_directory();
 	void do_upload(const QStringList &paths, const QString &directory);
@@ -268,6 +269,7 @@ signals:
 	void host_key_revoked(const QString &fingerprint);
 
 private:
+	bool m_raw_channel = false;
 	void teardown();
 	void fail(const QString &reason);
 	bool set_option(int option, const void *value, const char *what);
@@ -1188,8 +1190,8 @@ void bssh_libssh_worker::do_open_shell(int cols, int rows) {
 	 * on either platform (sec 3, core principle 1). The remote allocates
 	 * it; this side only ever says how big the grid is.
 	 */
-	if (ssh_channel_request_pty_size(m_channel, m_term.toUtf8().constData(),
-	                                  cols, rows) != SSH_OK) {
+	if (!m_raw_channel && ssh_channel_request_pty_size(m_channel, m_term.toUtf8().constData(),
+	                                                    cols, rows) != SSH_OK) {
 		fail(session_error());
 		return;
 	}
@@ -1264,6 +1266,13 @@ void bssh_libssh_worker::do_run_on_the_side(const QString &command) {
 	}
 	m_side_output.clear();
 	m_side_started.start();
+
+	/*
+	 * Asked before the shell opens, which is when a kept session's probe runs
+	 * (sec 5.6): nothing else has started the poll that reads the answer and
+	 * ends the wait, and the session would sit there with a blank screen.
+	 */
+	if (!m_poll) start_polling();
 	drain_side();
 }
 
@@ -1627,12 +1636,12 @@ void bssh_libssh_worker::do_set_keepalive(int seconds) {
 }
 
 void bssh_libssh_worker::drain() {
-	if (!m_channel) return;
-
 	/* The side channel first: it is short, and the shell's loop below can
-	 * end the session. */
+	 * end the session. And before the shell's check, as there may not be one
+	 * yet: a kept session asks on the side before opening it. */
 	drain_side();
 	drain_probe();
+	if (!m_channel) return;
 
 	/*
 	 * Anything the window had no room for last time. This runs from the
@@ -1662,6 +1671,9 @@ void bssh_libssh_worker::drain() {
 				return;
 			}
 			if (n <= 0) break;
+
+			/* In a binary stream it would read as frames, and be none. */
+			if (is_stderr && m_raw_channel) continue;
 			emit bytes_received(QByteArray(buffer, n));
 		}
 	}
@@ -1704,7 +1716,7 @@ void bssh_libssh_worker::drain() {
 void bssh_libssh_worker::do_resize(int cols, int rows) {
 	m_cols = cols;
 	m_rows = rows;
-	if (!m_channel) return;
+	if (!m_channel || m_raw_channel) return;
 
 	/*
 	 * A window-change the remote never hears leaves it drawing to the
@@ -2183,6 +2195,12 @@ void bssh_ssh_session_libssh::cancel_upload() {
 void bssh_ssh_session_libssh::run_on_the_side(const QString &command) {
 	QMetaObject::invokeMethod(m_worker, [this, command] {
 		m_worker->do_run_on_the_side(command);
+	}, Qt::QueuedConnection);
+}
+
+void bssh_ssh_session_libssh::set_raw_channel(bool raw) {
+	QMetaObject::invokeMethod(m_worker, [this, raw] {
+		m_worker->do_set_raw_channel(raw);
 	}, Qt::QueuedConnection);
 }
 

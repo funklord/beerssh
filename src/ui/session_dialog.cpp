@@ -357,6 +357,14 @@ QWidget *bssh_session_dialog::build_session_page() {
 		m_keep_awake->setToolTip(QStringLiteral(
 		        "While this host is connected, the computer does not go to sleep."));
 		keeps->addWidget(m_keep_awake);
+
+		m_resume_session = new QCheckBox(QStringLiteral("Keep the shell on the server"), page);
+		m_resume_session->setObjectName(QStringLiteral("resume_session"));
+		m_resume_session->setToolTip(QStringLiteral(
+		        "Where the host has beerssh-session, a dropped connection comes back to "
+		        "the same shell with everything it printed. Elsewhere it makes no "
+		        "difference."));
+		keeps->addWidget(m_resume_session);
 	}
 	keeps->addStretch(1);
 	destination->addRow(keeps);
@@ -600,6 +608,7 @@ bssh_profile_t bssh_session_dialog::current_profile() const {
 	profile.proxy_jump = m_jump->text().trimmed();
 	profile.keep_scrollback = m_keep_scrollback->isChecked();
 	if (m_keep_awake) profile.keep_awake = m_keep_awake->isChecked();
+	if (m_resume_session) profile.resume_session = m_resume_session->isChecked();
 	profile.folder = m_folder->currentText().trimmed();
 
 	/*
@@ -682,6 +691,7 @@ void bssh_session_dialog::set_current_profile(const bssh_profile_t &profile) {
 	m_jump->setText(profile.proxy_jump);
 	m_keep_scrollback->setChecked(profile.keep_scrollback);
 	if (m_keep_awake) m_keep_awake->setChecked(profile.keep_awake);
+	if (m_resume_session) m_resume_session->setChecked(profile.resume_session);
 	m_folder->setCurrentText(profile.folder);
 
 	if (m_font_picker) {

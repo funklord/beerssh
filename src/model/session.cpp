@@ -1,5 +1,10 @@
 #include "model/session.h"
 
+#include "session/session_client.h"
+#include "session/wire.h"
+
+#include <QUuid>
+
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDataStream>
@@ -15,6 +20,13 @@
 #include "term/term_features.h"
 #include "model/preset.h"
 #include "model/app_settings.h"
+
+/* What a host runs for a session that outlives its connection (sec 5.6). */
+#define BSSH_RESUME_PROGRAM "beerssh-session"
+#define BSSH_RESUME_VERSION_LINE "beerssh-session 1\n"
+
+/* Often enough that a faithful log keeps room, and rarely enough to cost nothing. */
+static const uint64_t BSSH_RESUME_ACK_EVERY = 64 * 1024;
 
 bssh_session::bssh_session(const bssh_profile_t &profile, QObject *parent)
     : QObject(parent),
@@ -307,8 +319,10 @@ void bssh_session::wire_transport() {
 		m_bytes_in += bytes.size();
 		m_last_in = QDateTime::currentDateTimeUtc();
 	});
-	connect(m_transport, &bssh_ssh_session::bytes_received,
-	         m_emulator, &bssh_emulator::feed);
+	connect(m_transport, &bssh_ssh_session::bytes_received, this, [this](const QByteArray &bytes) {
+		if (m_resume == RESUME_ACTIVE) take_resume_bytes(bytes);
+		else m_emulator->feed(bytes);
+	});
 	connect(m_transport, &bssh_ssh_session::failed, this, [this](const QString &reason) {
 		note_connection_lost();
 
@@ -408,6 +422,10 @@ void bssh_session::wire_transport() {
 	 */
 	connect(m_transport, &bssh_ssh_session::side_output_ready, this,
 	         [this](const QByteArray &output) {
+		if (m_resume == RESUME_PROBING) {
+			answer_resume_probe(output);
+			return;
+		}
 		if (!m_mux_listing) return;
 		m_mux_listing = false;
 		if (m_mux_answered) return;
@@ -447,55 +465,170 @@ void bssh_session::wire_transport() {
 			m_password_refused = false;
 
 			/*
-			 * The tmux or screen session this tab switched to (sec 10.2a)
-			 * is its shell on every connect, so a reconnect comes back
-			 * attached to it. Never over a command of the profile's own.
+			 * The shell waits for the answer when the host may keep it:
+			 * opened first, there would be a plain shell to throw away.
 			 */
-			if (!m_mux_command.isEmpty() && m_profile.command.isEmpty())
-				m_transport->set_command(m_mux_command);
-			m_transport->open_shell(m_cols, m_rows);
-			m_sent_cols = m_cols;
-			m_sent_rows = m_rows;
-
-			/*
-			 * The on-connect command (sec 10.2), and sec 5.3's practical
-			 * answer to "a reconnect is a new shell": pointing it at
-			 * tmux is what turns a dropped connection into a session
-			 * that comes back with the work still in it.
-			 *
-			 * Sent on every connect, INCLUDING a reconnect, because a
-			 * reconnect is exactly when it matters -- the new shell is
-			 * the one that needs re-attaching.
-			 */
-			const QString command =
-			        m_settings.value(QStringLiteral("on_connect_command")).toString();
-			if (!command.isEmpty()) {
-				send_out(command.toUtf8() + '\n');
+			if (wants_resume()) {
+				m_resume = RESUME_PROBING;
+				m_transport->run_on_the_side(QLatin1String(BSSH_RESUME_PROGRAM " version"));
+			} else {
+				open_remote_shell();
 			}
-
-			/*
-			 * A listing still out belongs to the connection before this
-			 * one. Over SSH its channel went with that connection and will
-			 * never answer, and left set this would keep every connection
-			 * after it from listing.
-			 */
-			m_mux_listing = false;
-
-			/*
-			 * tmux and screen (sec 10.2a): what is running is listed
-			 * beside the shell, which opened above, so the prompt is not
-			 * kept waiting for it -- on every connect, so the drawer is
-			 * current after a reconnect too.
-			 */
-			list_multiplexers();
 		}
 		emit state_changed();
 	});
 
 }
 
+bool bssh_session::wants_resume() const {
+	return m_profile.resume_session && !m_profile.local && m_profile.command.isEmpty()
+	       && m_mux_command.isEmpty() && m_resume != RESUME_REFUSED;
+}
+
+void bssh_session::open_remote_shell() {
+	/*
+	 * The tmux or screen session this tab switched to (sec 10.2a)
+	 * is its shell on every connect, so a reconnect comes back
+	 * attached to it. Never over a command of the profile's own.
+	 */
+	if (!m_mux_command.isEmpty() && m_profile.command.isEmpty())
+		m_transport->set_command(m_mux_command);
+	m_transport->open_shell(m_cols, m_rows);
+	m_sent_cols = m_cols;
+	m_sent_rows = m_rows;
+
+	/*
+	 * The on-connect command (sec 10.2), and sec 5.3's practical
+	 * answer to "a reconnect is a new shell": pointing it at
+	 * tmux is what turns a dropped connection into a session
+	 * that comes back with the work still in it.
+	 *
+	 * Sent on every connect, INCLUDING a reconnect, because a
+	 * reconnect is exactly when it matters -- the new shell is
+	 * the one that needs re-attaching.
+	 */
+	const QString command =
+	        m_settings.value(QStringLiteral("on_connect_command")).toString();
+	if (!command.isEmpty()) {
+		send_out(command.toUtf8() + '\n');
+	}
+
+	/*
+	 * A listing still out belongs to the connection before this
+	 * one. Over SSH its channel went with that connection and will
+	 * never answer, and left set this would keep every connection
+	 * after it from listing.
+	 */
+	m_mux_listing = false;
+
+	/*
+	 * tmux and screen (sec 10.2a): what is running is listed
+	 * beside the shell, which opened above, so the prompt is not
+	 * kept waiting for it -- on every connect, so the drawer is
+	 * current after a reconnect too.
+	 */
+	list_multiplexers();
+}
+
+/*
+ * The answer to the probe. Anything but the expected line is a host without
+ * the program, or one that says so in words this does not know, and it is
+ * plain SSH: the probe can delay a shell and must never prevent one.
+ */
+void bssh_session::answer_resume_probe(const QByteArray &output) {
+	if (!output.startsWith(BSSH_RESUME_VERSION_LINE)) {
+		/* Taken away since the last connection: what follows is a new shell. */
+		if (m_resume_client && m_resume_client->next) m_emulator->reset_modes();
+		m_resume = RESUME_NONE;
+		open_remote_shell();
+		return;
+	}
+
+	if (m_resume_name.isEmpty())
+		m_resume_name = QUuid::createUuid().toByteArray(QUuid::Id128);
+
+	if (!m_resume_client) {
+		m_resume_client = std::make_shared<bssh_session_client_t>();
+		bssh_session_client_events_t events;
+		events.context = this;
+		events.output = [](void *self, const uint8_t *bytes, size_t len) {
+			static_cast<bssh_session *>(self)->m_emulator->feed(
+			        QByteArray(reinterpret_cast<const char *>(bytes), int(len)));
+		};
+		events.gap = [](void *self, uint64_t count) {
+			static_cast<bssh_session *>(self)->m_emulator->feed(
+			        QStringLiteral("\r\n[%1 bytes lost]\r\n").arg(count).toUtf8());
+		};
+
+		/* The channel ending says the rest, and it is that which is acted on. */
+		events.exited = [](void *, int32_t) {};
+		events.restarted = [](void *self) {
+			bssh_session *session = static_cast<bssh_session *>(self);
+			session->m_emulator->reset_modes();
+			session->m_emulator->feed(QByteArrayLiteral("\r\n[a new shell: the old one has gone]\r\n"));
+		};
+		bssh_session_client_init(m_resume_client.get(), &events);
+	}
+	bssh_session_client_reset_link(m_resume_client.get());
+
+	const bool first = !m_resume_client->next;
+	m_resume = RESUME_ACTIVE;
+	m_transport->set_raw_channel(true);
+	m_transport->set_command({ QLatin1String(BSSH_RESUME_PROGRAM), QStringLiteral("attach"),
+	                           QString::fromLatin1(m_resume_name) });
+	m_transport->open_shell(m_cols, m_rows);
+	m_sent_cols = m_cols;
+	m_sent_rows = m_rows;
+
+	uint8_t frame[32];
+	m_transport->send(QByteArray(reinterpret_cast<const char *>(frame),
+	                             int(bssh_wire_put_attach(frame, sizeof(frame), m_resume_client->next,
+	                                                      uint16_t(m_cols), uint16_t(m_rows)))));
+
+	/* The same shell on a return, which has run this already. */
+	if (first) {
+		const QString command = m_settings.value(QStringLiteral("on_connect_command")).toString();
+		if (!command.isEmpty()) send_out(command.toUtf8() + '\n');
+	}
+
+	m_mux_listing = false;
+	list_multiplexers();
+}
+
+void bssh_session::take_resume_bytes(const QByteArray &bytes) {
+	const int status = bssh_session_client_feed(m_resume_client.get(),
+	                                            reinterpret_cast<const uint8_t *>(bytes.constData()),
+	                                            size_t(bytes.size()));
+	if (status != 0) {
+		/*
+		 * A .bashrc printing ahead of the program, or something else answering
+		 * to its name. The channel is no use for a protocol, and a plain shell
+		 * still is, on this same connection.
+		 */
+		m_resume = RESUME_REFUSED;
+		m_transport->set_raw_channel(false);
+		m_transport->restart_shell(m_profile.command);
+		return;
+	}
+
+	uint8_t frame[16];
+	const size_t len = bssh_session_client_ack_due(m_resume_client.get(), BSSH_RESUME_ACK_EVERY, frame,
+	                                               sizeof(frame));
+	if (len) m_transport->send(QByteArray(reinterpret_cast<const char *>(frame), int(len)));
+}
+
 void bssh_session::disconnect_from_host() {
 	m_user_disconnected = true;
+
+	/*
+	 * The user closed it, which a drop is not: without this every closed tab
+	 * would leave a shell on the server for ever.
+	 */
+	if (m_resume == RESUME_ACTIVE && m_transport) {
+		uint8_t frame[4];
+		m_transport->send(QByteArray(reinterpret_cast<const char *>(frame),
+		                             int(bssh_wire_put(frame, sizeof(frame), BSSH_WIRE_HANGUP, nullptr, 0))));
+	}
 
 	/*
 	 * Announced before the transport is touched, because the reconnect
@@ -538,7 +671,7 @@ void bssh_session::reconnect() {
 	 * and a link that dropped inside an editor comes back with the shell
 	 * drawing into the alternate buffer.
 	 */
-	if (m_emulator) m_emulator->reset_modes();
+	if (m_emulator && m_resume != RESUME_ACTIVE) m_emulator->reset_modes();
 
 	if (m_transport) {
 		/*
@@ -669,6 +802,13 @@ void bssh_session::send_size() {
 	if (m_cols == m_sent_cols && m_rows == m_sent_rows) return;
 	m_sent_cols = m_cols;
 	m_sent_rows = m_rows;
+	if (m_resume == RESUME_ACTIVE) {
+		uint8_t frame[16];
+		m_transport->send(QByteArray(reinterpret_cast<const char *>(frame),
+		                             int(bssh_wire_put_resize(frame, sizeof(frame), uint16_t(m_cols),
+		                                                      uint16_t(m_rows)))));
+		return;
+	}
 	m_transport->resize(m_cols, m_rows);
 }
 
@@ -684,7 +824,18 @@ void bssh_session::send_out(const QByteArray &bytes) {
 	}
 	m_bytes_out += bytes.size();
 	m_last_out = QDateTime::currentDateTimeUtc();
-	m_transport->send(bytes);
+
+	if (m_resume != RESUME_ACTIVE) {
+		m_transport->send(bytes);
+		return;
+	}
+	QByteArray frame(int(BSSH_WIRE_FRAME_MAX), Qt::Uninitialized);
+	for (qsizetype at = 0; at < bytes.size(); at += BSSH_WIRE_BODY_MAX) {
+		const size_t len = size_t(qMin<qsizetype>(BSSH_WIRE_BODY_MAX, bytes.size() - at));
+		const size_t used = bssh_wire_put(reinterpret_cast<uint8_t *>(frame.data()), size_t(frame.size()),
+		                                  BSSH_WIRE_INPUT, bytes.constData() + at, len);
+		m_transport->send(frame.left(int(used)));
+	}
 }
 
 namespace {
@@ -797,6 +948,12 @@ bool bssh_session::export_handoff(QByteArray &state, QList<int> &fds, QString *w
 	fds.clear();
 	if (!m_transport || m_transport->state() != bssh_ssh_session::CONNECTED) {
 		if (why) *why = QStringLiteral("the session is not connected");
+		return false;
+	}
+
+	/* Its place in the stream lives here, and nothing carries that yet. */
+	if (m_resume == RESUME_ACTIVE) {
+		if (why) *why = QStringLiteral("the session is kept on the server");
 		return false;
 	}
 

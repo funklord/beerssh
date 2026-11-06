@@ -265,6 +265,7 @@ void profile_store_test::a_hosts_choices_are_written_to_disk() {
 		bssh_profile_t host = make_profile(QStringLiteral("zoomed"), QStringLiteral("z.example"));
 		host.font_zoom = -4;
 		host.keep_awake = true;
+		host.resume_session = true;
 		host.keep_scrollback = true;
 		host.folder = QStringLiteral("Work");
 		id = store.save(host);
@@ -275,6 +276,7 @@ void profile_store_test::a_hosts_choices_are_written_to_disk() {
 	bssh_profile_store reopened(path);
 	QCOMPARE(reopened.profile(id).font_zoom, -4);
 	QVERIFY(reopened.profile(id).keep_awake);
+	QVERIFY(reopened.profile(id).resume_session);
 	QVERIFY(reopened.profile(id).keep_scrollback);
 	QCOMPARE(reopened.profile(id).folder, QStringLiteral("Work"));
 }

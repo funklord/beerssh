@@ -123,6 +123,13 @@ public:
 	 * mean pretending one of them can do what it cannot.
 	 */
 	virtual void set_command(const QStringList &command) = 0;
+
+	/*
+	 * The next shell is a byte stream rather than a terminal: no pty, so the
+	 * far end's line discipline cannot rewrite what is carried, which is what
+	 * a binary protocol needs (sec 5.6). Only SSH has one to leave out.
+	 */
+	virtual void set_raw_channel(bool raw) { Q_UNUSED(raw); }
 	virtual void resize(int cols, int rows) = 0;
 
 	virtual void send(const QByteArray &bytes) = 0;

@@ -1424,10 +1424,29 @@ exec channel runs. `make check-session` proves it over a real sshd: with the
 connection killed during a job, the next one finds the same shell and all 5000
 lines written meanwhile, in order. `src/session/session_client.h` is the client's
 half, for both transports: it keeps its place across links and never joins text
-across a gap. It is tested, and BeerSSH does not use it yet. Wiring it into the
-SSH path means an exec with no pty (a pty would mangle frames), a probe on every
-connection, and a reconnect that keeps modes, so it waits on how the helper
-reaches a host: until then the probe would cost every connection for nothing.
+across a gap.
+
+**BeerSSH uses it over SSH, per host, off by default**: *Keep the shell on the
+server*, `resume_session`. Off because the probe is a round trip on every
+connection, for a program few hosts have yet; the holder's automatic negotiation
+is this with the default turned on, once the program can reach hosts. `make
+check-ssh` proves it on the real transport against a real sshd, through a real
+login: a drop during a job comes back to the same shell with the job's output, and
+closing leaves nothing on the host. Not yet tried on Android, or by hand.
+
+What the path does: a probe beside the connection (`beerssh-session version`), then
+an exec with no pty, which would rewrite frames, and stderr dropped for the same
+reason. The offset lives in `bssh_session`, because a reconnect makes a new
+transport. A reconnect keeps the terminal's modes, since it is the same program
+still running. The on-connect command runs once, on the first attach. A session
+kept this way is not handed to another process, because nothing carries its place
+in the stream yet. Closing sends `hangup`: without it every closed tab would leave
+a shell on the server for ever. A client asking past the end of a session is told
+`restarted`, because after a reboot its offset belongs to a session that has gone,
+and quietly clamped, what the new shell wrote would be taken for bytes already
+seen and never drawn. In Serial and Eventual a replay must not answer terminal
+queries twice; the client has no such mode yet, so it attaches only from where it
+stopped.
 
 The host's first bytes on a link are a fixed hello. A length alone cannot tell
 this protocol from text: a banner from a chatty `.bashrc`, the fault that breaks

@@ -1,6 +1,11 @@
 #include "session_host_test.h"
 
+#include "fake_ssh_session.h"
+#include "model/conn_manager.h"
+#include "model/session.h"
+#include "model/session_registry.h"
 #include "session/session_client.h"
+#include "term/emulator.h"
 #include "session/session_host.h"
 #include "session/wire.h"
 
@@ -465,6 +470,7 @@ struct received_t {
 	QByteArray text;
 	QList<uint64_t> gaps;
 	int exits = 0;
+	int restarts = 0;
 	int32_t status = 0;
 	bssh_session_client_t client;
 
@@ -484,6 +490,7 @@ struct received_t {
 			++me->exits;
 			me->status = status;
 		};
+		events.restarted = [](void *self) { ++static_cast<received_t *>(self)->restarts; };
 		bssh_session_client_init(&client, &events);
 		hello();
 	}
@@ -647,4 +654,251 @@ void session_host_test::a_client_and_a_real_host_agree_from_the_first_byte() {
 		QCOMPARE(bssh_session_client_feed(&received.client, chunk, size_t(got)), 0);
 	}
 	QVERIFY(received.text.contains("from-the-program"));
+}
+
+void session_host_test::a_client_asking_past_the_end_is_told_it_is_a_new_session() {
+	host_process_t host("echo a-new-shell; read wait");
+	client_t link;
+	QVERIFY(link.connect_to(host.path));
+
+	/* As after a reboot: the client's place is in a session that is gone. */
+	link.attach(5000);
+
+	received_t received;
+	received.client.next = 5000;
+	bssh_session_client_reset_link(&received.client);
+
+	QElapsedTimer timer;
+	timer.start();
+	while (!received.text.contains("a-new-shell") && timer.elapsed() < 3000) {
+		pollfd one = { link.fd, POLLIN, 0 };
+		if (poll(&one, 1, 100) <= 0) continue;
+
+		uint8_t chunk[4096];
+		const ssize_t got = read(link.fd, chunk, sizeof(chunk));
+		QVERIFY(got > 0);
+		QCOMPARE(bssh_session_client_feed(&received.client, chunk, size_t(got)), 0);
+	}
+	QVERIFY2(received.text.contains("a-new-shell"), "what the new shell wrote was taken as seen");
+	QCOMPARE(received.restarts, 1);
+	QVERIFY(received.gaps.isEmpty());
+}
+
+void session_host_test::a_hangup_ends_the_program_and_the_host() {
+	host_process_t host(ECHO_SHELL, 4096, 60000);
+	client_t link;
+
+	QVERIFY(link.connect_to(host.path));
+	link.attach(0);
+	QVERIFY(link.wait_for("ready:"));
+
+	/* Well before the linger: nobody is coming back. */
+	uint8_t frame[4];
+	link.send_raw(frame, bssh_wire_put(frame, sizeof(frame), BSSH_WIRE_HANGUP, nullptr, 0));
+	link.drop();
+
+	int code = -1;
+	QVERIFY(host.ended(5000, &code));
+}
+
+namespace {
+
+/* A session over the fake transport, one fake per connection. */
+struct kept_t {
+	bssh_factory_reset_t factory_reset;
+	QList<bssh_fake_ssh_session *> fakes;
+	bssh_session_registry registry;
+	bssh_session *session = nullptr;
+
+	explicit kept_t(bool wanted = true) {
+		bssh_ssh_session::set_factory([this](QObject *parent) -> bssh_ssh_session * {
+			bssh_fake_ssh_session *fake = new bssh_fake_ssh_session(parent);
+			fakes.append(fake);
+			return fake;
+		});
+
+		bssh_profile_t profile;
+		profile.name = QStringLiteral("kept");
+		profile.host = QStringLiteral("kept.example");
+		profile.user = QStringLiteral("nabbe");
+		profile.resume_session = wanted;
+		session = registry.create(profile);
+		registry.conn_manager_for(session)->set_auto_reconnect(false);
+		session->connect_to_host();
+		fakes.last()->simulate_key_auth_success();
+	}
+
+	bssh_fake_ssh_session *fake() const { return fakes.last(); }
+
+	void answer_probe() { fake()->simulate_side_output("beerssh-session 1\n"); }
+
+	void host_says(const QByteArray &frame) { fake()->emit_chunk(frame); }
+
+	QByteArray hello() const {
+		uint8_t frame[32];
+		const size_t len = bssh_wire_put_hello(frame, sizeof(frame));
+		return QByteArray(reinterpret_cast<const char *>(frame), int(len));
+	}
+
+	QByteArray output(uint64_t offset, const char *text) const {
+		uint8_t frame[256];
+		const size_t len = bssh_wire_put_output(frame, sizeof(frame), offset,
+		                                        reinterpret_cast<const uint8_t *>(text), strlen(text));
+		return QByteArray(reinterpret_cast<const char *>(frame), int(len));
+	}
+
+	QString screen() const { return session->emulator()->screen().to_text(); }
+
+	/* Every frame the client wrote, kinds in order. */
+	QList<int> kinds_written() const {
+		QByteArray bytes = fake()->written();
+		QList<int> kinds;
+		for (;;) {
+			bssh_wire_frame_t frame;
+			uint32_t used = 0;
+			if (bssh_wire_take(reinterpret_cast<uint8_t *>(bytes.data()), uint32_t(bytes.size()), &frame,
+			                   &used) != 1)
+				return kinds;
+			kinds.append(frame.kind);
+			bytes.remove(0, int(used));
+		}
+	}
+
+	/* The attach frame's offset, which it writes first. */
+	uint64_t attached_at() const {
+		QByteArray bytes = fake()->written();
+		bssh_wire_frame_t frame;
+		uint32_t used = 0;
+		uint64_t offset = 0;
+		uint16_t columns = 0;
+		uint16_t rows = 0;
+		if (bssh_wire_take(reinterpret_cast<uint8_t *>(bytes.data()), uint32_t(bytes.size()), &frame, &used) != 1
+		    || frame.kind != BSSH_WIRE_ATTACH || bssh_wire_read_attach(&frame, &offset, &columns, &rows))
+			return UINT64_MAX;
+		return offset;
+	}
+};
+
+}
+
+void session_host_test::a_host_not_asked_is_not_probed() {
+	kept_t kept(false);
+	QVERIFY(kept.fake()->side_commands().filter(QStringLiteral("beerssh-session")).isEmpty());
+	QCOMPARE(kept.fake()->shells_opened(), 1);
+	QVERIFY(!kept.fake()->raw_channel());
+}
+
+void session_host_test::a_host_without_the_program_gets_a_plain_shell() {
+	kept_t kept;
+
+	/* Asked first, and no shell until it is answered. */
+	QVERIFY(!kept.fake()->side_commands().filter(QStringLiteral("beerssh-session version")).isEmpty());
+	QCOMPARE(kept.fake()->shells_opened(), 0);
+
+	/* The shell's answer to a command it does not have is no output at all. */
+	kept.fake()->simulate_side_output(QByteArray());
+	QCOMPARE(kept.fake()->shells_opened(), 1);
+	QVERIFY(!kept.fake()->raw_channel());
+	QVERIFY(kept.fake()->command().isEmpty());
+
+	/* And bytes are bytes: nothing here is a frame. */
+	kept.host_says("plain-output");
+	QVERIFY(kept.screen().contains(QStringLiteral("plain-output")));
+}
+
+void session_host_test::a_host_with_the_program_gets_a_kept_session() {
+	kept_t kept;
+	kept.answer_probe();
+
+	QCOMPARE(kept.fake()->shells_opened(), 1);
+	QVERIFY(kept.fake()->raw_channel());
+	QCOMPARE(kept.fake()->command().value(0), QStringLiteral("beerssh-session"));
+	QCOMPARE(kept.fake()->command().value(1), QStringLiteral("attach"));
+	QVERIFY(!kept.fake()->command().value(2).isEmpty());
+	QCOMPARE(kept.attached_at(), uint64_t(0));
+
+	kept.host_says(kept.hello() + kept.output(0, "from-the-host"));
+	QVERIFY(kept.screen().contains(QStringLiteral("from-the-host")));
+
+	/* What is typed and the size both go as frames, not as bytes on the channel. */
+	kept.session->emulator()->send_paste(QStringLiteral("typed"));
+	kept.session->resize(100, 30);
+	const QList<int> kinds = kept.kinds_written();
+	QVERIFY(kinds.contains(BSSH_WIRE_INPUT));
+	QVERIFY(kinds.contains(BSSH_WIRE_RESIZE));
+	QCOMPARE(kept.fake()->resize_count(), 0);
+}
+
+void session_host_test::a_reconnect_returns_to_the_same_place_with_modes_kept() {
+	kept_t kept;
+	kept.answer_probe();
+	const QString name = kept.fake()->command().value(2);
+
+	/* Inside an editor when the link drops: the alternate screen. */
+	kept.host_says(kept.hello() + kept.output(0, "\033[?1049hin-the-editor"));
+	QVERIFY(kept.session->emulator()->screen().to_text().contains(QStringLiteral("in-the-editor")));
+	const uint64_t held = strlen("\033[?1049hin-the-editor");
+
+	kept.fake()->simulate_connection_lost();
+	kept.session->reconnect();
+	kept.fake()->simulate_key_auth_success();
+	kept.answer_probe();
+
+	QCOMPARE(kept.fake()->command().value(2), name);
+	QCOMPARE(kept.attached_at(), held);
+
+	/* Still in the editor: a plain reconnect would have reset the modes. */
+	QVERIFY(kept.screen().contains(QStringLiteral("in-the-editor")));
+	kept.host_says(kept.hello() + kept.output(held, "-and-on"));
+	QVERIFY(kept.screen().contains(QStringLiteral("in-the-editor-and-on")));
+}
+
+void session_host_test::a_banner_ahead_of_the_program_falls_back_on_the_same_connection() {
+	kept_t kept;
+	kept.answer_probe();
+
+	kept.host_says("Welcome to the host, have a nice day\r\n");
+	QCOMPARE(kept.fake()->restarts().size(), 1);
+	QVERIFY(!kept.fake()->raw_channel());
+
+	/* Not tried again on a later connection of this session. */
+	kept.fake()->simulate_connection_lost();
+	kept.session->reconnect();
+	kept.fake()->simulate_key_auth_success();
+	QCOMPARE(kept.fake()->shells_opened(), 1);
+	QVERIFY(kept.fake()->side_commands().filter(QStringLiteral("beerssh-session")).isEmpty());
+
+	/* And it is a terminal again: bytes go as they are. */
+	kept.fake()->clear_written();
+	kept.session->emulator()->send_paste(QStringLiteral("typed"));
+	QCOMPARE(kept.fake()->written(), QByteArray("typed"));
+}
+
+void session_host_test::closing_a_kept_session_hangs_it_up() {
+	kept_t kept;
+	kept.answer_probe();
+	kept.host_says(kept.hello());
+
+	bssh_fake_ssh_session *fake = kept.fake();
+	kept.session->disconnect_from_host();
+	QCOMPARE(int(fake->written().at(fake->written().size() - 2)), int(BSSH_WIRE_HANGUP));
+}
+
+void session_host_test::a_new_shell_after_a_reboot_is_shown_and_said() {
+	kept_t kept;
+	kept.answer_probe();
+	kept.host_says(kept.hello() + kept.output(0, "old-shell"));
+
+	kept.fake()->simulate_connection_lost();
+	kept.session->reconnect();
+	kept.fake()->simulate_key_auth_success();
+	kept.answer_probe();
+
+	uint8_t frame[16];
+	const size_t len = bssh_wire_put_offset(frame, sizeof(frame), BSSH_WIRE_RESTARTED, 0);
+	kept.host_says(kept.hello() + QByteArray(reinterpret_cast<const char *>(frame), int(len))
+	               + kept.output(0, "new-shell"));
+
+	QVERIFY(kept.screen().contains(QStringLiteral("a new shell")));
+	QVERIFY(kept.screen().contains(QStringLiteral("new-shell")));
 }

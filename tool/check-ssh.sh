@@ -87,7 +87,14 @@ PubkeyAuthentication yes
 UsePAM no
 StrictModes no
 Subsystem sftp internal-sftp
+SetEnv PATH=$DIR/bin:/usr/bin:/bin XDG_RUNTIME_DIR=$DIR/run
 EOF
+
+# The program a kept session runs on the host (sec 5.6), found by PATH as it
+# would be anywhere, with its sockets in this run's own directory.
+mkdir -p "$DIR/bin" "$DIR/run"
+chmod 700 "$DIR/run"
+if [ -n "${BSSH_SESSION_BIN:-}" ]; then cp "$BSSH_SESSION_BIN" "$DIR/bin/beerssh-session"; fi
 
 echo "check-ssh: sshd on 127.0.0.1:$PORT, one generated key, no passwords"
 "$SSHD" -f "$DIR/sshd_config" -E "$DIR/sshd.log"
@@ -120,6 +127,8 @@ run_phase() {
 	BSSH_TEST_SSH_PORT=$PORT \
 	BSSH_TEST_SSH_KEY="$DIR/home/.ssh/id_test" \
 	BSSH_TEST_SSH_PHASE="$1" \
+	BSSH_TEST_SESSION_DIR="$DIR/run/beerssh-session" \
+	BSSH_TEST_SESSION_BIN="$DIR/bin/beerssh-session" \
 	BSSH_TEST_SSH_READY="${BSSH_TEST_SSH_READY:-}" \
 	BSSH_TEST_SSH_NOTICED="${BSSH_TEST_SSH_NOTICED:-}" \
 	BSSH_TEST_OPENSSH_KNOWN_HOSTS="${BSSH_TEST_OPENSSH_KNOWN_HOSTS:-}" \

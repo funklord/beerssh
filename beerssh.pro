@@ -84,6 +84,10 @@ SOURCES += \
     src/model/settings_resolver.cpp \
     src/model/window_title.cpp \
     src/model/session.cpp \
+    src/session/session_client.c \
+    src/session/wire.c \
+    src/session/generated/frame.c \
+    src/session/generated/situ.c \
     src/model/handoff_wire.cpp \
     src/model/handoff_point.cpp \
     src/model/session_registry.cpp \

@@ -2,6 +2,7 @@
 #include <QFile>
 #include <QStandardPaths>
 #include <QElapsedTimer>
+#include <QRegularExpression>
 #include <QEventLoop>
 #include <QTimer>
 #include <QSignalSpy>
@@ -926,6 +927,93 @@ QByteArray shell_output(int cols, int rows, const QByteArray &command,
 }
 
 } /* namespace */
+
+void live_ssh_test::a_kept_session_comes_back_to_the_same_shell()
+{
+	if (!server_available()) return;
+	if (!ordinary_phase()) QSKIP("this belongs to the plain phase");
+	if (!QFile::exists(qEnvironmentVariable("BSSH_TEST_SESSION_BIN")))
+		QSKIP("no beerssh-session: run this through make check-ssh");
+
+	/*
+	 * sec 5.6 over the real transport: what no fake can show is that libssh
+	 * opens an exec with no pty, since a pty would turn a frame's newline byte
+	 * into two and the very first frames would stop making sense.
+	 */
+	bssh_profile_t profile;
+	profile.name = QStringLiteral("kept");
+	profile.host = QStringLiteral("127.0.0.1");
+	profile.port = test_port();
+	profile.user = qEnvironmentVariable("USER");
+	profile.identity_file = test_key();
+	profile.resume_session = true;
+
+	bssh_session session(profile);
+	connect(&session, &bssh_session::host_key_unknown, &session,
+	        [&session](const QString &) { session.accept_host_key(); });
+
+	const auto shows = [&session](const QRegularExpression &pattern, int ms) {
+		QElapsedTimer timer;
+		timer.start();
+		QRegularExpressionMatch match;
+		while (timer.elapsed() < ms) {
+			QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+			match = pattern.match(session.emulator()->screen().to_text());
+			if (match.hasMatch()) return match;
+			QTest::qWait(20);
+		}
+		return match;
+	};
+
+	/* Enter as a key: bash's bracketed paste would keep a pasted newline. */
+	const auto type = [&session](const QString &text) {
+		session.emulator()->send_paste(text);
+		session.emulator()->send_char(U'\r', 0);
+	};
+
+	/* However this test ends: a failure must not leave a shell on the host. */
+	struct hang_up_t {
+		bssh_session &session;
+		~hang_up_t() {
+			session.disconnect_from_host();
+			QTest::qWait(300);
+		}
+	} hang_up{ session };
+
+	session.connect_to_host();
+
+	/*
+	 * Quoted apart, so that the echo of the typing cannot satisfy this. Typed
+	 * until answered: a login profile takes its time, and may read its input.
+	 */
+	QRegularExpressionMatch first;
+	for (int tries = 0; tries < 10 && !first.hasMatch(); ++tries) {
+		type(QStringLiteral("export KEPT=$$; echo \"kept\"\"=$KEPT.\""));
+		first = shows(QRegularExpression(QStringLiteral("kept=(\\d+)\\.")), 2000);
+	}
+	QVERIFY2(first.hasMatch(), qPrintable(session.emulator()->screen().to_text()));
+	const QString shell = first.captured(1);
+
+	/* A job, and the connection goes from under it. */
+	type(QStringLiteral("(sleep 2; echo \"while\"\"-away:$KEPT.\") &"));
+	QTest::qWait(300);
+	session.reconnect();
+
+	const QString away = QStringLiteral("while-away:") + shell + QStringLiteral("\\.");
+	QVERIFY2(shows(QRegularExpression(away), 10000).hasMatch(),
+	         qPrintable(session.emulator()->screen().to_text()));
+
+	type(QStringLiteral("echo \"sa\"\"me:$$.\""));
+	const QString same = QStringLiteral("same:") + shell + QStringLiteral("\\.");
+	QVERIFY2(shows(QRegularExpression(same), 8000).hasMatch(),
+	         qPrintable(session.emulator()->screen().to_text()));
+
+	/* Closed by the user, which a drop is not: nothing stays on the host. */
+	session.disconnect_from_host();
+	const QDir sockets(qEnvironmentVariable("BSSH_TEST_SESSION_DIR"));
+	QTRY_VERIFY_WITH_TIMEOUT(sockets.entryList(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::System).isEmpty(),
+	                         5000);
+}
 
 void live_ssh_test::a_remote_command_runs_instead_of_a_shell()
 {

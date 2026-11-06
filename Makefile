@@ -1090,8 +1090,8 @@ check-ci:
 # path to the binary is written once. It was written twice and they
 # disagreed: the script said build-test and this says build-tests, so
 # the target could not run at all between 2026-08-25 and 2026-09-07.
-check-ssh: $(TEST_BIN)
-	BSSH_TEST_BIN=$(TEST_BIN) ./tool/check-ssh.sh
+check-ssh: $(TEST_BIN) $(SESSION_BIN)
+	BSSH_TEST_BIN=$(TEST_BIN) BSSH_SESSION_BIN=$(SESSION_BIN) ./tool/check-ssh.sh
 
 # Sec 8.4's process migration, and the one part of it with no prior art to
 # copy: moving a LIVE connection between processes without the peer

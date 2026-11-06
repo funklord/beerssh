@@ -143,10 +143,13 @@ public:
 
 	/* Recorded rather than run, so a test can ask what -e reached (sec 8.6). */
 	void set_command(const QStringList &command) override { m_command = command; }
+	void set_raw_channel(bool raw) override { m_raw_channel = raw; }
 
 	/* Recorded, and answered only when the test says what it printed. */
 	void run_on_the_side(const QString &command) override { m_side_commands.append(command); }
 	QStringList side_commands() const { return m_side_commands; }
+	bool raw_channel() const { return m_raw_channel; }
+	int shells_opened() const { return m_shells_opened; }
 	void simulate_side_output(const QByteArray &output) { emit side_output_ready(output); }
 
 	/* Every restart_shell(), its words joined by spaces. */
@@ -187,6 +190,8 @@ private:
 	bool m_find_held = false;
 	int m_upload_count = 0;
 	QStringList m_side_commands;
+	bool m_raw_channel = false;
+	int m_shells_opened = 0;
 	QStringList m_restarts;
 	QString m_fail_reason;
 	int m_cols;

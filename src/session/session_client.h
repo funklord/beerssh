@@ -34,6 +34,8 @@ typedef struct bssh_session_client_events {
 	/* `count` bytes are gone for good, and `next` now stands after them. */
 	void (*gap)(void *context, uint64_t count);
 	void (*exited)(void *context, int32_t status);
+	/* The session asked for is gone and this is a new one: a reboot, say. */
+	void (*restarted)(void *context);
 } bssh_session_client_events_t;
 
 typedef struct bssh_session_client {

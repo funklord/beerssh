@@ -39,6 +39,7 @@ void bssh_fake_ssh_session::authenticate_password(const QString &password) {
 }
 
 void bssh_fake_ssh_session::open_shell(int cols, int rows) {
+	++m_shells_opened;
 	m_cols = cols;
 	m_rows = rows;
 
