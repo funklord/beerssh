@@ -73,6 +73,7 @@ SOURCES += \
     command_line_test.cpp \
     conn_manager_test.cpp \
     output_log_test.cpp \
+    line_gaps_test.cpp \
     emulator_bench.cpp \
     live_ssh_test.cpp \
     handoff_test.cpp \
@@ -131,6 +132,7 @@ SOURCES += \
     ../src/model/app_settings.cpp \
     ../src/model/conn_manager.cpp \
     ../src/session/output_log.c \
+    ../src/session/line_gaps.c \
     ../src/model/command_line.cpp \
     ../src/model/document_path.cpp \
     ../src/model/preset.cpp \
@@ -191,6 +193,7 @@ HEADERS += \
     command_line_test.h \
     conn_manager_test.h \
     output_log_test.h \
+    line_gaps_test.h \
     emulator_bench.h \
     live_ssh_test.h \
     handoff_test.h \
@@ -247,6 +250,7 @@ HEADERS += \
     ../src/model/app_settings.h \
     ../src/model/conn_manager.h \
     ../src/session/output_log.h \
+    ../src/session/line_gaps.h \
     ../src/model/command_line.h \
     ../src/model/document_path.h \
     ../src/model/preset.h \

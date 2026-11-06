@@ -1,0 +1,73 @@
+# The exact shape of what a client lacks (project.md sec 5.6).
+
+# A lost line offered for backfill: asked for, for ever, from a server that
+# no longer has it.
+[[sabotage]]
+name = "lost lines are offered"
+file = "src/session/line_gaps.c"
+find = "\t\tif (gap->kind != BSSH_LINE_GAP_MISSING) continue;\n"
+replace = ""
+expect = "lost_lines_are_kept_apart_and_never_offered"
+
+# Text arriving for a line the server says it lost is not that line.
+[[sabotage]]
+name = "a lost line can be filled"
+file = "src/session/line_gaps.c"
+find = "\t\tif (gap->kind != BSSH_LINE_GAP_LOST) continue;\n"
+replace = "\t\tcontinue;\n"
+expect = "a_lost_line_cannot_be_filled"
+
+# Out of room, the split goes ahead over the end of the caller's array.
+[[sabotage]]
+name = "a fill splits with no room"
+file = "src/session/line_gaps.c"
+find = "\tif (lines->used + needed > lines->capacity) return -1;\n\n\tfor (size_t i = 0; i < lines->used;) {"
+replace = "\tfor (size_t i = 0; i < lines->used;) {"
+expect = "running_out_of_room_leaves_the_line_missing"
+
+[[sabotage]]
+name = "losing splits with no room"
+file = "src/session/line_gaps.c"
+find = "\tif (lines->used + needed > lines->capacity) return -1;\n\n\tcut(lines, first, last);"
+replace = "\t(void)needed;\n\tcut(lines, first, last);"
+expect = "running_out_of_room_leaves_the_line_missing"
+
+# Without the clamp a huge count wraps and the fill covers nothing.
+[[sabotage]]
+name = "a fill's end wraps"
+file = "src/session/line_gaps.c"
+find = "\tuint64_t last = count > lines->end - first ? lines->end : first + count;"
+replace = "\tuint64_t last = first + count;"
+expect = "a_fill_past_the_end_changes_nothing_beyond_it"
+
+# A late snapshot moving the end back forgets lines it already counted.
+[[sabotage]]
+name = "an older snapshot moves the end back"
+file = "src/session/line_gaps.c"
+find = "\tif (end <= lines->end) return 0;\n"
+replace = ""
+expect = "a_snapshot_says_how_many_lines_are_missing"
+
+# A last gap that stops short of the end is not the new lines' gap.
+[[sabotage]]
+name = "extending grows a gap across held lines"
+file = "src/session/line_gaps.c"
+find = "if (last && last->kind == BSSH_LINE_GAP_MISSING && end_of(last) == lines->end) {"
+replace = "if (last && last->kind == BSSH_LINE_GAP_MISSING) {"
+expect = "extending_after_a_fill_starts_a_new_gap"
+
+# Neighbouring lost ranges kept apart use up the bounded array for nothing.
+[[sabotage]]
+name = "lost ranges do not merge"
+file = "src/session/line_gaps.c"
+find = "\tinsert_at(lines, at, gap);\n\tmerge_around(lines, at);\n"
+replace = "\tinsert_at(lines, at, gap);\n"
+expect = "lost_ranges_merge_with_their_neighbours"
+
+# Older on a tie: the reader at the end of history waits on the far past.
+[[sabotage]]
+name = "a tie goes to the older line"
+file = "src/session/line_gaps.c"
+find = "if (found < 0 || distance <= best_distance) {"
+replace = "if (found < 0 || distance < best_distance) {"
+expect = "the_line_wanted_is_the_one_nearest_the_reader"

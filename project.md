@@ -1413,8 +1413,8 @@ holds a socket open simply keeps holding it. What still needs deciding is what
 
 ### 5.6 A session that outlives its connection — **[DESIGN for v2, holder 2026-11-06; being built]**
 
-**Built so far:** the raw log, `src/session/output_log.h`, tested but linked into
-nothing yet. `src/session/` is plain C with no Qt, so it can move to fuzznet.
+**Built so far:** the raw log, `src/session/output_log.h`, and the gap map,
+`src/session/line_gaps.h`, tested but linked into nothing yet. `src/session/` is plain C with no Qt, so it can move to fuzznet.
 
 **This replaces "Mosh in v2".** It is the v2 answer to the gap in §5.3: a
 reconnect is a new remote shell. Plain SSH stays the default and the fallback,
@@ -1513,13 +1513,29 @@ The largest gain, a shell that survives, needs no UDP at all, which is why SSH
 would come first for a host not on fuzznet. Each new login needs a key or a
 remembered password; without one, a person is asked (§11).
 
-**Starting a session, by what the host has:**
+**A third kind of connection in the host list** (holder, 2026-11-06): Local
+shell, SSH, and **fuzznet shell**, which is the direct path. An SSH host needs no
+new kind: **over SSH it is negotiated automatically when the capability exists.**
 
 | Host | Connection |
 |---|---|
-| Enrolled in fuzznet | direct over fuzznet, no SSH involved |
-| Helper available, not enrolled | through SSH, as above |
-| Anything else | plain SSH, as today |
+| Saved as a fuzznet shell | direct over fuzznet, no SSH involved |
+| SSH, capability found | upgraded by itself, nothing asked |
+| SSH, capability not found | plain SSH, as today |
+
+The negotiation is a probe on an exec channel of its own, the shape the working
+directory probe already has. It runs **after login and before the shell opens**,
+because upgrading afterwards would leave two shells. That costs a round trip on
+each connection, which remembering the last answer per host can hide. Failure,
+refusal or a timeout mean plain SSH: the probe can delay a shell and must never
+prevent one. A server hiding the capability costs only the upgrade, and the pane
+says which kind is running, so the fallback is not silent. A per-host setting can
+turn it off.
+
+The probe can also report the host's fuzznet identity. It arrives over a connection
+whose host key was verified, so it could answer first contact without a pairing
+card or TOFU, offering to save the host as a fuzznet shell. That widens what an SSH
+host key vouches for, so it is the holder's call, and open.
 
 The holder's point, 2026-11-06: fuzznet already maintains host keys and
 authentication for other software, so setup is simpler there. Trust is settled
