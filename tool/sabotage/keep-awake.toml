@@ -6,15 +6,15 @@
 [[sabotage]]
 name = "a host that did not ask keeps the computer awake"
 file = "src/model/session_registry.cpp"
-find = "\t\tif (session->profile().keep_awake && session->is_live()) return true;"
-replace = "\t\tif (session->is_live()) return true;"
+find = "\t\tif (session->profile().keep_awake && on_its_way(session)) return true;"
+replace = "\t\tif (on_its_way(session)) return true;"
 expect = "only_a_connected_keep_awake_host_keeps_the_computer_awake"
 
 # A host that asked keeps it awake whether or not anything is connected.
 [[sabotage]]
 name = "a host that is not connected keeps the computer awake"
 file = "src/model/session_registry.cpp"
-find = "\t\tif (session->profile().keep_awake && session->is_live()) return true;"
+find = "\t\tif (session->profile().keep_awake && on_its_way(session)) return true;"
 replace = "\t\tif (session->profile().keep_awake) return true;"
 expect = "only_a_connected_keep_awake_host_keeps_the_computer_awake"
 

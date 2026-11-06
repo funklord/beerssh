@@ -100,11 +100,12 @@ public:
 	void save_kept_scrollback();
 
 	/*
-	 * Whether any live session's host asks for the computer to be kept
-	 * awake while connected (bssh_profile_t::keep_awake). Live as
-	 * bssh_session::is_live means it, connecting and reconnecting included:
-	 * a build waiting on a dropped link to come back is still a build a
-	 * sleep would lose. One that is disconnected asks for nothing.
+	 * Whether any session's host asks for the computer to be kept awake
+	 * while connected (bssh_profile_t::keep_awake). Connecting and
+	 * reconnecting count, the wait between two attempts included, when
+	 * is_live() is false: a build waiting on a dropped link to come back
+	 * is still a build a sleep would lose. One that is disconnected and
+	 * not coming back asks for nothing.
 	 */
 	bool keeps_awake() const;
 
@@ -156,6 +157,9 @@ signals:
 	void changed();
 
 private:
+	/* Live, or waiting to be: a backoff, or the next network. */
+	bool on_its_way(bssh_session *session) const;
+
 	/* What create() and adopt() share: registered, and wired. */
 	void attach(bssh_session *session);
 

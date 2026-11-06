@@ -143,6 +143,11 @@ void session_registry_test::only_a_connected_keep_awake_host_keeps_the_computer_
 	QVERIFY(builder->is_live());
 	QVERIFY(registry.keeps_awake());
 
+	/* Nor between two attempts, when a dropped session is not live. */
+	fakes.at(1)->simulate_connection_lost();
+	QVERIFY(!builder->is_live());
+	QVERIFY(registry.keeps_awake());
+
 	/* And not once it is gone. */
 	registry.close(builder);
 	QVERIFY(!registry.keeps_awake());

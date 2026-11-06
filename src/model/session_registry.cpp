@@ -289,8 +289,8 @@ void bssh_session_registry::close(bssh_session *session) {
 }
 
 bool bssh_session_registry::keeps_awake() const {
-	for (const bssh_session *session : m_sessions) {
-		if (session->profile().keep_awake && session->is_live()) return true;
+	for (bssh_session *session : m_sessions) {
+		if (session->profile().keep_awake && on_its_way(session)) return true;
 	}
 	return false;
 }
@@ -311,6 +311,12 @@ int bssh_session_registry::live_count() const {
 	return live;
 }
 
+bool bssh_session_registry::on_its_way(bssh_session *session) const {
+	if (session->is_live()) return true;
+	const bssh_conn_manager *manager = m_managers.value(session, nullptr);
+	return manager && (manager->is_reconnecting() || manager->is_waiting_for_network());
+}
+
 int bssh_session_registry::connected_count() const {
 	int connected = 0;
 	for (bssh_session *session : m_sessions) {
@@ -322,12 +328,7 @@ int bssh_session_registry::connected_count() const {
 int bssh_session_registry::connecting_count() const {
 	int connecting = 0;
 	for (bssh_session *session : m_sessions) {
-		if (session->state() == bssh_ssh_session::CONNECTED) continue;
-		const bssh_conn_manager *manager = m_managers.value(session, nullptr);
-		if (session->is_live()
-		    || (manager && (manager->is_reconnecting() || manager->is_waiting_for_network()))) {
-			++connecting;
-		}
+		if (session->state() != bssh_ssh_session::CONNECTED && on_its_way(session)) ++connecting;
 	}
 	return connecting;
 }

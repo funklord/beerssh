@@ -34,3 +34,12 @@ file = "src/model/conn_manager.cpp"
 find = "\t\tm_waiting_for_network = true;\n"
 replace = ""
 expect = "giving_up_still_waits_for_the_network"
+
+# Live is false between two attempts, so a dropped build host would let the
+# computer sleep through the wait the option exists for.
+[[sabotage]]
+name = "keep awake lets go between two attempts"
+file = "src/model/session_registry.cpp"
+find = "if (session->profile().keep_awake && on_its_way(session)) return true;"
+replace = "if (session->profile().keep_awake && session->is_live()) return true;"
+expect = "only_a_connected_keep_awake_host_keeps_the_computer_awake"
