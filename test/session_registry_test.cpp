@@ -155,6 +155,50 @@ void session_registry_test::only_a_connected_keep_awake_host_keeps_the_computer_
 	bssh_ssh_session::set_factory(nullptr);
 }
 
+void session_registry_test::a_session_out_of_attempts_is_waiting_and_not_connecting() {
+	const bssh_factory_reset_t factory_reset;
+	QList<bssh_fake_ssh_session *> fakes;
+	bssh_ssh_session::set_factory([&fakes](QObject *parent) -> bssh_ssh_session * {
+		bssh_fake_ssh_session *fake = new bssh_fake_ssh_session(parent);
+		fakes.append(fake);
+		return fake;
+	});
+
+	bssh_session_registry registry;
+	bssh_profile_t awake = profile_for(QStringLiteral("build"), QStringLiteral("build.example"));
+	awake.keep_awake = true;
+	bssh_session *session = registry.create(awake);
+	session->connect_to_host();
+	fakes.at(0)->simulate_key_auth_success();
+	QCOMPARE(registry.waiting_count(), 0);
+
+	/*
+	 * Nothing dials until the network changes, which may be never: not
+	 * "connecting", and not a reason to keep a laptop from sleeping. It
+	 * does stay counted, because the count is what holds the foreground
+	 * service, and the service is what hears the network come back.
+	 */
+	registry.conn_manager_for(session)->set_max_attempts(0);
+	QList<int> held_when_told;
+	connect(&registry, &bssh_session_registry::changed, this, [&] {
+		held_when_told.append(registry.connected_count() + registry.connecting_count()
+		                      + registry.waiting_count());
+	});
+	fakes.at(0)->simulate_connection_lost();
+	QCOMPARE(registry.connected_count(), 0);
+	QCOMPARE(registry.connecting_count(), 0);
+	QCOMPARE(registry.waiting_count(), 1);
+	QVERIFY(!registry.keeps_awake());
+	QVERIFY(!held_when_told.isEmpty());
+	QVERIFY(!held_when_told.contains(0));
+
+	/* The tab's own Reconnect dials now, so it is connecting again. */
+	session->reconnect();
+	QCOMPARE(registry.connecting_count(), 1);
+	QCOMPARE(registry.waiting_count(), 0);
+	QVERIFY(registry.keeps_awake());
+}
+
 void session_registry_test::live_count_ignores_dead_sessions() {
 	bssh_session_registry registry;
 	registry.create(profile_for(QStringLiteral("a"), QStringLiteral("a.example")));

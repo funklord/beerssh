@@ -45,6 +45,7 @@
 #include <QAccessible>
 #include <QAbstractSlider>
 #include <QTimer>
+#include "model/conn_manager.h"
 #include "model/command_line.h"
 #include "model/profile.h"
 #include "model/preset.h"
@@ -5196,6 +5197,53 @@ struct keep_sessions_on_close_t {
 	~keep_sessions_on_close_t() { bssh_app_settings().set_keep_sessions_on_close(was); }
 };
 
+}
+
+void layout_test::a_session_out_of_attempts_keeps_the_process_resident() {
+	const bssh_factory_reset_t factory_reset;
+	/*
+	 * sec 5.3: nothing dials until the network changes, and without the
+	 * process nothing hears it change. On Android keep-alive is the
+	 * foreground service, which a backgrounded app cannot start again.
+	 */
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+
+	{
+		bssh_main_window window;
+		window.resize(1000, 700);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		bssh_session_registry *registry = window.registry();
+		const registry_left_as_found_t tidy(registry);
+
+		bssh_profile_t host = named(QStringLiteral("waiting"));
+		host.host = QStringLiteral("waiting.example");
+		bssh_session *session = registry->create(host);
+		window.adopt_session(session);
+		session->connect_to_host();
+		QVERIFY(fake);
+		fake->simulate_key_auth_success();
+		QCoreApplication::processEvents();
+
+		registry->conn_manager_for(session)->set_max_attempts(0);
+		fake->simulate_connection_lost();
+		QCoreApplication::processEvents();
+		QCOMPARE(registry->waiting_count(), 1);
+		QVERIFY2(!QApplication::quitOnLastWindowClosed(),
+		          "the process let go of a session waiting for the network");
+
+		/* Told to stop, it is waiting for nothing. */
+		session->disconnect_from_host();
+		QCoreApplication::processEvents();
+		QCOMPARE(registry->waiting_count(), 0);
+		QVERIFY(QApplication::quitOnLastWindowClosed());
+	}
+
+	QApplication::setQuitOnLastWindowClosed(true);
 }
 
 void layout_test::a_window_kept_running_comes_back_from_the_tray() {

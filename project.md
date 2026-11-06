@@ -1092,10 +1092,11 @@ type-specific `FOREGROUND_SERVICE_*` permission, `INTERNET`,
   Fold.** It counted `is_live()`, which holds the states a reconnect passes
   through: with the server frozen, a session retrying read "1 session connected"
   on every attempt and "0" between them, for as long as the host stayed away.
-  Now "1 session connected, 2 connecting", with "connecting" covering a session
-  dialling and one waiting out its backoff, and the tray the same words. The
-  keep-alive follows both counts, so the service no longer stops between two
-  attempts while the window is in front.
+  Now "1 session connected, 2 connecting, 1 waiting to reconnect", with
+  "connecting" covering a session dialling and one waiting out its backoff,
+  "waiting" one out of attempts that dials again only when the network changes,
+  and the tray the same words. The keep-alive follows all three, so the service
+  no longer stops between two attempts while the window is in front.
 
 ### 5.3 Reconnection state machine (in `bssh_conn_manager`)
 States: `disconnected → resolving → connecting → authenticating → connected →
@@ -1248,11 +1249,19 @@ events from `bssh_platform` (§3) without caring which platform produced them.
   five minutes; then `gave_up` took the count to 0, the service went the same
   way, and nothing was left to hear the network return. `is_waiting_for_network()`
   holds the service with nothing dialling, so the cap still spares the radio,
-  and the notification reads "connecting" until the user closes the tab. On
-  the API 36 emulator, all networks off for 8 minutes in the background:
-  service up throughout, signed in 4 s after they returned. That the cap was
-  reached there is arithmetic, no log line says so; the unit test and its
-  sabotage hold the path itself. **Rejected:** dropping the cap, which is the
+  and the notification reads "waiting to reconnect" until the user closes the
+  tab or reconnects it. It read "connecting" at first, and the Fold showed what
+  that cost: with the test server gone at 03:30 it still said so at 09:24, six
+  hours with nothing dialling, and the same answer told a keep-awake host's
+  computer to stay up, so one dead server would have held a laptop awake until
+  its battery ran out. A session in that wait keeps the service and no longer
+  keeps the computer awake. **Unverified:** that a laptop waking from sleep gives
+  such a session the network change it waits for. On the API 36 emulator, all networks off for 8 minutes in the background:
+  service up throughout, signed in 4 s after they returned. The cap itself was
+  seen on the same emulator, 2026-11-06, with the server killed under a signed-in
+  session in the background: "waiting to reconnect" 319 s after the attempts
+  began, service up. A real network change starts the count again, as it should:
+  one at 3 minutes took a first run past 8 with the attempts restarted at 1 s. **Rejected:** dropping the cap, which is the
   storm above, and letting go of the process, which is the fault.
 ### 5.4 Battery / OEM caveats (Android)
 Aggressive OEM battery managers (e.g. some Chinese OEM skins) may kill the
@@ -17705,13 +17714,20 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
   run; §5.4; §19.6). **The Fold is not rebooted -- the holder, 2026-11-06:
   "you can test reboot on another phone but not on the fold."** Boot stands
   as seen on an API 36 emulator with a PIN (§19.6) until another phone is on
-  adb. **Still to measure there: screen-off.** BeerSSH holds no wake lock, so
-  whether its 60 s keepalive and its backoff keep running in deep sleep is
-  unknown, and an emulator's CPU does not suspend. Capture on the server side
-  (tcpdump in a throwaway sshd container) and read `dumpsys meminfo`'s Uptime
-  against Realtime for the time slept. If timers stall, "Keep the computer
-  awake" on Android is the candidate, against sec 16's recorded "not on
-  Android", and that call is the holder's. For a run that shortens the
+  adb. **Screen-off, measured as far as power allows.** Plugged into USB,
+  locked, display dozing, 2026-11-06: 12 minutes with 0 s of CPU sleep, keepalives
+  60.0 s apart at the server, and a server-side kill signed in again 11 s later
+  with no input. That says nothing of deep sleep, since USB kept the CPU up. The
+  night after: 96 of 96 probes of beersshd answered, 5 minutes apart over 8 hours,
+  both processes alive for 7 h 52 min, CPU asleep 28 of 442 minutes, the phone on
+  USB and then a charger. `dumpsys deviceidle` reads ACTIVE on power, so **Doze
+  needs the battery**, and a charger is no better a test than USB. **Still to
+  measure: unplugged and left.** BeerSSH holds no wake lock, so whether its 60 s
+  keepalive and its backoff keep running there is unknown, and an emulator's CPU
+  does not suspend. Capture on the server side (tcpdump in a throwaway sshd
+  container) and read `dumpsys meminfo`'s Uptime against Realtime for the time
+  slept. If timers stall, "Keep the computer awake" on Android is the candidate,
+  against sec 16's recorded "not on Android", and that call is the holder's. For a run that shortens the
   limit: `device_config set_sync_disabled_for_tests until_reboot` FIRST, then
   `put` (§19.6), and restore with `delete` and `set_sync_disabled_for_tests
   none`: the limit is system-wide.

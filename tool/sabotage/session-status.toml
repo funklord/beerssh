@@ -52,3 +52,45 @@ file = "src/model/conn_manager.cpp"
 find = "\tif (m_session->is_live()) {\n\t\tset_reconnecting(false);\n\t\treturn;\n\t}\n"
 replace = ""
 expect = "a_retry_due_on_a_live_session_does_not_dial_again"
+
+# Out of attempts, nothing dials; counted as connecting the notification said
+# so for six hours on the Fold, and a laptop stayed awake for one dead server.
+[[sabotage]]
+name = "a session out of attempts is still on its way"
+file = "src/model/session_registry.cpp"
+find = "\treturn manager && manager->is_reconnecting();\n"
+replace = "\treturn manager && (manager->is_reconnecting() || manager->is_waiting_for_network());\n"
+expect = "a_session_out_of_attempts_is_waiting_and_not_connecting"
+
+# Not counted at all: the service stops and nothing hears the network return.
+[[sabotage]]
+name = "a session out of attempts is not counted"
+file = "src/model/session_registry.cpp"
+find = "if (manager && manager->is_waiting_for_network() && !on_its_way(session)) ++waiting;"
+replace = "Q_UNUSED(manager);"
+expect = "a_session_out_of_attempts_is_waiting_and_not_connecting"
+
+# A session being dialled by hand, still reported as waiting beside connecting.
+[[sabotage]]
+name = "a dialling session is also counted as waiting"
+file = "src/model/session_registry.cpp"
+find = "manager->is_waiting_for_network() && !on_its_way(session)"
+replace = "manager->is_waiting_for_network()"
+expect = "a_session_out_of_attempts_is_waiting_and_not_connecting"
+
+# The words: a third count that never reaches the notification.
+[[sabotage]]
+name = "the waiting count is not said"
+file = "src/platform/platform.cpp"
+find = "\tif (waiting > 0) add(waiting, QStringLiteral(\"waiting to reconnect\"));\n"
+replace = ""
+expect = "session_status_says_what_is_connected_and_what_is_not"
+
+# Counted but not held: on a phone the service stops, and nothing is left to
+# hear the network come back.
+[[sabotage]]
+name = "residency forgets a session out of attempts"
+file = "src/ui/main_window.cpp"
+find = "\tplatform->set_keep_alive(connected + connecting + waiting > 0 || hidden);\n"
+replace = "\tplatform->set_keep_alive(connected + connecting > 0 || hidden);\n"
+expect = "a_session_out_of_attempts_keeps_the_process_resident"

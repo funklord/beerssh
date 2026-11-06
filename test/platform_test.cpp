@@ -145,12 +145,17 @@ void platform_test::keeping_awake_is_asked_only_on_a_change() {
 }
 
 void platform_test::session_status_says_what_is_connected_and_what_is_not() {
-	QCOMPARE(bssh_platform::session_status(0, 0), QStringLiteral("0 sessions connected"));
-	QCOMPARE(bssh_platform::session_status(1, 0), QStringLiteral("1 session connected"));
-	QCOMPARE(bssh_platform::session_status(2, 0), QStringLiteral("2 sessions connected"));
-	QCOMPARE(bssh_platform::session_status(0, 1), QStringLiteral("1 session connecting"));
-	QCOMPARE(bssh_platform::session_status(0, 3), QStringLiteral("3 sessions connecting"));
-	QCOMPARE(bssh_platform::session_status(1, 2), QStringLiteral("1 session connected, 2 connecting"));
+	QCOMPARE(bssh_platform::session_status(0, 0, 0), QStringLiteral("0 sessions connected"));
+	QCOMPARE(bssh_platform::session_status(1, 0, 0), QStringLiteral("1 session connected"));
+	QCOMPARE(bssh_platform::session_status(2, 0, 0), QStringLiteral("2 sessions connected"));
+	QCOMPARE(bssh_platform::session_status(0, 1, 0), QStringLiteral("1 session connecting"));
+	QCOMPARE(bssh_platform::session_status(0, 3, 0), QStringLiteral("3 sessions connecting"));
+	QCOMPARE(bssh_platform::session_status(1, 2, 0), QStringLiteral("1 session connected, 2 connecting"));
+	QCOMPARE(bssh_platform::session_status(0, 0, 1), QStringLiteral("1 session waiting to reconnect"));
+	QCOMPARE(bssh_platform::session_status(0, 0, 2), QStringLiteral("2 sessions waiting to reconnect"));
+	QCOMPARE(bssh_platform::session_status(0, 1, 1), QStringLiteral("1 session connecting, 1 waiting to reconnect"));
+	QCOMPARE(bssh_platform::session_status(2, 1, 1),
+	         QStringLiteral("2 sessions connected, 1 connecting, 1 waiting to reconnect"));
 }
 
 void platform_test::session_count_and_notify_are_safe_without_a_tray() {
@@ -162,9 +167,9 @@ void platform_test::session_count_and_notify_are_safe_without_a_tray() {
 	 * dies because the desktop has no notification area is worse than one
 	 * that silently skips the notification.
 	 */
-	platform->set_session_count(3, 1);
+	platform->set_session_count(3, 1, 1);
 	platform->notify(QStringLiteral("BeerSSH"), QStringLiteral("reconnecting"));
-	platform->set_session_count(0, 0);
+	platform->set_session_count(0, 0, 0);
 
 	QVERIFY(true);
 }

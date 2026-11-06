@@ -212,9 +212,9 @@ void bssh_session_registry::attach(bssh_session *session) {
 
 	connect(manager, &bssh_conn_manager::gave_up, this, [session] {
 		/*
-		 * Not guarded on the screen, unlike the other two. Giving up is
-		 * terminal: the shell is gone and will not come back on its own,
-		 * and that is worth saying whether or not the pane is visible --
+		 * Not guarded on the screen, unlike the other two. The shell is
+		 * gone, and nothing dials again until the network changes, and
+		 * that is worth saying whether or not the pane is visible --
 		 * a person watching a pane that has quietly stopped retrying has
 		 * no way to tell it from one still trying.
 		 */
@@ -314,7 +314,7 @@ int bssh_session_registry::live_count() const {
 bool bssh_session_registry::on_its_way(bssh_session *session) const {
 	if (session->is_live()) return true;
 	const bssh_conn_manager *manager = m_managers.value(session, nullptr);
-	return manager && (manager->is_reconnecting() || manager->is_waiting_for_network());
+	return manager && manager->is_reconnecting();
 }
 
 int bssh_session_registry::connected_count() const {
@@ -331,6 +331,15 @@ int bssh_session_registry::connecting_count() const {
 		if (session->state() != bssh_ssh_session::CONNECTED && on_its_way(session)) ++connecting;
 	}
 	return connecting;
+}
+
+int bssh_session_registry::waiting_count() const {
+	int waiting = 0;
+	for (bssh_session *session : m_sessions) {
+		const bssh_conn_manager *manager = m_managers.value(session, nullptr);
+		if (manager && manager->is_waiting_for_network() && !on_its_way(session)) ++waiting;
+	}
+	return waiting;
 }
 
 bssh_session *bssh_session_registry::at(int index) const {

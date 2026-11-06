@@ -83,10 +83,14 @@ public:
 	 * so a session retrying a dead host read "1 session connected" for
 	 * each attempt and "0" between them -- seen on the Fold, 2026-11-05.
 	 * Connecting is everything still on its way there, a reconnect waiting
-	 * out its backoff or the next network included.
+	 * out its backoff included. Waiting is a session out of attempts: nothing
+	 * dials until the network changes, which may be never, so a server that
+	 * went away read "1 session connecting" for six hours on the Fold,
+	 * 2026-11-06.
 	 */
 	int connected_count() const;
 	int connecting_count() const;
+	int waiting_count() const;
 
 	bssh_conn_manager *conn_manager_for(bssh_session *session) const;
 
@@ -105,7 +109,9 @@ public:
 	 * reconnecting count, the wait between two attempts included, when
 	 * is_live() is false: a build waiting on a dropped link to come back
 	 * is still a build a sleep would lose. One that is disconnected and
-	 * not coming back asks for nothing.
+	 * not coming back asks for nothing, and nor does one out of attempts:
+	 * its wait has no end, so one server gone would hold a laptop awake
+	 * until the battery ran out.
 	 */
 	bool keeps_awake() const;
 
@@ -157,7 +163,7 @@ signals:
 	void changed();
 
 private:
-	/* Live, or waiting to be: a backoff, or the next network. */
+	/* Live, or due to dial again when a backoff ends. */
 	bool on_its_way(bssh_session *session) const;
 
 	/* What create() and adopt() share: registered, and wired. */

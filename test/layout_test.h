@@ -267,6 +267,7 @@ private slots:
 	 */
 	void a_drag_released_outside_every_window_tears_out();
 	void a_release_on_a_strip_makes_a_tab();
+	void a_session_out_of_attempts_keeps_the_process_resident();
 	void a_window_kept_running_comes_back_from_the_tray();
 	void closing_a_window_closes_its_sessions_without_asking();
 	void the_tmux_drawer_switches_on_a_click();

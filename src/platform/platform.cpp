@@ -76,13 +76,20 @@ bssh_platform::~bssh_platform() {
  */
 static int bssh_forced_touch = -1;
 
-QString bssh_platform::session_status(int connected, int connecting) {
-	const QString sessions = connected == 1 ? QStringLiteral("1 session connected")
-	                                        : QStringLiteral("%1 sessions connected").arg(connected);
-	if (connecting == 0) return sessions;
-	if (connected > 0) return QStringLiteral("%1, %2 connecting").arg(sessions).arg(connecting);
-	return connecting == 1 ? QStringLiteral("1 session connecting")
-	                       : QStringLiteral("%1 sessions connecting").arg(connecting);
+QString bssh_platform::session_status(int connected, int connecting, int waiting) {
+	QStringList parts;
+
+	/* The first count says what is being counted, the rest only how many. */
+	const auto add = [&parts](int count, const QString &what) {
+		if (!parts.isEmpty()) parts.append(QStringLiteral("%1 %2").arg(count).arg(what));
+		else if (count == 1) parts.append(QStringLiteral("1 session ") + what);
+		else parts.append(QStringLiteral("%1 sessions %2").arg(count).arg(what));
+	};
+
+	if (connected > 0 || connecting + waiting == 0) add(connected, QStringLiteral("connected"));
+	if (connecting > 0) add(connecting, QStringLiteral("connecting"));
+	if (waiting > 0) add(waiting, QStringLiteral("waiting to reconnect"));
+	return parts.join(QStringLiteral(", "));
 }
 
 bool bssh_platform::is_touch_primary() const {

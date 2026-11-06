@@ -7174,12 +7174,15 @@ void bssh_main_window::update_residency() {
 	/*
 	 * A session waiting out its backoff is still a session to keep the
 	 * process for: between two attempts it is not live, and the service
-	 * used to stop there and start again with the next one.
+	 * used to stop there and start again with the next one. So is one
+	 * out of attempts: without the process nothing hears the network
+	 * change that would send it dialling again.
 	 */
 	const int connected = m_registry->connected_count();
 	const int connecting = m_registry->connecting_count();
-	platform->set_session_count(connected, connecting);
-	platform->set_keep_alive(connected + connecting > 0 || hidden);
+	const int waiting = m_registry->waiting_count();
+	platform->set_session_count(connected, connecting, waiting);
+	platform->set_keep_alive(connected + connecting + waiting > 0 || hidden);
 }
 
 void bssh_main_window::closeEvent(QCloseEvent *event) {
