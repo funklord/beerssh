@@ -7,6 +7,10 @@
 #include <signal.h>
 #include <unistd.h>
 
+#ifdef Q_OS_ANDROID
+#include <android/log.h>
+#endif
+
 #include <QGuiApplication>
 #include <QTimer>
 
@@ -32,15 +36,36 @@ const int BSSH_HANG_POLL_MS = 2000;
 /* The one the running app uses; see bssh_hang_state for who writes it. */
 bssh_hang_state g_state;
 
+/*
+ * steady_clock is CLOCK_MONOTONIC, which stands still while the phone sleeps, so
+ * a sleeping phone is not a silent loop.
+ */
 qint64 now_ms() {
 	using namespace std::chrono;
 	return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
 }
 
+/*
+ * Straight to the log and not through qWarning, whose handler takes a lock the
+ * wedged thread could hold. The two lines give when a wedge began, how long it
+ * lasted, and with the lifecycle beside them what ended it.
+ */
+void note_silence(const char *what, qint64 idle_ms, bool foreground) {
+#ifdef Q_OS_ANDROID
+	__android_log_print(ANDROID_LOG_WARN, "beerssh", "main loop %s after %lld ms, %s", what,
+	                    static_cast<long long>(idle_ms),
+	                    foreground ? "foreground" : "background");
+#else
+	Q_UNUSED(what);
+	Q_UNUSED(idle_ms);
+	Q_UNUSED(foreground);
+#endif
+}
+
 } /* namespace */
 
-bool bssh_hang_should_dump(bool foreground, qint64 idle_ms, qint64 threshold_ms) {
-	return foreground && idle_ms >= threshold_ms;
+bool bssh_hang_should_dump(qint64 idle_ms, qint64 threshold_ms) {
+	return idle_ms >= threshold_ms;
 }
 
 void bssh_hang_state::beat(qint64 now_ms) {
@@ -49,16 +74,19 @@ void bssh_hang_state::beat(qint64 now_ms) {
 
 void bssh_hang_state::set_foreground(bool foreground, qint64 now_ms) {
 	/*
-	 * The clock before the flag: the watcher must never see "foreground"
-	 * paired with a beat from before the pause.
+	 * The clock before the flag: the log must never pair "foreground"
+	 * with a beat from before the pause.
 	 */
 	if (foreground) m_last_beat_ms.store(now_ms);
 	m_foreground.store(foreground);
 }
 
 bool bssh_hang_state::should_dump(qint64 now_ms, qint64 threshold_ms) const {
-	return bssh_hang_should_dump(m_foreground.load(), now_ms - m_last_beat_ms.load(),
-	                             threshold_ms);
+	return bssh_hang_should_dump(idle_ms(now_ms), threshold_ms);
+}
+
+qint64 bssh_hang_state::idle_ms(qint64 now_ms) const {
+	return now_ms - m_last_beat_ms.load();
 }
 
 void bssh_start_hang_watchdog() {
@@ -99,17 +127,25 @@ void bssh_start_hang_watchdog() {
 	 */
 	std::thread([] {
 		bool dumped = false;
+		qint64 silent_since_ms = 0;
 		for (;;) {
 			std::this_thread::sleep_for(std::chrono::milliseconds(BSSH_HANG_POLL_MS));
 
-			if (!g_state.should_dump(now_ms(), BSSH_HANG_THRESHOLD_MS)) {
+			const qint64 now = now_ms();
+			if (!g_state.should_dump(now, BSSH_HANG_THRESHOLD_MS)) {
 				/* Recovered, or never stalled: re-arm for the next time. */
+				if (dumped) {
+					note_silence("beat again", now - silent_since_ms,
+					             g_state.foreground());
+				}
 				dumped = false;
 				continue;
 			}
 
 			if (dumped) continue;
 			dumped = true;
+			silent_since_ms = now - g_state.idle_ms(now);
+			note_silence("silent", now - silent_since_ms, g_state.foreground());
 
 			/*
 			 * ART's SignalCatcher answers SIGQUIT by dumping every

@@ -844,8 +844,15 @@ instead:
 
 - **The gate is the whole risk, and its two failures are not
   symmetric.** The watchdog must fire only when the app is FOREGROUND and
-  frozen, never when it is merely backgrounded -- Qt suspends its event
-  loop on background, so a stale heartbeat there is normal, not a hang. A
+  frozen, never when it is merely backgrounded -- Qt suspended its event
+  loop on background when this was written, so a stale heartbeat there was
+  normal. **No longer so** since `android.app.background_running`: the loop
+  runs in the background, measured on the Fold (§5.6), and a stale heartbeat
+  there is a wedge. So the DUMP now fires on silence anywhere and logs when it
+  began and ended; this gate stays for the `_exit()` half, which kills. On the
+  API 36 emulator, the main thread alone held 40 s under lldb with the app at Home:
+  `main loop silent after 30856 ms, background`, a stack dump, `beat again after
+  44027 ms`, and the process alive. A
   gate too STRICT misses the hang: no worse than today. A gate too LOOSE
   kills a live backgrounded session: a regression worse than the rare
   bug. So the gate must be the Android lifecycle's own resumed/paused
@@ -1433,7 +1440,10 @@ connection, for a program few hosts have yet; the holder's automatic negotiation
 is this with the default turned on, once the program can reach hosts. So it is a
 choice and not a value: `Default (off)`, `On`, `Off`, with a key written only for
 a pinned choice. When the default flips, a host left alone follows it and a host
-set to Off stays off, which a saved bare value could not have told apart. `make
+set to Off stays off, which a saved bare value could not have told apart. The shape
+is Konqueror's per-domain Java and JavaScript policy (*Use Global*, *Accept*,
+*Reject*) and Windows Group Policy's *Not Configured*, *Enabled*, *Disabled*: both
+old, and both overriding a wider setting per item, which is what a host does here. `make
 check-ssh` proves it on the real transport against a real sshd, through a real
 login: a drop during a job comes back to the same shell with the job's output, and
 closing leaves nothing on the host. On the API 36 emulator, 2026-11-06, with the
@@ -1472,11 +1482,40 @@ had not dialled, the notification still read "1 session connected", and the proc
 and its foreground service were alive. The killed connection was a bare FIN, so it
 was not the clean-exit path. The same sequence on the API 36 emulator came back in 3 s,
 and so did a drop on the Fold on USB 2 s after Home. Being restored is therefore not
-the cause. Five of the six Qt threads named for the main loop sat in `futex_wait`, which
-suggests the main thread was not handling the worker's signal, though
-`background_running` is set. The experiment that decides it: bring the app to the
-front and see whether it dials at once. Deep sleep itself is still unmeasured: the
-phone was in use, and slept 270 s of 30 minutes.
+the cause. Deep sleep itself is still unmeasured: the phone was in use, and slept
+270 s of 30 minutes.
+**What was measured the next morning, 2026-11-07, from the same process.** The Qt main
+thread is the one with the context switches, 14353 of 14327; of the others named for
+the main loop four are Adreno's GL workers and one is the hang watchdog. Healthy, it
+sits in `poll`. In the fault all five were in `futex_wait`, so **the main thread was
+blocked on a lock**, not idle, and the worker's news waited behind it. It recovered in
+the same process: the holder opened the app at 19:01:19 for 26 s, the notification
+later read "waiting to reconnect", and at 06:47:27, on battery, locked and in the
+background, Wi-Fi coming back made it dial within 250 ms and go on for 8 minutes. So
+Qt's event loop does run in the background, as `background_running` promises, and
+§5.1's "Qt suspends its event loop on background" no longer holds. Whether the 19:01
+visit is what freed it cannot now be shown: logcat kept nothing before 06:41 and the
+server's log went with its container.
+The best candidate is `QAndroidPlatformOpenGLWindow::eglSurface()`. Every Android
+window draws through GL (`QRhiBackingStore`); suspending destroys the surface and
+clears `m_androidSurfaceCreated`; the early return for a suspended app needs that flag
+true, so anything reaching `makeCurrent()` then calls `createSurface()` and waits on
+`m_surfaceWaitCondition` with no timeout, for a surface a stopped activity will not
+get until it is shown again. That is the family §5.1 suspects, and a candidate only.
+**Tried on the API 36 emulator, none blocked:** Home, screen off, display size, density
+and rotation changes under a backgrounded app (Qt's display listener is off from
+`onPause`), and 36 resume-then-Home flickers from 0 to 800 ms apart, each with the main
+thread read after. The emulator did print the `makeCurrent(): no EGLSurface` line at
+each Home, so that path is live. The Fold's hinge is the case left.
+**The stack can now be had on an unrooted phone**, which is what §5.1 said was owed:
+BeerSSH is a debug build, so `run-as` can start the NDK's `lldb-server gdbserver --attach`
+from the app's directory, with `adb forward` to the host's `lldb`. lldb has no modules
+that way and its backtrace stops at frame 0, so walk `x29` by script, read
+`/proc/PID/maps` under `run-as`, turn `base.apk` offsets into library offsets from the
+zip's stored entries, and run `llvm-symbolizer` on the build tree's libraries. About a
+second's pause and a few kilobytes over Wi-Fi; fetching modules instead would hold the
+process frozen far longer. Measured on the healthy process: `QEventLoop::exec` down to
+`qt_safe_poll`.
 A phone saved its layout only in `closeEvent()`, which Android hardly ever delivers;
 it now saves on leaving and on naming. Touch restores no tabs, since a tab not
 connected is a blank screen and a keyboard with nothing to say what it is; the name
@@ -1621,6 +1660,18 @@ The probe can also report the host's fuzznet identity. It arrives over a connect
 whose host key was verified, so it could answer first contact without a pairing
 card or TOFU, offering to save the host as a fuzznet shell. That widens what an SSH
 host key vouches for, so it is the holder's call, and open.
+
+**Where fuzznet stands on this, from its session, 2026-11-06** (its sec 918, 923-925; a
+report, and the decisions in it are the holder's). A one-shot command needs nothing
+new: a `fzn_daemon_procedure_t` with rule `none`, opened by `remote/permit/shell`, with
+answers of at most 4096 bytes. **A terminal needs a two-way stream at keystroke
+latency, which does not exist.** A session frame of 33 bytes would make a keystroke 62
+on UDP instead of 173, at the cost of session state, a second frame shape and a
+fallback when one side has lost the session: recommended there, not built, and LoRa
+wants the same thing. The holder on where a shell service lives: "Probably yes, and
+maybe we should put it in beersshd if it links fuzznet." beersshd links nothing of
+fuzznet today; the split proposed in its sec 925 is that fuzznet carries and gates, and
+beersshd starts the process. A service started as the right user is unbuilt.
 
 The holder's point, 2026-11-06: fuzznet already maintains host keys and
 authentication for other software, so setup is simpler there. Trust is settled

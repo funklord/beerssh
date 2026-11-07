@@ -23,21 +23,18 @@ private slots:
 	void session_status_says_what_is_connected_and_what_is_not();
 
 	/*
-	 * The hang watchdog's gate -- the whole risk of sec 5.1's fix -- as a
-	 * pure function: it fires only when the app is FOREGROUND and the loop
-	 * has been silent past the threshold. A backgrounded stall, which
-	 * Qt's own suspend produces every time the app is put away, must not
-	 * read as a hang.
+	 * The hang watchdog's gate as a pure function: the loop has been silent
+	 * past the threshold.
 	 */
-	void the_hang_gate_fires_only_foreground_and_past_the_threshold();
+	void the_hang_gate_fires_past_the_threshold();
 
 	/*
-	 * And where "foreground" comes from: the platform's lifecycle, written
-	 * straight into the state, not Qt's state sampled by the heartbeat --
-	 * which on Android stops at pause still saying "foreground", and never
-	 * hears a resume the Qt thread wedged in.
+	 * The loop runs in the background (sec 5.6), so silence there is a wedge,
+	 * and "foreground" is the platform's lifecycle, written straight into the
+	 * state, not Qt's state sampled by the heartbeat, which never hears a
+	 * resume the Qt thread wedged in.
 	 */
-	void the_hang_gate_follows_the_lifecycle_not_the_last_beat();
+	void a_loop_silent_in_the_background_is_a_hang();
 
 	/* The platform is asked only when keeping awake changes its answer. */
 	void keeping_awake_is_asked_only_on_a_change();

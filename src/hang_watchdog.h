@@ -6,15 +6,15 @@
 #include <QtGlobal>
 
 /*
- * A watchdog for the last-terminal-close hang (project.md sec 5.1).
+ * A watchdog for a wedged main thread (project.md sec 5.1, sec 5.6).
  *
  * The failure is upstream Qt's AndroidDeadlockProtector wedging the UI
  * thread, which nothing on that thread can then clear -- which is why the
  * foreground service's STOP never runs and the process stays alive and
  * unstartable. This is the DIAGNOSTIC half of the fix that sec 5.1
  * designs: a thread that is NOT the wedged one notices the main loop has
- * stopped beating while the app is foreground, and raises SIGQUIT at the
- * process, which on Android is ART's SignalCatcher dumping every thread's
+ * stopped beating, and raises SIGQUIT at the process, which on Android is
+ * ART's SignalCatcher dumping every thread's
  * stack to logcat and /data/anr -- finally capturing the "already locked
  * by '<HOLDER>'" line the manual repro could not provoke.
  *
@@ -26,13 +26,15 @@
  */
 
 /*
- * Whether the watchdog should dump: the app is FOREGROUND and the main
- * loop has not beaten for at least the threshold. A pure function so the
- * gate -- the whole risk -- is tested rather than reasoned about. A
- * backgrounded app whose loop Qt has suspended is not a hang, which is
- * why foreground is a precondition rather than a detail.
+ * Whether the watchdog should dump: the main loop has not beaten for at
+ * least the threshold, in front of the user or not. This asked for the
+ * foreground as well, because Qt used to stop the loop on suspend. Since
+ * android.app.background_running it does not, so silence in the background
+ * is a wedge too, and on the Fold (sec 5.6) that is where one hid: a
+ * session's drop went unhandled with nothing logged. A dump harms nothing.
+ * The _exit() half kills, and it must still ask for the foreground.
  */
-bool bssh_hang_should_dump(bool foreground, qint64 idle_ms, qint64 threshold_ms);
+bool bssh_hang_should_dump(qint64 idle_ms, qint64 threshold_ms);
 
 /*
  * The two facts the watchdog reads, written from two threads and read
@@ -40,18 +42,10 @@ bool bssh_hang_should_dump(bool foreground, qint64 idle_ms, qint64 threshold_ms)
  * watchdog must not take, since the wedged thread could hold it.
  *
  * FOREGROUND IS THE PLATFORM'S LIFECYCLE, NOT QT'S STATE (sec 5.1). It
- * was read from QGuiApplication::applicationState() inside the heartbeat,
- * and on Android that is wrong in both directions:
- *
- *   - On pause, Qt stops delivering TIMERS before it posts the state
- *     change (QAndroidEventDispatcher::goingToStop), so the beat stopped
- *     with "foreground" as its last word -- and every trip to the
- *     background longer than the threshold read as a hang. Harmless as a
- *     stack dump; a live session killed once the _exit() half lands.
- *   - On resume, Qt's state reaches its thread asynchronously, after the
- *     window work where the deadlock is suspected. A thread wedged there
- *     never records the resume, so the one hang this exists for would
- *     read as "backgrounded" and never fire.
+ * no longer gates the dump; it says which side a wedge happened on, and the
+ * _exit() half will need it. Qt's state is no use for that: it reaches its
+ * thread asynchronously, after the window work where the deadlock is
+ * suspected, so a thread wedged there never records the resume.
  *
  * Android's ActivityLifecycleCallbacks fire on its own UI thread, from
  * super.onResume() -- before QtActivityBase does any of its resume work --
@@ -66,14 +60,18 @@ public:
 	 * The window went in front of the user or away from them. From the
 	 * platform's lifecycle, on whatever thread it reports on.
 	 *
-	 * Coming forward also restarts the clock. The loop has not beaten
-	 * since the pause -- timers were stopped -- so without the restart a
-	 * healthy resume after a long background would be read as that whole
-	 * background spent wedged, and dumped before its first beat.
+	 * Coming forward also restarts the clock: a process Android froze
+	 * while away has not beaten, and must not be charged for that on its
+	 * way back.
 	 */
 	void set_foreground(bool foreground, qint64 now_ms);
 
 	bool should_dump(qint64 now_ms, qint64 threshold_ms) const;
+
+	/* How long the loop has been silent, for the log. */
+	qint64 idle_ms(qint64 now_ms) const;
+
+	bool foreground() const { return m_foreground.load(); }
 
 private:
 	std::atomic<qint64> m_last_beat_ms{0};

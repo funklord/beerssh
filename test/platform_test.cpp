@@ -66,48 +66,45 @@ void platform_test::going_out_of_sight_is_the_platforms_to_answer_for() {
 	QVERIFY(!platform->send_to_background());
 }
 
-void platform_test::the_hang_gate_fires_only_foreground_and_past_the_threshold() {
+void platform_test::the_hang_gate_fires_past_the_threshold() {
 	const qint64 threshold = 30000;
 
-	/* Foreground and well past: the one case that fires. */
-	QVERIFY(bssh_hang_should_dump(true, 30000, threshold));
-	QVERIFY(bssh_hang_should_dump(true, 45000, threshold));
+	QVERIFY(bssh_hang_should_dump(30000, threshold));
+	QVERIFY(bssh_hang_should_dump(45000, threshold));
 
-	/* Foreground but not yet past: a slow moment, not a hang. */
-	QVERIFY(!bssh_hang_should_dump(true, 29999, threshold));
-	QVERIFY(!bssh_hang_should_dump(true, 0, threshold));
-
-	/*
-	 * Backgrounded, however long the stall: Qt suspends the loop when the
-	 * app is put away, so this is the normal case, not a hang -- and the
-	 * arm that, if it fired, would kill a live backgrounded session.
-	 */
-	QVERIFY(!bssh_hang_should_dump(false, 45000, threshold));
-	QVERIFY(!bssh_hang_should_dump(false, 300000, threshold));
+	/* Not yet past: a slow moment, not a hang. */
+	QVERIFY(!bssh_hang_should_dump(29999, threshold));
+	QVERIFY(!bssh_hang_should_dump(0, threshold));
 }
 
-void platform_test::the_hang_gate_follows_the_lifecycle_not_the_last_beat() {
+void platform_test::a_loop_silent_in_the_background_is_a_hang() {
 	const qint64 threshold = 30000;
 	bssh_hang_state state;
 
 	/* The control: foreground, and the loop stops beating -- a hang. */
 	state.set_foreground(true, 0);
+	QVERIFY(state.foreground());
 	state.beat(1000);
 	QVERIFY(!state.should_dump(30999, threshold));
 	QVERIFY(state.should_dump(31000, threshold));
 
 	/*
-	 * Put away. Qt stops timers at pause, so there is no beat after this
-	 * one -- the case the old gate read as "foreground at the last beat"
-	 * and dumped half a minute into every trip to the background.
+	 * Put away. The loop goes on beating there, so beats keep it quiet and
+	 * their stopping is a wedge: sec 5.6, a main thread on a lock in the
+	 * background with the watchdog saying nothing.
 	 */
 	state.set_foreground(false, 2000);
-	QVERIFY2(!state.should_dump(600000, threshold),
-	          "a backgrounded app is not a hung one, however long it is away");
+	state.beat(100000);
+	QVERIFY2(!state.should_dump(129999, threshold),
+	          "a loop still beating in the background read as a hang");
+	QVERIFY2(state.should_dump(600000, threshold),
+	          "a main thread wedged in the background went unreported");
+	QVERIFY(!state.foreground());
+	QCOMPARE(state.idle_ms(600000), qint64(500000));
 
 	/*
-	 * Brought back after ten minutes. The loop has not beaten since the
-	 * pause; a healthy resume must not be charged for the time it was away.
+	 * Brought back after ten minutes, from a process Android may have frozen:
+	 * a healthy resume must not be charged for the time it was away.
 	 */
 	state.set_foreground(true, 600000);
 	QVERIFY2(!state.should_dump(600500, threshold),
