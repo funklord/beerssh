@@ -67,6 +67,7 @@ int bssh_wire_take(uint8_t *data, uint32_t have, bssh_wire_frame_t *frame, uint3
 /* Each returns the bytes written, or 0 if `capacity` is too small. */
 size_t bssh_wire_put(uint8_t *out, size_t capacity, uint8_t kind, const void *body, size_t len);
 size_t bssh_wire_put_offset(uint8_t *out, size_t capacity, uint8_t kind, uint64_t offset);
+size_t bssh_wire_put_lost(uint8_t *out, size_t capacity, uint64_t offset, uint64_t lines);
 size_t bssh_wire_put_output(uint8_t *out, size_t capacity, uint64_t offset, const uint8_t *bytes,
                             size_t len);
 size_t bssh_wire_put_attach(uint8_t *out, size_t capacity, uint64_t offset, uint16_t columns,
@@ -77,6 +78,7 @@ size_t bssh_wire_put_hello(uint8_t *out, size_t capacity);
 
 /* Reading a body. Each returns 0, or -1 when the body is not that message. */
 int bssh_wire_read_offset(const bssh_wire_frame_t *frame, uint64_t *offset);
+int bssh_wire_read_lost(const bssh_wire_frame_t *frame, uint64_t *offset, uint64_t *lines);
 int bssh_wire_read_output(const bssh_wire_frame_t *frame, uint64_t *offset, const uint8_t **bytes,
                           uint32_t *len);
 int bssh_wire_read_attach(const bssh_wire_frame_t *frame, uint64_t *offset, uint16_t *columns,

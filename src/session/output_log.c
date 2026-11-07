@@ -44,6 +44,33 @@ static void copy_in(bssh_output_log_t *log, uint64_t offset, const uint8_t *data
 	memcpy(log->bytes, data + first, len - first);
 }
 
+static uint64_t count_lines(const uint8_t *bytes, size_t len) {
+	uint64_t lines = 0;
+
+	for (size_t i = 0; i < len; ++i) lines += bytes[i] == '\n';
+	return lines;
+}
+
+/*
+ * Newlines in what `taken` more bytes will push out: read before they are written
+ * over, since afterwards the only place that knew is gone. A write larger than
+ * the log pushes out some of itself as well.
+ */
+static uint64_t lines_pushed_out(const bssh_output_log_t *log, const uint8_t *data, size_t taken) {
+	const uint64_t new_end = log->end + taken;
+	if (new_end - log->start <= log->capacity) return 0;
+
+	const uint64_t new_start = new_end - log->capacity;
+	const uint64_t held_to = new_start < log->end ? new_start : log->end;
+	const size_t len = (size_t)(held_to - log->start);
+	const size_t at = (size_t)(log->start % log->capacity);
+	const size_t first = len < log->capacity - at ? len : log->capacity - at;
+
+	uint64_t lines = count_lines(log->bytes + at, first) + count_lines(log->bytes, len - first);
+	if (new_start > log->end) lines += count_lines(data, (size_t)(new_start - log->end));
+	return lines;
+}
+
 size_t bssh_output_log_append(bssh_output_log_t *log, const uint8_t *data, size_t len,
                               uint64_t at_ms) {
 	if (!log || !data || !len) return 0;
@@ -56,6 +83,7 @@ size_t bssh_output_log_append(bssh_output_log_t *log, const uint8_t *data, size_
 	}
 
 	add_mark(log, log->end, at_ms);
+	log->start_line += lines_pushed_out(log, data, taken);
 
 	/* Only the tail of a write larger than the whole log can be kept. */
 	const size_t kept = taken < log->capacity ? taken : log->capacity;

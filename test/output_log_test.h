@@ -11,6 +11,7 @@ private slots:
 	void reads_back_what_was_written_across_the_wrap();
 	void says_gone_and_absent_apart();
 	void live_evicts_the_oldest_and_counts_what_the_client_lost();
+	void the_log_knows_the_line_it_starts_at();
 	void a_write_larger_than_the_log_keeps_its_tail();
 	void faithful_never_overwrites_what_the_client_lacks();
 	void an_ack_never_moves_backwards_or_past_the_end();

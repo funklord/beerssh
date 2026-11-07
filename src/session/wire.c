@@ -52,6 +52,14 @@ size_t bssh_wire_put_offset(uint8_t *out, size_t capacity, uint8_t kind, uint64_
 	return bssh_wire_put(out, capacity, kind, body, len);
 }
 
+size_t bssh_wire_put_lost(uint8_t *out, size_t capacity, uint64_t offset, uint64_t lines) {
+	uint8_t body[20];
+	const uint32_t first = situ_varint_put(body, 10, offset);
+	const uint32_t second = situ_varint_put(body + first, 10, lines);
+
+	return bssh_wire_put(out, capacity, BSSH_WIRE_LOST, body, first + second);
+}
+
 size_t bssh_wire_put_output(uint8_t *out, size_t capacity, uint64_t offset, const uint8_t *bytes,
                             size_t len) {
 	uint8_t head[10];
@@ -116,6 +124,16 @@ int bssh_wire_read_offset(const bssh_wire_frame_t *frame, uint64_t *offset) {
 	if (body_message(frame, &msg)) return -1;
 	if (situ_bssh_frame_offset_view(&msg, 0, frame->body_len, &view) != SITU_OK) return -1;
 	return situ_bssh_frame_offset_offset_get(view, offset) == SITU_OK ? 0 : -1;
+}
+
+int bssh_wire_read_lost(const bssh_wire_frame_t *frame, uint64_t *offset, uint64_t *lines) {
+	situ_msg_t msg;
+	situ_view_t view;
+
+	if (body_message(frame, &msg)) return -1;
+	if (situ_bssh_frame_lost_view(&msg, 0, frame->body_len, &view) != SITU_OK) return -1;
+	if (situ_bssh_frame_lost_offset_get(view, offset) != SITU_OK) return -1;
+	return situ_bssh_frame_lost_lines_get(view, lines) == SITU_OK ? 0 : -1;
 }
 
 int bssh_wire_read_output(const bssh_wire_frame_t *frame, uint64_t *offset, const uint8_t **bytes,

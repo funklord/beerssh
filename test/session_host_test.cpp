@@ -89,6 +89,7 @@ struct client_t {
 	QByteArray output;
 	uint64_t next = 0;
 	uint64_t lost_to = 0;
+	uint64_t lost_lines = 0;
 	bool saw_lost = false;
 	bool saw_exit = false;
 	int32_t exit_status = -1;
@@ -197,7 +198,8 @@ struct client_t {
 				if (offset != next) output.append("<<JUMP>>");
 				output.append(reinterpret_cast<const char *>(bytes), int(len));
 				next = offset + len;
-			} else if (frame.kind == BSSH_WIRE_LOST && !bssh_wire_read_offset(&frame, &offset)) {
+			} else if (frame.kind == BSSH_WIRE_LOST
+			           && !bssh_wire_read_lost(&frame, &offset, &lost_lines)) {
 				saw_lost = true;
 				lost_to = offset;
 				next = offset;
@@ -363,6 +365,15 @@ void session_host_test::a_client_too_far_behind_is_told_what_was_lost() {
 	QVERIFY(client.saw_lost);
 	QVERIFY(client.lost_to > 1000000);
 	QVERIFY(!client.output.contains("<<JUMP>>"));
+
+	/*
+	 * The shape of the hole, from a known program: the first line that arrived
+	 * says how many seq wrote before it. Its first bytes may be the end of a line,
+	 * and the shell's own echo of nothing adds none.
+	 */
+	const QList<QByteArray> arrived = client.output.split('\n');
+	QVERIFY(arrived.size() > 2);
+	QCOMPARE(client.lost_lines + 1, arrived.at(1).trimmed().toULongLong() - 1);
 }
 
 void session_host_test::a_faithful_mode_pauses_the_program_and_loses_nothing() {
@@ -469,6 +480,7 @@ namespace {
 struct received_t {
 	QByteArray text;
 	QList<uint64_t> gaps;
+	QList<uint64_t> lines;
 	int exits = 0;
 	int restarts = 0;
 	int caught_up = 0;
@@ -481,9 +493,10 @@ struct received_t {
 		events.output = [](void *self, const uint8_t *bytes, size_t len) {
 			static_cast<received_t *>(self)->text.append(reinterpret_cast<const char *>(bytes), int(len));
 		};
-		events.gap = [](void *self, uint64_t count) {
+		events.gap = [](void *self, uint64_t count, uint64_t lines) {
 			received_t *me = static_cast<received_t *>(self);
 			me->gaps.append(count);
+			me->lines.append(lines);
 			me->text.append('|');
 		};
 		events.exited = [](void *self, int32_t status) {
@@ -544,21 +557,39 @@ void session_host_test::the_client_never_joins_text_across_a_gap() {
 
 void session_host_test::the_client_is_told_what_a_lost_frame_took() {
 	received_t received;
-	received.output(0, "ab");
+	received.output(0, "a\n");
 
-	uint8_t frame[16];
-	const size_t len = bssh_wire_put_offset(frame, sizeof(frame), BSSH_WIRE_LOST, 100);
+	/* Line 40 at offset 100, and the client held one: 39 are gone. */
+	uint8_t frame[32];
+	const size_t len = bssh_wire_put_lost(frame, sizeof(frame), 100, 40);
 	QCOMPARE(bssh_session_client_feed(&received.client, frame, len), 0);
 	QCOMPARE(received.gaps, QList<uint64_t>{ 98 });
+	QCOMPARE(received.lines, QList<uint64_t>{ 39 });
 	QCOMPARE(received.client.next, uint64_t(100));
+	QCOMPARE(received.client.line, uint64_t(40));
 
 	/* Told again of what it already knows, it adds nothing. */
 	QCOMPARE(bssh_session_client_feed(&received.client, frame, len), 0);
 	QCOMPARE(received.gaps.size(), 1);
 
 	/* And output from there joins up with no second gap. */
-	received.output(100, "cd");
-	QCOMPARE(received.text, QByteArray("ab|cd"));
+	received.output(100, "c\n");
+	QCOMPARE(received.text, QByteArray("a\n|c\n"));
+
+	/* A second hole is measured from there, not from the start. */
+	const size_t again = bssh_wire_put_lost(frame, sizeof(frame), 200, 50);
+	QCOMPARE(bssh_session_client_feed(&received.client, frame, again), 0);
+	QCOMPARE(received.lines.last(), uint64_t(9));
+
+	/* Bytes seen twice are lines counted once. */
+	received.output(200, "d\ne\n");
+	received.output(200, "d\ne\nf\n");
+	QCOMPARE(received.client.line, uint64_t(53));
+
+	/* A host's line behind the client's own is no number to show. */
+	const size_t behind = bssh_wire_put_lost(frame, sizeof(frame), 300, 2);
+	QCOMPARE(bssh_session_client_feed(&received.client, frame, behind), 0);
+	QCOMPARE(received.lines.last(), uint64_t(0));
 }
 
 void session_host_test::the_client_drops_what_it_has_already_seen() {
@@ -816,6 +847,28 @@ void session_host_test::a_host_not_asked_is_not_probed() {
 	QVERIFY(kept.fake()->side_commands().filter(QStringLiteral("beerssh-session")).isEmpty());
 	QCOMPARE(kept.fake()->shells_opened(), 1);
 	QVERIFY(!kept.fake()->raw_channel());
+}
+
+void session_host_test::a_kept_session_shows_a_hole_as_lines() {
+	kept_t kept;
+	kept.answer_probe();
+	kept.host_says(kept.hello());
+
+	auto lost = [](uint64_t offset, uint64_t lines) {
+		uint8_t frame[32];
+		const size_t len = bssh_wire_put_lost(frame, sizeof(frame), offset, lines);
+		return QByteArray(reinterpret_cast<const char *>(frame), int(len));
+	};
+
+	kept.host_says(lost(1000, 37));
+	QVERIFY2(kept.screen().contains(QStringLiteral("[37 lines lost]")), qPrintable(kept.screen()));
+
+	kept.host_says(lost(1100, 38));
+	QVERIFY2(kept.screen().contains(QStringLiteral("[1 line lost]")), qPrintable(kept.screen()));
+
+	/* A full-screen program writes no newlines, and bytes are all there is. */
+	kept.host_says(lost(1200, 38));
+	QVERIFY2(kept.screen().contains(QStringLiteral("[100 bytes lost]")), qPrintable(kept.screen()));
 }
 
 void session_host_test::a_host_without_the_program_gets_a_plain_shell() {

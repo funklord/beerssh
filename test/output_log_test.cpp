@@ -76,6 +76,48 @@ void output_log_test::live_evicts_the_oldest_and_counts_what_the_client_lost() {
 	QCOMPARE(small.log.lost, uint64_t(3));
 }
 
+void output_log_test::the_log_knows_the_line_it_starts_at() {
+	/*
+	 * sec 5.6: a person can picture lines and not bytes. Counted as they leave,
+	 * since nothing else remembers them. small_log_t holds 8 bytes.
+	 */
+	small_log_t small;
+	small.append("a\nb\nc\nd\n");
+	QCOMPARE(small.log.start_line, uint64_t(0));
+
+	/* Pushes out "a\nb", so one newline has left. */
+	small.append("xyz");
+	QCOMPARE(small.log.start, uint64_t(3));
+	QCOMPARE(small.log.start_line, uint64_t(1));
+
+	/* 5 bytes out, "\nc\nd\n". */
+	small.append("12345");
+	QCOMPARE(small.log.start, uint64_t(8));
+	QCOMPARE(small.log.start_line, uint64_t(4));
+
+	/* A write larger than the log pushes out part of itself as well. */
+	small.append("p\nq\nr\ns\nt\nu\n");
+	QCOMPARE(small.log.start, uint64_t(20));
+	QCOMPARE(small.log.start_line, uint64_t(6));
+
+	/* Across the end of the ring: offsets 6 to 9 sit at both ends of it. */
+	small_log_t wrapped;
+	wrapped.append("abcdef\n\n");
+	wrapped.append("\n\nzzzz");
+	QCOMPARE(wrapped.log.start_line, uint64_t(0));
+	wrapped.append("wxyz");
+	QCOMPARE(wrapped.log.start, uint64_t(10));
+	QCOMPARE(wrapped.log.start_line, uint64_t(4));
+
+	/* In a faithful log too: acknowledged bytes leave, and they had lines. */
+	small_log_t faithful;
+	bssh_output_log_set_faithful(&faithful.log, 1);
+	faithful.append("a\nb\nc\nd\n");
+	bssh_output_log_ack(&faithful.log, 8);
+	faithful.append("e\nf\n");
+	QCOMPARE(faithful.log.start_line, uint64_t(2));
+}
+
 void output_log_test::a_write_larger_than_the_log_keeps_its_tail() {
 	small_log_t small;
 	small.append("ab");

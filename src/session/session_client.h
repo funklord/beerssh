@@ -31,8 +31,12 @@ extern "C" {
 typedef struct bssh_session_client_events {
 	void *context;
 	void (*output)(void *context, const uint8_t *bytes, size_t len);
-	/* `count` bytes are gone for good, and `next` now stands after them. */
-	void (*gap)(void *context, uint64_t count);
+	/*
+	 * `count` bytes are gone for good, and `next` now stands after them. `lines`
+	 * is how many newlines were among them, which is what a person can picture,
+	 * and 0 when that is not known or a full-screen program wrote none.
+	 */
+	void (*gap)(void *context, uint64_t count, uint64_t lines);
 	void (*exited)(void *context, int32_t status);
 	/* The session asked for is gone and this is a new one: a reboot, say. */
 	void (*restarted)(void *context);
@@ -43,6 +47,7 @@ typedef struct bssh_session_client_events {
 typedef struct bssh_session_client {
 	bssh_session_client_events_t events;
 	uint64_t next;
+	uint64_t line;   /* newlines before `next`, from the session's start */
 	uint64_t acked;
 	uint8_t in[BSSH_SESSION_CLIENT_BUFFER];
 	uint32_t in_used;

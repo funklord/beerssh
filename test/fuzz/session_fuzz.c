@@ -24,8 +24,9 @@ static void on_output(void *context, const uint8_t *bytes, size_t len) {
 	for (size_t i = 0; i < len; ++i) delivered += bytes[i];
 }
 
-static void on_gap(void *context, uint64_t count) {
+static void on_gap(void *context, uint64_t count, uint64_t lines) {
 	(void)context;
+	(void)lines;
 	assert(count > 0);
 }
 

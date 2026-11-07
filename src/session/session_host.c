@@ -256,8 +256,8 @@ static void fill_out(host_t *host) {
 	        bssh_output_log_read(&host->log, host->sent, chunk, sizeof(chunk), &len);
 
 	if (answer == BSSH_OUTPUT_LOG_GONE) {
-		host->out_used = bssh_wire_put_offset(host->out, sizeof(host->out), BSSH_WIRE_LOST,
-		                                      host->log.start);
+		host->out_used = bssh_wire_put_lost(host->out, sizeof(host->out), host->log.start,
+		                                    host->log.start_line);
 		host->sent = host->log.start;
 	} else if (answer == BSSH_OUTPUT_LOG_OK) {
 		host->out_used = bssh_wire_put_output(host->out, sizeof(host->out), host->sent, chunk, len);

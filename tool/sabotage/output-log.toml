@@ -78,3 +78,25 @@ file = "src/session/output_log.c"
 find = "if (log->marks[last].at_ms == at_ms) return;"
 replace = "(void)last;"
 expect = "marks_coalesce_and_lose_only_the_oldest_timing"
+
+# Counted after the copy, the newlines read are the new bytes and not the old.
+[[sabotage]]
+name = "lines are counted after they are overwritten"
+file = "src/session/output_log.c"
+find = "\tlog->start_line += lines_pushed_out(log, data, taken);\n\n\t/* Only the tail of a write larger than the whole log can be kept. */\n\tconst size_t kept = taken < log->capacity ? taken : log->capacity;\n\tcopy_in(log, log->end + (taken - kept), data + (taken - kept), kept);\n"
+replace = "\n\t/* Only the tail of a write larger than the whole log can be kept. */\n\tconst size_t kept = taken < log->capacity ? taken : log->capacity;\n\tcopy_in(log, log->end + (taken - kept), data + (taken - kept), kept);\n\tlog->start_line += lines_pushed_out(log, data, taken);\n"
+expect = "the_log_knows_the_line_it_starts_at"
+
+[[sabotage]]
+name = "a write larger than the log forgets its own lines"
+file = "src/session/output_log.c"
+find = "\tif (new_start > log->end) lines += count_lines(data, (size_t)(new_start - log->end));\n"
+replace = ""
+expect = "the_log_knows_the_line_it_starts_at"
+
+[[sabotage]]
+name = "the ring's wrap is not counted"
+file = "src/session/output_log.c"
+find = "count_lines(log->bytes + at, first) + count_lines(log->bytes, len - first);"
+replace = "count_lines(log->bytes + at, first);"
+expect = "the_log_knows_the_line_it_starts_at"

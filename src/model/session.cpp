@@ -579,9 +579,12 @@ void bssh_session::answer_resume_probe(const QByteArray &output) {
 			static_cast<bssh_session *>(self)->m_emulator->feed(
 			        QByteArray(reinterpret_cast<const char *>(bytes), int(len)));
 		};
-		events.gap = [](void *self, uint64_t count) {
+		events.gap = [](void *self, uint64_t count, uint64_t lines) {
+			const QString lost = lines == 1 ? QStringLiteral("1 line")
+			                     : lines ? QStringLiteral("%1 lines").arg(lines)
+			                             : QStringLiteral("%1 bytes").arg(count);
 			static_cast<bssh_session *>(self)->m_emulator->feed(
-			        QStringLiteral("\r\n[%1 bytes lost]\r\n").arg(count).toUtf8());
+			        QStringLiteral("\r\n[%1 lost]\r\n").arg(lost).toUtf8());
 		};
 
 		/* The channel ending says the rest, and it is that which is acted on. */

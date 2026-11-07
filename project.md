@@ -1525,9 +1525,17 @@ leaves its shell running, and a detached shell has no time limit. Closing sends 
 a shell on the server for ever. A client asking past the end of a session is told
 `restarted`, because after a reboot its offset belongs to a session that has gone,
 and quietly clamped, what the new shell wrote would be taken for bytes already
-seen and never drawn. In Serial and Eventual a replay must not answer terminal
-queries twice; the client has no such mode yet, so it attaches only from where it
-stopped.
+seen and never drawn. A replay must not answer terminal queries twice, which is
+what `caught_up` is for: a restart attaches from the start of the log and stays
+silent until it arrives.
+**A hole is told in lines**, because that is what a person can picture and the holder
+asked for its shape, not its size. The log counts newlines as they leave, and `lost`
+carries the line number at its offset; the client keeps its own, so what is missing
+is one subtraction, from the same numbering as `line_gaps.h`. The terminal says
+`[1234 lines lost]`, or bytes for a full-screen program, which writes no newlines.
+These are the program's lines and not screen rows. The gap map itself stays unused
+until a channel can deliver lines out of order: over one ordered stream a hole is
+never filled later, so there is only ever the one line to show.
 
 The host's first bytes on a link are a fixed hello. A length alone cannot tell
 this protocol from text: a banner from a chatty `.bashrc`, the fault that breaks

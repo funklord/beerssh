@@ -10,6 +10,13 @@ void bssh_session_client_init(bssh_session_client_t *client,
 	client->events = *events;
 }
 
+static uint64_t count_lines(const uint8_t *bytes, uint32_t len) {
+	uint64_t lines = 0;
+
+	for (uint32_t i = 0; i < len; ++i) lines += bytes[i] == '\n';
+	return lines;
+}
+
 static int take_output(bssh_session_client_t *client, const bssh_wire_frame_t *frame) {
 	uint64_t offset = 0;
 	const uint8_t *bytes = NULL;
@@ -18,7 +25,7 @@ static int take_output(bssh_session_client_t *client, const bssh_wire_frame_t *f
 	if (bssh_wire_read_output(frame, &offset, &bytes, &len)) return -1;
 
 	if (offset > client->next) {
-		client->events.gap(client->events.context, offset - client->next);
+		client->events.gap(client->events.context, offset - client->next, 0);
 		client->next = offset;
 	} else if (offset < client->next) {
 		const uint64_t seen = client->next - offset;
@@ -29,16 +36,22 @@ static int take_output(bssh_session_client_t *client, const bssh_wire_frame_t *f
 
 	if (len) client->events.output(client->events.context, bytes, len);
 	client->next += len;
+	client->line += count_lines(bytes, len);
 	return 0;
 }
 
 static int take_lost(bssh_session_client_t *client, const bssh_wire_frame_t *frame) {
 	uint64_t offset = 0;
+	uint64_t lines = 0;
 
-	if (bssh_wire_read_offset(frame, &offset)) return -1;
+	if (bssh_wire_read_lost(frame, &offset, &lines)) return -1;
 	if (offset > client->next) {
-		client->events.gap(client->events.context, offset - client->next);
+		/* Behind what was already counted is a host's mistake, and not a number. */
+		const uint64_t missing = lines > client->line ? lines - client->line : 0;
+
+		client->events.gap(client->events.context, offset - client->next, missing);
 		client->next = offset;
+		client->line = lines;
 	}
 	return 0;
 }
@@ -48,6 +61,7 @@ static int take_restarted(bssh_session_client_t *client, const bssh_wire_frame_t
 
 	if (bssh_wire_read_offset(frame, &offset)) return -1;
 	client->next = offset;
+	client->line = 0;
 	client->acked = offset;
 	client->events.restarted(client->events.context);
 	return 0;

@@ -62,6 +62,7 @@ typedef struct bssh_output_log {
 	uint64_t end;      /* offset the next byte will have */
 	uint64_t acked;    /* the client holds everything below this */
 	uint64_t lost;     /* bytes evicted before the client had them */
+	uint64_t start_line;  /* newlines before `start`: its line, from the session's start */
 	int faithful;
 } bssh_output_log_t;
 

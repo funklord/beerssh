@@ -22,7 +22,8 @@ varint_type bssh_varint {
 //   4 ack      client: I hold everything below this offset
 //   5 resize   client: the terminal's size
 //   6 exited   host: the program ended
-//   7 lost     host: nothing older than this offset is held
+//   7 lost     host: nothing older than this offset is held, and how many
+//              lines the session had written before it
 //   8 mode     client: live, eventual or serial
 //   9 hello    host: the first bytes on every link, a fixed text
 //  10 restarted host: not the session asked for; a new one, from this offset
@@ -48,6 +49,11 @@ struct bssh_frame_resize {
 
 struct bssh_frame_offset {
 	bssh_varint  offset;
+}
+
+struct bssh_frame_lost {
+	bssh_varint  offset;
+	bssh_varint  lines;
 }
 
 struct bssh_frame_exited {

@@ -28,6 +28,7 @@ private slots:
 	void the_client_delivers_output_split_anywhere();
 	void the_client_never_joins_text_across_a_gap();
 	void the_client_is_told_what_a_lost_frame_took();
+	void a_kept_session_shows_a_hole_as_lines();
 	void the_client_drops_what_it_has_already_seen();
 	void the_client_keeps_its_place_across_a_new_link();
 	void the_client_acknowledges_when_due_and_not_before();
