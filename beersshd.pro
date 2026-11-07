@@ -115,3 +115,8 @@ android {
     PKGCONFIG += libcrypto
     include($$PWD/libssh.pri)
 }
+
+# Header dependencies from the compiler: tool/qmake-deps.mk says why.
+QMAKE_CFLAGS   += -MMD -MP
+QMAKE_CXXFLAGS += -MMD -MP
+QMAKE_CLEAN    += *.d

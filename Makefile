@@ -725,11 +725,15 @@ define bssh_qmake
 	fi
 endef
 
+# A qmake Makefile's own dependencies are as old as its last qmake run; these are
+# the compiler's, from the build just before. See the fragment.
+QMAKE_SUBMAKE = -f Makefile -f $(CURDIR)/tool/qmake-deps.mk
+
 $(BUILD_DIR)/Makefile: beerssh.pro
 	$(call bssh_qmake,$(BUILD_DIR),beerssh.pro)
 
 $(TARGET): $(VTERM_LIB) $(LIBSSH_LIB) $(BUILD_DIR)/Makefile $(SOURCES) $(HEADERS)
-	$(MAKE) -C $(BUILD_DIR)
+	$(MAKE) -C $(BUILD_DIR) $(QMAKE_SUBMAKE)
 	cp $(BUILD_DIR)/$(TARGET) $(TARGET)
 
 run: $(TARGET)
@@ -747,7 +751,7 @@ $(SSHD_BUILD_DIR)/Makefile: beersshd.pro \
 	$(call bssh_qmake,$(SSHD_BUILD_DIR),beersshd.pro)
 
 $(SSHD_TARGET): $(LIBSSH_LIB) $(SSHD_BUILD_DIR)/Makefile $(SSHD_SOURCES)
-	$(MAKE) -C $(SSHD_BUILD_DIR)
+	$(MAKE) -C $(SSHD_BUILD_DIR) $(QMAKE_SUBMAKE)
 	cp $(SSHD_BUILD_DIR)/$(SSHD_TARGET) $(SSHD_TARGET)
 
 # Built in its own directory from its own .pro: the test binary needs the
@@ -763,7 +767,7 @@ $(TEST_BUILD_DIR)/Makefile: test/tests.pro \
 	$(call bssh_qmake,$(TEST_BUILD_DIR),test/tests.pro)
 
 $(TEST_BIN): $(VTERM_LIB) $(LIBSSH_LIB) $(TEST_BUILD_DIR)/Makefile $(SOURCES) $(HEADERS) $(wildcard test/*.cpp test/*.h)
-	$(MAKE) -C $(TEST_BUILD_DIR)
+	$(MAKE) -C $(TEST_BUILD_DIR) $(QMAKE_SUBMAKE)
 
 
 
@@ -1413,7 +1417,7 @@ android-fonts:
 AAB_NAME = $(notdir $(ANDROID_AAB))
 
 android-aab: $(ANDROID_BUILD_DIR)/Makefile $(ANDROID_ASSETS)
-	$(MAKE) -C $(ANDROID_BUILD_DIR) aab
+	$(MAKE) -C $(ANDROID_BUILD_DIR) $(QMAKE_SUBMAKE) aab
 	@src=$$(find $(ANDROID_BUILD_DIR)/android-build/build/outputs -name '*.aab' -print -quit); \
 	if [ -z "$$src" ]; then echo "android-aab: no .aab was produced" >&2; exit 1; fi; \
 	cp "$$src" $(ANDROID_BUILD_DIR)/$(AAB_NAME); \
@@ -1465,7 +1469,7 @@ ifneq ($(ANDROID_KEYSTORE),)
 	@# did first -- drops them silently and produces a DEBUG-SIGNED apk
 	@# under a message announcing a release build. Signed with the debug
 	@# key is the one packaging mistake nobody catches by looking.
-	$(MAKE) -C $(ANDROID_BUILD_DIR) apk_install_target
+	$(MAKE) -C $(ANDROID_BUILD_DIR) $(QMAKE_SUBMAKE) apk_install_target
 	@# `apk` here is QT'S generated target, not one of ours -- ours is
 	@# `android` now, and this line reads Qt's Makefile to lift the
 	@# androiddeployqt command out of it.
@@ -1486,7 +1490,7 @@ ifneq ($(ANDROID_KEYSTORE),)
 	if [ -z "$$deploy" ]; then echo "android: cannot find Qt's deploy command" >&2; exit 1; fi; \
 	$$deploy --release --sign $(ANDROID_KEYSTORE) $(ANDROID_KEY_ALIAS)
 else
-	$(MAKE) -C $(ANDROID_BUILD_DIR) apk
+	$(MAKE) -C $(ANDROID_BUILD_DIR) $(QMAKE_SUBMAKE) apk
 	@echo "android: DEBUG-SIGNED. Installs anywhere, and is not a release artifact:"
 	@echo "android:   Play will reject it, and it conflicts with a real build's signature."
 	@echo "android:   Set ANDROID_KEYSTORE and ANDROID_KEY_ALIAS for a signed release build."

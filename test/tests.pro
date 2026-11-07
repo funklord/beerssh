@@ -316,3 +316,8 @@ HEADERS += \
     ../src/ui/terminal_accessible.h \
     ../src/ui/theme.h \
     ../src/ui/terminal_view.h
+
+# Header dependencies from the compiler: tool/qmake-deps.mk says why.
+QMAKE_CFLAGS   += -MMD -MP
+QMAKE_CXXFLAGS += -MMD -MP
+QMAKE_CLEAN    += *.d
