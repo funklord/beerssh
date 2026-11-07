@@ -455,6 +455,12 @@ public:
 		return !env.checkAndClearExceptions();
 	}
 
+	void free_surface_wait() override {
+		QJniObject::callStaticMethod<void>("se/vibes/beerssh/BsshLifecycle", "release", "()V");
+		QJniEnvironment env;
+		env.checkAndClearExceptions();
+	}
+
 	void set_session_count(int connected, int connecting, int waiting, int asking) override {
 		m_status = session_status(connected, connecting, waiting, asking);
 

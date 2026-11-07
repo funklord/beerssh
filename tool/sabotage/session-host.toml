@@ -591,3 +591,11 @@ file = "src/model/session_registry.cpp"
 find = "\t\tif (session->profile().keep_awake && on_its_way(session) && !session->asking())\n"
 replace = "\t\tif (session->profile().keep_awake && on_its_way(session))\n"
 expect = "a_session_stopped_on_a_question_is_not_connecting"
+
+# sec 5.6: Qt's untimed wait for a surface, freed by the watchdog.
+[[sabotage]]
+name = "the watchdog never frees a surface wait"
+file = "src/hang_watchdog.cpp"
+find = "\treturn idle_ms >= BSSH_HANG_SURFACE_MS;\n"
+replace = "\treturn false;\n"
+expect = "a_surface_wait_is_freed_long_before_the_dump"

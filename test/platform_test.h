@@ -34,6 +34,7 @@ private slots:
 	 * state, not Qt's state sampled by the heartbeat, which never hears a
 	 * resume the Qt thread wedged in.
 	 */
+	void a_surface_wait_is_freed_long_before_the_dump();
 	void a_loop_silent_in_the_background_is_a_hang();
 
 	/* The platform is asked only when keeping awake changes its answer. */

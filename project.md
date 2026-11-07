@@ -797,7 +797,8 @@ took the clean path (service to 0, front door). The one captured instance
 was the pre-existing hung process. The likely trigger is the
 `eglSurface()` deadlock on SURFACE CREATION (foreground-resume, fold,
 rotate) rather than on the pane rebuild, which creates no Surface -- and a
-fold on this device is a hardware hinge no script can drive. Two live
+fold on this device is a hardware hinge no script can drive (an emulator can
+stand in for one: §5.6, `tool/check-surface-wait.sh`). Two live
 observations point the same way: a backgrounded beerssh spins
 `makeCurrent(): no EGLSurface, likely Surface destroyed by Android`
 roughly every 14s (the render thread stays hot while not visible, which is
@@ -1477,7 +1478,7 @@ app in the background, signed in again 2 s later with no input; the app force-st
 during a job, then the normal host list, one tap and the password, the same shell
 with its whole screen and the line the job wrote while no app existed.
 
-**Open fault, found on the Fold the same day, not reproduced.** Off USB, with the app
+**A fault found on the Fold the same day; cause found and fixed 2026-11-07, below.** Off USB, with the app
 25 minutes in the background and the holder in another app, a connection killed from
 the server was not redialled. The phone answered the FIN within 100 ms and held no
 socket to the server afterwards, so the worker saw the drop, but 12 minutes later it
@@ -1499,17 +1500,56 @@ Qt's event loop does run in the background, as `background_running` promises, an
 §5.1's "Qt suspends its event loop on background" no longer holds. Whether the 19:01
 visit is what freed it cannot now be shown: logcat kept nothing before 06:41 and the
 server's log went with its container.
-The best candidate is `QAndroidPlatformOpenGLWindow::eglSurface()`. Every Android
-window draws through GL (`QRhiBackingStore`); suspending destroys the surface and
+**The cause is Qt's wait for a surface, reproduced on an emulator the same day.** Every
+Android window draws through GL (`QRhiBackingStore`); suspending destroys the surface and
 clears `m_androidSurfaceCreated`; the early return for a suspended app needs that flag
 true, so anything reaching `makeCurrent()` then calls `createSurface()` and waits on
 `m_surfaceWaitCondition` with no timeout, for a surface a stopped activity will not
-get until it is shown again. That is the family §5.1 suspects, and a candidate only.
+get until it is shown again. **What gets a paint there is a stale state.** Android's
+thread queues the app's states and Qt's applies them in turn. Applying `Suspended`
+destroys the surface and flushes the window system events inside that handler, and the
+flush applies an `Active` or `Inactive` queued behind it from a moment's resume. To Qt
+the window is exposed again, so it paints, while the activity is already stopped. The
+`Suspended` that would correct it is queued behind a thread that has stopped. The stack,
+symbolised, from `debuggerd -b`:
+
+    QWaitCondition::wait  <- qtforandroid plugin  <- QOpenGLContext::makeCurrent
+    <- QRhi::beginFrame <- QPlatformBackingStore::rhiFlush <- QBackingStore::flush
+    <- QWidgetRepaintManager::sync <- processExposeEvent <- flushWindowSystemEvents
+    <- qtforandroid plugin <- applicationStateChanged <- setApplicationState
+    <- flushWindowSystemEvents <- qtforandroid plugin <- applicationStateChanged
+
+Device asleep, activity `STOPPED`, Android's main thread idle in its looper, Qt's main
+thread in `futex_wait_queue` with its switch count still: the Fold's fault, and bringing
+the app to the front freed it, as the Fold's visit seems to have. It took two things the
+single tries below did not have together: **steady output**, since a quiet window has
+nothing to paint, and **the whole of a fold at once**: state to `CLOSED`, screen off,
+size and density to the cover's, then back, from 0 to 2 s apart. It blocked at cycle 12
+of the first run. The Fold's own stack is still not captured, so the identity with this
+stack rests on the same wait channel, state and recovery.
+**The fix frees the wait; it does not avoid it.** The wait ends on any valid surface, so
+when the hang watchdog finds the loop silent for 4 s it calls
+`BsshLifecycle.release()`, which, if the activity is stopped, hands each Qt window a
+64x64 `ImageReader` surface nobody sees. The queued `Suspended` then takes it away, and
+starting again brings the real one. Rejected: dropping expose and update events while
+stopped, which leaves Qt's repaint bookkeeping waiting for a request that was swallowed,
+and cannot catch a stop landing just after its check; a patched platform plugin, which
+is Qt's file in Qt's kit. `QtWindow` is package private, so the feed is a class in Qt's
+package and a Qt that changes it fails the build. **Measured with the fix:** 45 cycles,
+no block, freed 3 times (each a block before), same process, the screen still updating
+after. `tool/check-surface-wait.sh`, on the `bssh_fold` AVD ("7.6in Foldable", API 36).
+A link dropped during such a stall, the original symptom, was not itself run: it rests
+on the loop handling a drop once freed, which is measured. **Upstream:** the wait wants a
+timeout or the state check wants to survive `destroySurface()`. Not reported to Qt.
+**The emulator's own `fold` is not a fold**: the state goes to `CLOSED` and the app sees
+nothing, display size included, so 8 cycles of it alone proved nothing. The size and
+density come from `wm`. Nor is a panel swap the same as `wm size`, which is why this says
+reproduced and not identical.
 **Tried on the API 36 emulator, none blocked:** Home, screen off, display size, density
 and rotation changes under a backgrounded app (Qt's display listener is off from
 `onPause`), and 36 resume-then-Home flickers from 0 to 800 ms apart, each with the main
 thread read after. The emulator did print the `makeCurrent(): no EGLSurface` line at
-each Home, so that path is live. The Fold's hinge is the case left.
+each Home, so that path is live. Each of these was one change on a quiet window.
 **A question in the background did not wedge it either.** At about 09:30 on 2026-11-07,
 locked and on battery, the same process dialled a server with a new host key and stopped
 before authenticating: sshd logged its login grace running out, and with the old key

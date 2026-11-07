@@ -1192,6 +1192,7 @@ check-fonts:
 # earned -- so an absent SDK is an error with the reason named, and
 # whoever has no SDK simply does not run this target.
 ANDROID_JAVA_SRC = $(wildcard android/src/se/vibes/beerssh/*.java \
+                              android/src/org/qtproject/qt/android/*.java \
                               android-sshd/src/se/vibes/beersshd/*.java)
 
 check-java:

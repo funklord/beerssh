@@ -77,6 +77,14 @@ void platform_test::the_hang_gate_fires_past_the_threshold() {
 	QVERIFY(!bssh_hang_should_dump(0, threshold));
 }
 
+void platform_test::a_surface_wait_is_freed_long_before_the_dump() {
+	QVERIFY(!bssh_hang_should_free_surface(0));
+	QVERIFY2(!bssh_hang_should_free_surface(1999), "a late beat is not silence");
+	QVERIFY(bssh_hang_should_free_surface(4000));
+	QVERIFY2(bssh_hang_should_free_surface(29999),
+	          "a thread still wedged went without its cure until the dump");
+}
+
 void platform_test::a_loop_silent_in_the_background_is_a_hang() {
 	const qint64 threshold = 30000;
 	bssh_hang_state state;

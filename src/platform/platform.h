@@ -264,6 +264,13 @@ public:
 	virtual bool watch_foreground(std::function<void(bool foreground)> changed) = 0;
 
 	/*
+	 * The main loop has gone silent: if the window is stopped, free the
+	 * main thread from waiting for a surface (sec 5.6). From the hang
+	 * watchdog's thread. Only Android has such a wait.
+	 */
+	virtual void free_surface_wait() {}
+
+	/*
 	 * Reconnecting, reconnect failed, a bell in an unfocused pane.
 	 *
 	 * Split public-from-virtual the way has_biometric() and

@@ -33,6 +33,13 @@ const qint64 BSSH_HANG_THRESHOLD_MS = 30000;
 const int BSSH_HANG_BEAT_MS = 1000;
 const int BSSH_HANG_POLL_MS = 2000;
 
+/*
+ * Long past anything a healthy loop does, and short against the time a session
+ * has to notice its link dropped. A false alarm costs nothing: the surface goes
+ * only to a stopped window, which has none.
+ */
+const qint64 BSSH_HANG_SURFACE_MS = 4000;
+
 /* The one the running app uses; see bssh_hang_state for who writes it. */
 bssh_hang_state g_state;
 
@@ -63,6 +70,10 @@ void note_silence(const char *what, qint64 idle_ms, bool foreground) {
 }
 
 } /* namespace */
+
+bool bssh_hang_should_free_surface(qint64 idle_ms) {
+	return idle_ms >= BSSH_HANG_SURFACE_MS;
+}
 
 bool bssh_hang_should_dump(qint64 idle_ms, qint64 threshold_ms) {
 	return idle_ms >= threshold_ms;
@@ -122,8 +133,9 @@ void bssh_start_hang_watchdog() {
 	/*
 	 * The watchdog. Detached and never joined: it is meant to outlive
 	 * every other thread and stop only when the process does, which is
-	 * its termination condition. It takes no lock and touches no Qt
-	 * object, so a wedged main thread cannot wedge it too.
+	 * its termination condition. It touches no Qt object but the JNI call
+	 * that frees a surface wait, and that holds no lock across the wait,
+	 * so a wedged main thread cannot wedge it too.
 	 */
 	std::thread([] {
 		bool dumped = false;
@@ -132,6 +144,9 @@ void bssh_start_hang_watchdog() {
 			std::this_thread::sleep_for(std::chrono::milliseconds(BSSH_HANG_POLL_MS));
 
 			const qint64 now = now_ms();
+			if (bssh_hang_should_free_surface(g_state.idle_ms(now)))
+				bssh_platform::instance()->free_surface_wait();
+
 			if (!g_state.should_dump(now, BSSH_HANG_THRESHOLD_MS)) {
 				/* Recovered, or never stalled: re-arm for the next time. */
 				if (dumped) {

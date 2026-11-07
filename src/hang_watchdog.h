@@ -37,6 +37,14 @@
 bool bssh_hang_should_dump(qint64 idle_ms, qint64 threshold_ms);
 
 /*
+ * Whether the loop has been silent long enough to try freeing it from Qt's
+ * wait for a surface (sec 5.6). Well before the dump, and asked again at every
+ * poll, because this one is a cure and not a report: the main thread is what
+ * handles a dropped link, and it is doing nothing until this works.
+ */
+bool bssh_hang_should_free_surface(qint64 idle_ms);
+
+/*
  * The two facts the watchdog reads, written from two threads and read
  * from a third, so atomics rather than a lock: a lock is the one thing a
  * watchdog must not take, since the wedged thread could hold it.
