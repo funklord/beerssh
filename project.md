@@ -1362,7 +1362,8 @@ holds a socket open simply keeps holding it. What still needs deciding is what
   against a default.
 - **Desktop notifications** (via `QSystemTrayIcon`, or the platform's native
   service) carry the same events the Android notification does: reconnecting,
-  reconnect failed, bell rang in an unfocused pane.
+  reconnect failed, bell rang in an unfocused pane. And a fourth since the Fold:
+  a session stopped on a question nobody is looking at (*Waiting for you*).
   **[BUILT 2026-09-20], and what was there before was the whole feature
   except the part that runs.** `bssh_platform::notify()` was declared with
   those three events written beside it as a comment, implemented on desktop
@@ -1509,6 +1510,14 @@ and rotation changes under a backgrounded app (Qt's display listener is off from
 `onPause`), and 36 resume-then-Home flickers from 0 to 800 ms apart, each with the main
 thread read after. The emulator did print the `makeCurrent(): no EGLSurface` line at
 each Home, so that path is live. The Fold's hinge is the case left.
+**A question in the background did not wedge it either.** At about 09:30 on 2026-11-07,
+locked and on battery, the same process dialled a server with a new host key and stopped
+before authenticating: sshd logged its login grace running out, and with the old key
+still in the phone's known_hosts that is the changed-key dialog, though nobody has seen
+it on screen. The main thread stayed in `poll` for the next half hour. What that did show:
+the notification read "1 session connecting" with nothing happening and nothing to send
+anyone to the app. Now it reads "1 session waiting for you", and a *Waiting for you*
+notification says what is asked.
 **The stack can now be had on an unrooted phone**, which is what §5.1 said was owed:
 BeerSSH is a debug build, so `run-as` can start the NDK's `lldb-server gdbserver --attach`
 from the app's directory, with `adb forward` to the host's `lldb`. lldb has no modules
@@ -1672,6 +1681,17 @@ The probe can also report the host's fuzznet identity. It arrives over a connect
 whose host key was verified, so it could answer first contact without a pairing
 card or TOFU, offering to save the host as a fuzznet shell. That widens what an SSH
 host key vouches for, so it is the holder's call, and open.
+
+**Since then, 2026-11-07, at fuzznet `55fde9e`** (its secs 932, 935): the holder said
+yes to the session frame, so the terminal has its transport. 33 bytes a frame against
+144, each frame still judged against the capability, so a host revoked mid-session is
+refused at its next. Both ends speak unasked: `fzn_daemon_say` and the extension's
+`said` on beersshd's side, `fzn_device_say`, `.heard` and `fzn_device_listen` on the
+client's; `fzn_udp_bearer` makes a bearer of a UDP socket, so `device/` is what a client
+on a host links. Each word goes once and resending is ours: fuzznet built no stream on
+purpose. State sync in the mosh manner wants nothing more; a byte stream wants resends.
+**Which of those two BeerSSH wants is what decides whether fuzznet needs anything else**,
+and §5.6's frames are a byte stream. Nothing here has to change yet.
 
 **Where fuzznet stands on this, from its session, 2026-11-06** (its sec 918, 923-925; a
 report, and the decisions in it are the holder's). A one-shot command needs nothing

@@ -68,6 +68,24 @@ bssh_session::bssh_session(const bssh_profile_t &profile, QObject *parent)
 	 */
 	m_emulator->set_image_budget(qint64(bssh_app_settings().image_history_mb()) * 1024 * 1024);
 
+	/*
+	 * Here and not beside the transport's wiring, which runs for each
+	 * connection. Ahead of any window's handler too: those sit in a dialog's
+	 * exec(), and the news has to be out before that starts.
+	 */
+	connect(this, &bssh_session::needs_password, this, [this] {
+		note_asking(QStringLiteral("asks for a password"));
+	});
+	connect(this, &bssh_session::needs_key_passphrase, this, [this] {
+		note_asking(QStringLiteral("asks for the key's passphrase"));
+	});
+	connect(this, &bssh_session::host_key_unknown, this, [this] {
+		note_asking(QStringLiteral("its host key is new"));
+	});
+	connect(this, &bssh_session::host_key_changed, this, [this] {
+		note_asking(QStringLiteral("its host key has changed"));
+	});
+
 	connect(m_emulator, &bssh_emulator::bell, this, [this] {
 		/*
 		 * A host whose preset silences the bell (sec 10.2) -- a noisy
@@ -452,6 +470,11 @@ void bssh_session::wire_transport() {
 
 	connect(m_transport, &bssh_ssh_session::state_changed,
 	         this, [this](bssh_ssh_session::state_t state) {
+		/* Whatever was asked, this connection no longer waits for it. */
+		if (state == bssh_ssh_session::CONNECTED || state == bssh_ssh_session::DISCONNECTED
+		    || state == bssh_ssh_session::FAILED)
+			m_asking = false;
+
 		if (state == bssh_ssh_session::CONNECTED) {
 			/*
 			 * Reached without a password ever being asked for means the
@@ -772,6 +795,7 @@ void bssh_session::reconnect() {
  * the same answer a refusal gets.
  */
 void bssh_session::supply_password(const QString &password) {
+	note_answered();
 	if (was_refused(password)) {
 		m_password_refused = true;
 		emit needs_password();
@@ -793,10 +817,24 @@ QByteArray bssh_session::refused_key(const QString &password) const {
 }
 
 void bssh_session::supply_key_passphrase(const QString &passphrase) {
+	note_answered();
 	if (m_transport) m_transport->supply_key_passphrase(passphrase);
 }
 
+void bssh_session::note_asking(const QString &what) {
+	m_asking = true;
+	emit state_changed();
+	if (!m_on_screen) emit asking_while_away(what);
+}
+
+void bssh_session::note_answered() {
+	if (!m_asking) return;
+	m_asking = false;
+	emit state_changed();
+}
+
 void bssh_session::accept_host_key() {
+	note_answered();
 	if (m_transport) m_transport->accept_host_key();
 }
 

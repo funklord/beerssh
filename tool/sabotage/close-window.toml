@@ -53,7 +53,7 @@ expect = "a_window_kept_running_comes_back_from_the_tray"
 [[sabotage]]
 name = "residency goes with the last live session, a window still away"
 file = "src/ui/main_window.cpp"
-find = "\tplatform->set_keep_alive(connected + connecting + waiting > 0 || hidden);\n"
+find = "\tplatform->set_keep_alive(connected + connecting + waiting + asking > 0 || hidden);\n"
 replace = "\tplatform->set_keep_alive(connected + connecting + waiting > 0);\n"
 expect = "a_window_kept_running_comes_back_from_the_tray"
 

@@ -86,14 +86,16 @@ public:
 	 * out its backoff included. Waiting is a session out of attempts: nothing
 	 * dials until the network changes, which may be never, so a server that
 	 * went away read "1 session connecting" for six hours on the Fold,
-	 * 2026-11-06.
+	 * 2026-11-06. Asking is a session stopped on a question for a person,
+	 * bssh_session::asking(), and is not counted as connecting.
 	 */
 	int connected_count() const;
 	int connecting_count() const;
 	int waiting_count() const;
+	int asking_count() const;
 
 	/*
-	 * Any of those three: a session that ending the process would lose.
+	 * Any of those four: a session that ending the process would lose.
 	 * live_count() is not this, being 0 between two reconnect attempts,
 	 * so an upgrade's old program quit with the session it could not give.
 	 */

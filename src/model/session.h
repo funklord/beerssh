@@ -127,6 +127,14 @@ public:
 	bool is_on_screen() const { return m_on_screen; }
 
 	/*
+	 * Stopped on a question only a person can answer: a host key, a password,
+	 * a passphrase. It is not connecting, because nothing happens until
+	 * somebody looks: the Fold read "1 session connecting" for an hour on
+	 * 2026-11-07, at a key prompt on a locked phone.
+	 */
+	bool asking() const { return m_asking; }
+
+	/*
 	 * True when the remote shell ended by itself rather than the
 	 * connection dropping. Reconnecting one of these reopens a shell the
 	 * user deliberately exited, which is the difference between a
@@ -351,6 +359,9 @@ signals:
 	 */
 	void bell_while_away();
 
+	/* Asked a person something nobody is looking at; `what` says what. */
+	void asking_while_away(const QString &what);
+
 	void title_changed();
 	void state_changed();
 
@@ -432,6 +443,8 @@ private:
 	enum resume_t { RESUME_NONE, RESUME_PROBING, RESUME_ACTIVE, RESUME_REFUSED };
 	bool wants_resume() const;
 	void note_shell_not_kept();
+	void note_asking(const QString &what);
+	void note_answered();
 	void open_remote_shell();
 	void answer_resume_probe(const QByteArray &output);
 	void take_resume_bytes(const QByteArray &bytes);
@@ -463,6 +476,7 @@ private:
 	bool m_used_key_auth;
 	bool m_password_requested;
 	bool m_on_screen;
+	bool m_asking = false;
 	int m_cols;
 	int m_rows;
 	/* What the remote was last told, and the holds on telling it. */

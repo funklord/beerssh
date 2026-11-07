@@ -527,3 +527,60 @@ file = "src/model/session.cpp"
 find = "const QString lost = lines == 1 ? QStringLiteral(\"1 line\")\n\t\t\t                     : lines ? QStringLiteral(\"%1 lines\").arg(lines)\n\t\t\t                             : QStringLiteral(\"%1 bytes\").arg(count);"
 replace = "Q_UNUSED(lines);\n\t\t\tconst QString lost = QStringLiteral(\"%1 bytes\").arg(count);"
 expect = "a_kept_session_shows_a_hole_as_lines"
+
+# The Fold, 2026-11-07: "1 session connecting" for an hour at a key prompt.
+[[sabotage]]
+name = "a session stopped on a question still reads as connecting"
+file = "src/model/session_registry.cpp"
+find = "\t\tif (session->state() != bssh_ssh_session::CONNECTED && !session->asking()\n"
+replace = "\t\tif (session->state() != bssh_ssh_session::CONNECTED\n"
+expect = "a_session_stopped_on_a_question_is_not_connecting"
+
+[[sabotage]]
+name = "a question nobody is looking at goes unannounced"
+file = "src/model/session.cpp"
+find = "\tif (!m_on_screen) emit asking_while_away(what);\n"
+replace = ""
+expect = "a_session_stopped_on_a_question_is_not_connecting"
+
+[[sabotage]]
+name = "a question in front of the user is announced too"
+file = "src/model/session.cpp"
+find = "\tif (!m_on_screen) emit asking_while_away(what);\n"
+replace = "\temit asking_while_away(what);\n"
+expect = "a_session_stopped_on_a_question_is_not_connecting"
+
+[[sabotage]]
+name = "an answered password still counts as asking"
+file = "src/model/session.cpp"
+find = "void bssh_session::supply_password(const QString &password) {\n\tnote_answered();\n"
+replace = "void bssh_session::supply_password(const QString &password) {\n"
+expect = "a_session_stopped_on_a_question_is_not_connecting"
+
+[[sabotage]]
+name = "an accepted host key still counts as asking"
+file = "src/model/session.cpp"
+find = "void bssh_session::accept_host_key() {\n\tnote_answered();\n"
+replace = "void bssh_session::accept_host_key() {\n"
+expect = "a_session_stopped_on_a_question_is_not_connecting"
+
+[[sabotage]]
+name = "an answered passphrase still counts as asking"
+file = "src/model/session.cpp"
+find = "void bssh_session::supply_key_passphrase(const QString &passphrase) {\n\tnote_answered();\n"
+replace = "void bssh_session::supply_key_passphrase(const QString &passphrase) {\n"
+expect = "a_session_stopped_on_a_question_is_not_connecting"
+
+[[sabotage]]
+name = "a connection that ended leaves the question standing"
+file = "src/model/session.cpp"
+find = "\t\t\tm_asking = false;\n"
+replace = "\t\t\t;\n"
+expect = "a_session_stopped_on_a_question_is_not_connecting"
+
+[[sabotage]]
+name = "the status never says a session is waiting for you"
+file = "src/platform/platform.cpp"
+find = "\tif (asking > 0) add(asking, QStringLiteral(\"waiting for you\"));\n"
+replace = ""
+expect = "session_status_says_what_is_connected_and_what_is_not"

@@ -241,15 +241,15 @@ public:
 
 	/*
 	 * How many sessions are connected, how many are on their way there,
-	 * and how many are out of attempts and waiting for the network to
-	 * change -- notification text on Android, the tray tooltip on desktop.
+	 * how many are out of attempts and waiting for the network to change,
+	 * and how many are stopped on a question -- notification text on Android, the tray tooltip on desktop.
 	 * Taken from the session registry, never from the view state: panes
 	 * and tabs come and go, sessions are what matter (sec 5.2).
 	 */
-	virtual void set_session_count(int connected, int connecting, int waiting) = 0;
+	virtual void set_session_count(int connected, int connecting, int waiting, int asking) = 0;
 
 	/* The words for those counts, the same on every platform. */
-	static QString session_status(int connected, int connecting, int waiting);
+	static QString session_status(int connected, int connecting, int waiting, int asking = 0);
 
 	/*
 	 * Reports, through `changed`, each time the app's window comes in front

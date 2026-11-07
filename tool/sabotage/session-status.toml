@@ -91,7 +91,7 @@ expect = "session_status_says_what_is_connected_and_what_is_not"
 [[sabotage]]
 name = "residency forgets a session out of attempts"
 file = "src/ui/main_window.cpp"
-find = "\tplatform->set_keep_alive(connected + connecting + waiting > 0 || hidden);\n"
+find = "\tplatform->set_keep_alive(connected + connecting + waiting + asking > 0 || hidden);\n"
 replace = "\tplatform->set_keep_alive(connected + connecting > 0 || hidden);\n"
 expect = "a_session_out_of_attempts_keeps_the_process_resident"
 
@@ -100,6 +100,6 @@ expect = "a_session_out_of_attempts_keeps_the_process_resident"
 [[sabotage]]
 name = "unfinished means live"
 file = "src/model/session_registry.cpp"
-find = "\treturn connected_count() + connecting_count() + waiting_count() > 0;\n"
+find = "\treturn connected_count() + connecting_count() + waiting_count() + asking_count() > 0;\n"
 replace = "\treturn live_count() > 0;\n"
 expect = "only_a_connected_session_counts_as_connected"

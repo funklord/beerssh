@@ -455,8 +455,8 @@ public:
 		return !env.checkAndClearExceptions();
 	}
 
-	void set_session_count(int connected, int connecting, int waiting) override {
-		m_status = session_status(connected, connecting, waiting);
+	void set_session_count(int connected, int connecting, int waiting, int asking) override {
+		m_status = session_status(connected, connecting, waiting, asking);
 
 		/* Nothing to update while no service is running. */
 		if (!m_keep_alive) return;

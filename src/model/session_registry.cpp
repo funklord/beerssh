@@ -224,6 +224,16 @@ void bssh_session_registry::attach(bssh_session *session) {
 		                .arg(session->title()));
 	});
 
+	/*
+	 * A fourth, added on the Fold: the session needs a person, and the app is
+	 * away. Nothing else would ever send them to it.
+	 */
+	connect(session, &bssh_session::asking_while_away, this, [session](const QString &what) {
+		bssh_platform::instance()->notify(
+		        QStringLiteral("Waiting for you"),
+		        QStringLiteral("%1 -- %2").arg(session->title()).arg(what));
+	});
+
 	connect(session, &bssh_session::bell_while_away, this, [session] {
 		bssh_platform::instance()->notify(
 		        QStringLiteral("Bell"),
@@ -328,9 +338,19 @@ int bssh_session_registry::connected_count() const {
 int bssh_session_registry::connecting_count() const {
 	int connecting = 0;
 	for (bssh_session *session : m_sessions) {
-		if (session->state() != bssh_ssh_session::CONNECTED && on_its_way(session)) ++connecting;
+		if (session->state() != bssh_ssh_session::CONNECTED && !session->asking()
+		    && on_its_way(session))
+			++connecting;
 	}
 	return connecting;
+}
+
+int bssh_session_registry::asking_count() const {
+	int asking = 0;
+	for (bssh_session *session : m_sessions) {
+		if (session->asking()) ++asking;
+	}
+	return asking;
 }
 
 int bssh_session_registry::waiting_count() const {
@@ -343,7 +363,7 @@ int bssh_session_registry::waiting_count() const {
 }
 
 bool bssh_session_registry::has_unfinished_sessions() const {
-	return connected_count() + connecting_count() + waiting_count() > 0;
+	return connected_count() + connecting_count() + waiting_count() + asking_count() > 0;
 }
 
 bssh_session *bssh_session_registry::at(int index) const {

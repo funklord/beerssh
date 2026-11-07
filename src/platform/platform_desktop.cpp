@@ -251,10 +251,10 @@ public:
 		Q_UNUSED(hide);
 	}
 
-	void set_session_count(int connected, int connecting, int waiting) override {
+	void set_session_count(int connected, int connecting, int waiting, int asking) override {
 		if (!m_tray) return;
 
-		m_tray->setToolTip(QStringLiteral("BeerSSH -- ") + session_status(connected, connecting, waiting));
+		m_tray->setToolTip(QStringLiteral("BeerSSH -- ") + session_status(connected, connecting, waiting, asking));
 	}
 
 	void platform_notify(const QString &title, const QString &body) override {

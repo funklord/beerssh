@@ -76,7 +76,7 @@ bssh_platform::~bssh_platform() {
  */
 static int bssh_forced_touch = -1;
 
-QString bssh_platform::session_status(int connected, int connecting, int waiting) {
+QString bssh_platform::session_status(int connected, int connecting, int waiting, int asking) {
 	QStringList parts;
 
 	/* The first count says what is being counted, the rest only how many. */
@@ -86,7 +86,8 @@ QString bssh_platform::session_status(int connected, int connecting, int waiting
 		else parts.append(QStringLiteral("%1 sessions %2").arg(count).arg(what));
 	};
 
-	if (connected > 0 || connecting + waiting == 0) add(connected, QStringLiteral("connected"));
+	if (connected > 0 || connecting + waiting + asking == 0) add(connected, QStringLiteral("connected"));
+	if (asking > 0) add(asking, QStringLiteral("waiting for you"));
 	if (connecting > 0) add(connecting, QStringLiteral("connecting"));
 	if (waiting > 0) add(waiting, QStringLiteral("waiting to reconnect"));
 	return parts.join(QStringLiteral(", "));

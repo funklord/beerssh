@@ -1085,6 +1085,86 @@ void session_registry_test::the_window_title_expands_what_the_session_knows() {
 }
 
 /*
+ * The Fold, 2026-11-07: a reconnect reached a server with a new key on a locked
+ * phone and read "1 session connecting" for an hour with nothing happening.
+ */
+void session_registry_test::a_session_stopped_on_a_question_is_not_connecting() {
+	QList<bssh_fake_ssh_session *> fakes;
+	bssh_ssh_session::set_factory([&fakes](QObject *parent) -> bssh_ssh_session * {
+		bssh_fake_ssh_session *fake = new bssh_fake_ssh_session(parent);
+		fakes.append(fake);
+		return fake;
+	});
+
+	QStringList told;
+	QObject sink;
+	QObject::connect(bssh_platform::instance(), &bssh_platform::notified, &sink,
+	                  [&told](const QString &title, const QString &body) {
+		told.append(title + QStringLiteral(": ") + body);
+	});
+
+	bssh_session_registry registry;
+	bssh_session *session = registry.create(profile_for(QStringLiteral("kept"), QStringLiteral("kept.example")));
+	QList<int> asking_when_told;
+	connect(&registry, &bssh_session_registry::changed, this, [&] {
+		asking_when_told.append(registry.asking_count());
+	});
+	session->connect_to_host();
+	QCOMPARE(registry.connecting_count(), 1);
+	QCOMPARE(registry.asking_count(), 0);
+
+	fakes.at(0)->simulate_host_key_changed(QStringLiteral("SHA256:new"));
+	QCOMPARE(registry.asking_count(), 1);
+	QCOMPARE(registry.connecting_count(), 0);
+	QCOMPARE(registry.waiting_count(), 0);
+	QVERIFY(registry.has_unfinished_sessions());
+	QVERIFY2(asking_when_told.contains(1), "the notification text was not told");
+	QCOMPARE(told.size(), 1);
+	QVERIFY(told.first().startsWith(QStringLiteral("Waiting for you: ")));
+	QVERIFY(told.first().endsWith(QStringLiteral(" -- its host key has changed")));
+
+	/* Answered, it is on its way again. */
+	session->accept_host_key();
+	QCOMPARE(registry.asking_count(), 0);
+	QCOMPARE(registry.connecting_count(), 1);
+
+	/* Each question counts, and one in front of the user is not news. */
+	session->set_on_screen(true);
+	fakes.at(0)->set_answers_held(true);
+	fakes.at(0)->simulate_password_required();
+	QCOMPARE(registry.asking_count(), 1);
+	QCOMPARE(told.size(), 1);
+	session->supply_password(QStringLiteral("pw"));
+	QCOMPARE(registry.asking_count(), 0);
+
+	session->set_on_screen(false);
+	fakes.at(0)->simulate_key_passphrase_required();
+	QCOMPARE(registry.asking_count(), 1);
+	QCOMPARE(told.size(), 2);
+	QVERIFY(told.last().endsWith(QStringLiteral(" -- asks for the key's passphrase")));
+	session->supply_key_passphrase(QStringLiteral("pp"));
+	QCOMPARE(registry.asking_count(), 0);
+
+	/* Unknown key, and the connection goes before anybody answers. */
+	fakes.at(0)->simulate_host_key_unknown(QStringLiteral("SHA256:first"));
+	QCOMPARE(registry.asking_count(), 1);
+	QVERIFY(told.last().endsWith(QStringLiteral(" -- its host key is new")));
+	session->disconnect_from_host();
+	QCOMPARE(registry.asking_count(), 0);
+
+	/* Nor does getting in leave the question standing. */
+	bssh_session *second = registry.create(profile_for(QStringLiteral("two"), QStringLiteral("two.example")));
+	second->connect_to_host();
+	fakes.last()->simulate_password_required();
+	QCOMPARE(registry.asking_count(), 1);
+	fakes.last()->simulate_key_auth_success();
+	QCOMPARE(registry.asking_count(), 0);
+	QCOMPARE(registry.connected_count(), 1);
+
+	bssh_ssh_session::set_factory(nullptr);
+}
+
+/*
  * sec 5.5 says a desktop notification carries three things: reconnecting,
  * reconnect failed, and a bell in a pane nobody is looking at.
  * bssh_platform::notify() was declared with that list written beside it,
