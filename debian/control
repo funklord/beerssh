@@ -34,3 +34,13 @@ Description: SFTP-only server for one folder
  no shell and no commands, forwards nothing, and keeps every path
  inside the folder. Modern scp works; the legacy scp protocol
  does not. Independent of the BeerSSH terminal.
+
+Package: beerssh-session
+Architecture: any
+Depends: ${misc:Depends}
+Description: keeps a shell on a server when the connection drops
+ Install this on a server to let BeerSSH keep its shell there: the
+ shell goes on running through a dropped connection, and whatever it
+ printed meanwhile is there when BeerSSH comes back. Run over SSH by
+ BeerSSH, with no daemon and nothing to configure. Linked statically,
+ so it depends on nothing.

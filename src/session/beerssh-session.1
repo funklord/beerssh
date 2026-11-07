@@ -1,0 +1,41 @@
+.TH BEERSSH-SESSION 1 "" "beerssh-session 1.0" "User Commands"
+.SH NAME
+beerssh-session \- keep a shell on a server when the connection drops
+.SH SYNOPSIS
+.B beerssh\-session version
+.br
+.B beerssh\-session attach
+.I NAME
+.SH DESCRIPTION
+beerssh-session is not run by hand. BeerSSH runs it over SSH for a host whose
+.I Keep the shell on the server
+option is on: the shell then belongs to this program and not to the connection,
+so it goes on running through a dropped link, and whatever it printed meanwhile
+is there when BeerSSH comes back. Closing the tab ends the shell.
+.PP
+Nothing needs configuring and no daemon runs. The program only has to be on the
+PATH that sshd gives a command, for the user who logs in. It is linked statically,
+so on another Linux of the same architecture copying the file there is enough.
+.PP
+A session keeps the last 8 MiB of output. A client away for longer than that is told
+how many lines are gone. After the program ends, the session stays for 10 minutes for
+a client to collect the end of it.
+.SH COMMANDS
+.TP
+.B version
+Prints the protocol it speaks, and exits. This is what BeerSSH asks first.
+.TP
+.BI attach " NAME"
+Joins the session called
+.IR NAME ,
+starting it if there is none, and speaks the session protocol on standard input
+and output.
+.SH FILES
+.TP
+.I $XDG_RUNTIME_DIR/beerssh-session/
+The sockets of the sessions running for this user, or
+.I /tmp/beerssh-session-UID/
+where that variable is not set.
+.SH SEE ALSO
+.BR beerssh (1),
+.BR ssh (1)

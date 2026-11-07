@@ -205,7 +205,8 @@ you asked for is never retried.
 running program and working directory are gone; only the local scrollback
 survives, and attaching to `tmux` on connect is one answer. The better one is
 a host's *Keep the shell on the server* option: where the host has
-`beerssh-session` on its PATH (`make session` builds it), a dropped connection
+`beerssh-session` on its PATH (the package of that name, or the one static file
+that `make session` builds, copied there), a dropped connection
 comes back to the same shell with everything it printed meanwhile, and closing
 the tab ends it. Elsewhere the option changes nothing (`project.md` §5.6).
 

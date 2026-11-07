@@ -345,6 +345,23 @@ if ! zcat -f /usr/share/man/man1/beersshd.1* 2>/dev/null | grep -q "host.-key"; 
 fi
 echo "check-deb: beersshd runs and its manual page is installed"
 
+# beerssh-session, what a server needs for a kept shell (sec 5.6). The exact
+# line, since it is what BeerSSH reads. Static is the promise that lets it be
+# copied to a server with nothing else on it, and apt would not notice a lost one.
+if [ "$(beerssh-session version 2>&1)" != "beerssh-session 1" ]; then
+	echo "check-deb: the installed beerssh-session did not answer its probe" >&2
+	exit 1
+fi
+if ldd /usr/bin/beerssh-session 2>&1 | grep -q "=>"; then
+	echo "check-deb: beerssh-session is not static" >&2
+	exit 1
+fi
+if ! zcat -f /usr/share/man/man1/beerssh-session.1* 2>/dev/null | grep -q "Keep the shell"; then
+	echo "check-deb: beerssh-session has no manual page" >&2
+	exit 1
+fi
+echo "check-deb: beerssh-session answers, is static, and has its manual page"
+
 # And removing it leaves nothing behind, which is the other half of what a
 # package is for.
 apt-get remove -y -qq beerssh beerssh-fonts >/dev/null 2>&1
@@ -362,6 +379,10 @@ fi
 # have taken it out with the remove above.
 if ! /usr/bin/beersshd --version >/dev/null 2>&1; then
 	echo "check-deb: removing beerssh took beersshd with it" >&2
+	exit 1
+fi
+if ! /usr/bin/beerssh-session version >/dev/null 2>&1; then
+	echo "check-deb: removing beerssh took beerssh-session with it" >&2
 	exit 1
 fi
 apt-get remove -y -qq beersshd >/dev/null 2>&1

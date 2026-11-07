@@ -1596,7 +1596,7 @@ check-apk: android
 # bssh_platform_desktop::font_directory checks after the build tree), and
 # without the .desktop entry, the AppStream metadata and an icon the app
 # is invisible to every software centre and most launchers.
-install: $(ARTIFACTS)
+install: $(ARTIFACTS) $(SESSION_BIN)
 	mkdir -p $(DESTDIR)$(PREFIX)/bin
 	install -m 0755 $(TARGET) $(DESTDIR)$(PREFIX)/bin/$(TARGET)
 
@@ -1606,6 +1606,11 @@ install: $(ARTIFACTS)
 	# beersshd, which debian/ packages apart from beerssh (sec 19).
 	install -m 0755 $(SSHD_TARGET) $(DESTDIR)$(PREFIX)/bin/$(SSHD_TARGET)
 	install -m 0644 $(SSHD_MAN_PAGE) $(DESTDIR)$(PREFIX)/share/man/man1/$(SSHD_MAN_PAGE)
+
+	# What a server needs for a kept shell (sec 5.6), packaged apart as well:
+	# a server has no use for the terminal and its Qt.
+	install -m 0755 $(SESSION_BIN) $(DESTDIR)$(PREFIX)/bin/beerssh-session
+	install -m 0644 src/session/beerssh-session.1 $(DESTDIR)$(PREFIX)/share/man/man1/beerssh-session.1
 
 	# Where bash-completion looks for a per-command file, and it loads it
 	# on demand rather than at every shell start -- which is why the name
@@ -1704,6 +1709,7 @@ deb: version-check fonts
 	@for f in ../beerssh_$(VERSION)_*.deb ../beerssh-fonts_$(VERSION)_all.deb \
 	          ../beerssh-dbgsym_$(VERSION)_*.deb \
 	          ../beersshd_$(VERSION)_*.deb ../beersshd-dbgsym_$(VERSION)_*.deb \
+	          ../beerssh-session_$(VERSION)_*.deb ../beerssh-session-dbgsym_$(VERSION)_*.deb \
 	          ../beerssh_$(VERSION)_*.buildinfo ../beerssh_$(VERSION)_*.changes; do \
 		[ -e "$$f" ] && mv -f "$$f" $(DEB_DIR)/ || true; \
 	done

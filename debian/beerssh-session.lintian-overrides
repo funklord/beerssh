@@ -1,0 +1,3 @@
+# Static on purpose: it is what lets one file run on a server with nothing else
+# installed, and be copied to one that has no package for it (project.md sec 5.6).
+beerssh-session: statically-linked-binary [usr/bin/beerssh-session]
