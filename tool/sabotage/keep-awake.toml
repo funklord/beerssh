@@ -6,16 +6,16 @@
 [[sabotage]]
 name = "a host that did not ask keeps the computer awake"
 file = "src/model/session_registry.cpp"
-find = "\t\tif (session->profile().keep_awake && on_its_way(session)) return true;"
-replace = "\t\tif (on_its_way(session)) return true;"
+find = "\t\tif (session->profile().keep_awake && on_its_way(session) && !session->asking())"
+replace = "\t\tif (on_its_way(session) && !session->asking())"
 expect = "only_a_connected_keep_awake_host_keeps_the_computer_awake"
 
 # A host that asked keeps it awake whether or not anything is connected.
 [[sabotage]]
 name = "a host that is not connected keeps the computer awake"
 file = "src/model/session_registry.cpp"
-find = "\t\tif (session->profile().keep_awake && on_its_way(session)) return true;"
-replace = "\t\tif (session->profile().keep_awake) return true;"
+find = "\t\tif (session->profile().keep_awake && on_its_way(session) && !session->asking())"
+replace = "\t\tif (session->profile().keep_awake && !session->asking())"
 expect = "only_a_connected_keep_awake_host_keeps_the_computer_awake"
 
 # The window never asks the platform.

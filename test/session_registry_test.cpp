@@ -1104,7 +1104,9 @@ void session_registry_test::a_session_stopped_on_a_question_is_not_connecting() 
 	});
 
 	bssh_session_registry registry;
-	bssh_session *session = registry.create(profile_for(QStringLiteral("kept"), QStringLiteral("kept.example")));
+	bssh_profile_t awake = profile_for(QStringLiteral("kept"), QStringLiteral("kept.example"));
+	awake.keep_awake = true;
+	bssh_session *session = registry.create(awake);
 	QList<int> asking_when_told;
 	connect(&registry, &bssh_session_registry::changed, this, [&] {
 		asking_when_told.append(registry.asking_count());
@@ -1118,6 +1120,9 @@ void session_registry_test::a_session_stopped_on_a_question_is_not_connecting() 
 	QCOMPARE(registry.connecting_count(), 0);
 	QCOMPARE(registry.waiting_count(), 0);
 	QVERIFY(registry.has_unfinished_sessions());
+
+	/* Nothing moves until somebody comes, so no laptop stays up for it. */
+	QVERIFY(!registry.keeps_awake());
 	QVERIFY2(asking_when_told.contains(1), "the notification text was not told");
 	QCOMPARE(told.size(), 1);
 	QVERIFY(told.first().startsWith(QStringLiteral("Waiting for you: ")));
@@ -1127,6 +1132,7 @@ void session_registry_test::a_session_stopped_on_a_question_is_not_connecting() 
 	session->accept_host_key();
 	QCOMPARE(registry.asking_count(), 0);
 	QCOMPARE(registry.connecting_count(), 1);
+	QVERIFY(registry.keeps_awake());
 
 	/* Each question counts, and one in front of the user is not news. */
 	session->set_on_screen(true);

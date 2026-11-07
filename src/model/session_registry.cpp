@@ -300,7 +300,8 @@ void bssh_session_registry::close(bssh_session *session) {
 
 bool bssh_session_registry::keeps_awake() const {
 	for (bssh_session *session : m_sessions) {
-		if (session->profile().keep_awake && on_its_way(session)) return true;
+		if (session->profile().keep_awake && on_its_way(session) && !session->asking())
+			return true;
 	}
 	return false;
 }

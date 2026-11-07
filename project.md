@@ -1516,8 +1516,10 @@ before authenticating: sshd logged its login grace running out, and with the old
 still in the phone's known_hosts that is the changed-key dialog, though nobody has seen
 it on screen. The main thread stayed in `poll` for the next half hour. What that did show:
 the notification read "1 session connecting" with nothing happening and nothing to send
-anyone to the app. Now it reads "1 session waiting for you", and a *Waiting for you*
-notification says what is asked.
+anyone to the app. Now it reads "1 session waiting for you", and asked out of sight it
+says what is asked: a *Waiting for you* notification on the desktop, and on Android the
+words alone, in the service's own low-importance notification, so nothing makes a sound
+there. A separate alert stays as `platform_notify` left it, to be judged on a device.
 **The stack can now be had on an unrooted phone**, which is what §5.1 said was owed:
 BeerSSH is a debug build, so `run-as` can start the NDK's `lldb-server gdbserver --attach`
 from the app's directory, with `adb forward` to the host's `lldb`. lldb has no modules

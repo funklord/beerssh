@@ -584,3 +584,10 @@ file = "src/platform/platform.cpp"
 find = "\tif (asking > 0) add(asking, QStringLiteral(\"waiting for you\"));\n"
 replace = ""
 expect = "session_status_says_what_is_connected_and_what_is_not"
+
+[[sabotage]]
+name = "a question nobody may answer holds the laptop awake"
+file = "src/model/session_registry.cpp"
+find = "\t\tif (session->profile().keep_awake && on_its_way(session) && !session->asking())\n"
+replace = "\t\tif (session->profile().keep_awake && on_its_way(session))\n"
+expect = "a_session_stopped_on_a_question_is_not_connecting"

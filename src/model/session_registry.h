@@ -120,7 +120,8 @@ public:
 	 * is still a build a sleep would lose. One that is disconnected and
 	 * not coming back asks for nothing, and nor does one out of attempts:
 	 * its wait has no end, so one server gone would hold a laptop awake
-	 * until the battery ran out.
+	 * until the battery ran out. A session stopped on a question asks for
+	 * nothing either, for the same reason.
 	 */
 	bool keeps_awake() const;
 
