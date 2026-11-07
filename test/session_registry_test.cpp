@@ -734,6 +734,78 @@ void session_registry_test::connection_details_say_what_the_link_carried() {
 	bssh_ssh_session::set_factory(nullptr);
 }
 
+void session_registry_test::a_shell_that_could_not_be_kept_is_said_so() {
+	const bssh_factory_reset_t factory_reset;
+	/*
+	 * sec 5.6: "the fallback is not silent". A host set to On that gets a plain
+	 * shell would otherwise show nothing until the connection drops and the
+	 * shell is gone, which is the one moment it was asked to prevent.
+	 */
+	QList<QPointer<bssh_fake_ssh_session>> made;
+	bssh_ssh_session::set_factory([&made](QObject *parent) -> bssh_ssh_session * {
+		bssh_fake_ssh_session *fake = new bssh_fake_ssh_session(parent);
+		made.append(fake);
+		return fake;
+	});
+	const QString notice = QStringLiteral("[shell not kept");
+	const QDateTime now = QDateTime::currentDateTimeUtc();
+
+	bssh_profile_t profile;
+	profile.host = QStringLiteral("box.example.com");
+	profile.resume_choice = bssh_profile_t::RESUME_ALWAYS;
+	bssh_session session(profile);
+
+	session.connect_to_host();
+	made.at(0)->simulate_key_auth_success();
+	made.at(0)->simulate_side_output("sh: beerssh-session: not found\n");
+	QVERIFY2(screen_text(session.emulator()).contains(notice), "the fallback was silent");
+	QVERIFY2(session.details(now).contains(QStringLiteral("no usable beerssh-session")),
+	          qPrintable(session.details(now)));
+
+	/* Once a tab: a reconnect has nothing new to say. */
+	made.at(0)->simulate_connection_lost();
+	session.reconnect();
+	made.at(1)->simulate_key_auth_success();
+	made.at(1)->simulate_side_output("sh: beerssh-session: not found\n");
+	QCOMPARE(screen_text(session.emulator()).count(notice), 1);
+
+	/* Installed meanwhile: the next connection is kept, and says that instead. */
+	made.at(1)->simulate_connection_lost();
+	session.reconnect();
+	made.at(2)->simulate_key_auth_success();
+	made.at(2)->simulate_side_output("beerssh-session 1\n");
+	QVERIFY(session.is_kept());
+	QVERIFY2(session.details(now).contains(QStringLiteral("Shell: kept on the server")),
+	          qPrintable(session.details(now)));
+
+	/* A host that never asked gets the fact on request and nothing on screen. */
+	bssh_profile_t plain;
+	plain.host = QStringLiteral("plain.example.com");
+	bssh_session other(plain);
+	other.connect_to_host();
+	made.at(3)->simulate_key_auth_success();
+	QVERIFY(!screen_text(other.emulator()).contains(notice));
+	QVERIFY2(other.details(now).contains(QStringLiteral("Shell: ends with the connection\n")),
+	          qPrintable(other.details(now)));
+
+	/*
+	 * One that follows the default while the probe is out, as every host would
+	 * the day the default turns on: told on request, and nothing on screen.
+	 */
+	bssh_session following(profile);
+	following.connect_to_host();
+	made.at(4)->simulate_key_auth_success();
+	bssh_profile_t follows = profile;
+	follows.resume_choice = bssh_profile_t::RESUME_FOLLOW_DEFAULT;
+	following.set_profile(follows);
+	made.at(4)->simulate_side_output("sh: beerssh-session: not found\n");
+	QVERIFY2(!screen_text(following.emulator()).contains(notice),
+	          "a host that did not ask was told on screen");
+	QVERIFY(following.details(now).contains(QStringLiteral("no usable beerssh-session")));
+
+	bssh_ssh_session::set_factory(nullptr);
+}
+
 void session_registry_test::a_store_view_touches_nothing_of_the_users() {
 	/*
 	 * The store screenshots are published, so they must show nothing of

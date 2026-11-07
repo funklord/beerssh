@@ -431,10 +431,15 @@ private:
 	/* A session kept on the server (sec 5.6). */
 	enum resume_t { RESUME_NONE, RESUME_PROBING, RESUME_ACTIVE, RESUME_REFUSED };
 	bool wants_resume() const;
+	void note_shell_not_kept();
 	void open_remote_shell();
 	void answer_resume_probe(const QByteArray &output);
 	void take_resume_bytes(const QByteArray &bytes);
 	resume_t m_resume = RESUME_NONE;
+
+	/* Asked for a kept shell, and the last connection could not give one. */
+	bool m_shell_not_kept = false;
+	bool m_told_shell_not_kept = false;
 	QByteArray m_resume_name;
 	bool m_resume_restored = false;
 	bool m_resume_replaying = false;

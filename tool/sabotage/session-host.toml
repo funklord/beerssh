@@ -205,8 +205,8 @@ expect = "a_host_not_asked_is_not_probed"
 [[sabotage]]
 name = "no program means no shell"
 file = "src/model/session.cpp"
-find = "\t\tm_resume = RESUME_NONE;\n\t\topen_remote_shell();\n\t\treturn;\n"
-replace = "\t\tm_resume = RESUME_NONE;\n\t\treturn;\n"
+find = "\t\tm_resume = RESUME_NONE;\n\t\tnote_shell_not_kept();\n\t\topen_remote_shell();\n\t\treturn;\n"
+replace = "\t\tm_resume = RESUME_NONE;\n\t\tnote_shell_not_kept();\n\t\treturn;\n"
 expect = "a_host_without_the_program_gets_a_plain_shell"
 
 # A pty rewrites what crosses it, and a frame stops being a frame.
@@ -454,3 +454,40 @@ file = "src/model/profile_store.cpp"
 find = "\t\tif (profile.resume_choice == bssh_profile_t::RESUME_FOLLOW_DEFAULT) {\n"
 replace = "\t\tif (false) {\n"
 expect = "keeping_the_shell_is_a_choice_and_not_a_value"
+
+# Asked for a kept shell, given a plain one, and told only when it has gone.
+[[sabotage]]
+name = "a shell not kept is not said on screen"
+file = "src/model/session.cpp"
+find = "\tm_told_shell_not_kept = true;\n\tm_emulator->feed(QByteArrayLiteral(\"[shell not kept: this server has no usable \"\n\t                                    BSSH_RESUME_PROGRAM \"]\\r\\n\"));\n"
+replace = "\tm_told_shell_not_kept = true;\n"
+expect = "a_shell_that_could_not_be_kept_is_said_so"
+
+[[sabotage]]
+name = "every reconnect repeats the notice"
+file = "src/model/session.cpp"
+find = "\tm_told_shell_not_kept = true;\n"
+replace = ""
+expect = "a_shell_that_could_not_be_kept_is_said_so"
+
+[[sabotage]]
+name = "connection details do not say the shell is not kept"
+file = "src/model/session.cpp"
+find = "\t} else if (m_shell_not_kept) {\n"
+replace = "\t} else if (false) {\n"
+expect = "a_shell_that_could_not_be_kept_is_said_so"
+
+[[sabotage]]
+name = "a shell kept after all still reads as not kept"
+file = "src/model/session.cpp"
+find = "\tif (is_kept()) {\n\t\tlines << QStringLiteral(\"Shell: kept on the server\");\n\t} else if"
+replace = "\tif"
+expect = "a_shell_that_could_not_be_kept_is_said_so"
+
+# The day the default turns on, every plain server would print this.
+[[sabotage]]
+name = "a host following the default is told as well"
+file = "src/model/session.cpp"
+find = "\tif (m_profile.resume_choice != bssh_profile_t::RESUME_ALWAYS || m_told_shell_not_kept) return;\n"
+replace = "\tif (m_told_shell_not_kept) return;\n"
+expect = "a_shell_that_could_not_be_kept_is_said_so"

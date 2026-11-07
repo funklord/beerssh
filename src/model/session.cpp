@@ -543,6 +543,20 @@ void bssh_session::open_remote_shell() {
 }
 
 /*
+ * sec 5.6: the fallback is not silent, or the first anyone hears of it is the
+ * shell gone. Said on screen only to a host set to On, which asked for this:
+ * one following the default must not get a line on every plain server the day
+ * the default turns on. Once a tab, since a reconnect has nothing new to say.
+ */
+void bssh_session::note_shell_not_kept() {
+	m_shell_not_kept = true;
+	if (m_profile.resume_choice != bssh_profile_t::RESUME_ALWAYS || m_told_shell_not_kept) return;
+	m_told_shell_not_kept = true;
+	m_emulator->feed(QByteArrayLiteral("[shell not kept: this server has no usable "
+	                                    BSSH_RESUME_PROGRAM "]\r\n"));
+}
+
+/*
  * The answer to the probe. Anything but the expected line is a host without
  * the program, or one that says so in words this does not know, and it is
  * plain SSH: the probe can delay a shell and must never prevent one.
@@ -552,6 +566,7 @@ void bssh_session::answer_resume_probe(const QByteArray &output) {
 		/* Taken away since the last connection: what follows is a new shell. */
 		if (m_resume_client && m_resume_client->next) m_emulator->reset_modes();
 		m_resume = RESUME_NONE;
+		note_shell_not_kept();
 		open_remote_shell();
 		return;
 	}
@@ -591,6 +606,7 @@ void bssh_session::answer_resume_probe(const QByteArray &output) {
 	const bool first = !m_resume_client->next;
 	m_resume_replaying = first && m_resume_restored;
 	m_resume = RESUME_ACTIVE;
+	m_shell_not_kept = false;
 	m_transport->set_raw_channel(true);
 	m_transport->set_command({ QLatin1String(BSSH_RESUME_PROGRAM), QStringLiteral("attach"),
 	                           QString::fromLatin1(m_resume_name) });
@@ -639,6 +655,7 @@ void bssh_session::take_resume_bytes(const QByteArray &bytes) {
 		 * still is, on this same connection.
 		 */
 		m_resume = RESUME_REFUSED;
+		note_shell_not_kept();
 		m_transport->set_raw_channel(false);
 		m_transport->restart_shell(m_profile.command);
 		return;
@@ -907,6 +924,14 @@ QString bssh_session::details(const QDateTime &now) const {
 	                 .arg(m_bytes_in).arg(ago(m_last_in, now));
 	lines << QStringLiteral("Sent: %1 bytes, last %2")
 	                 .arg(m_bytes_out).arg(ago(m_last_out, now));
+	if (is_kept()) {
+		lines << QStringLiteral("Shell: kept on the server");
+	} else if (m_shell_not_kept) {
+		lines << QStringLiteral("Shell: ends with the connection, no usable "
+		                        BSSH_RESUME_PROGRAM " on the server");
+	} else if (!m_profile.local) {
+		lines << QStringLiteral("Shell: ends with the connection");
+	}
 
 	/*
 	 * Anything that changes what a key sends. A program that turns one of

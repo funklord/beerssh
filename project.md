@@ -1653,8 +1653,10 @@ because upgrading afterwards would leave two shells. That costs a round trip on
 each connection, which remembering the last answer per host can hide. Failure,
 refusal or a timeout mean plain SSH: the probe can delay a shell and must never
 prevent one. A server hiding the capability costs only the upgrade, and the pane
-says which kind is running, so the fallback is not silent. A per-host setting can
-turn it off.
+says which kind is running, so the fallback is not silent: Connection Details always
+does, and a host set to On also gets one line on screen, once a tab, at the moment it
+falls back. Not a host following the default, or the day the default turns on every
+plain server would print it. A per-host setting can turn it off.
 
 The probe can also report the host's fuzznet identity. It arrives over a connection
 whose host key was verified, so it could answer first contact without a pairing
