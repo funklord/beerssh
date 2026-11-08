@@ -184,6 +184,16 @@ jobs:
           echo "using NDK at $ANDROID_NDK_ROOT"
           tool/build-deps-android.sh arm64-v8a
 
+      # The Gradle that Qt's wrapper names, from services.gradle.org. Four
+      # runs in a row failed there on 2026-11-08, with a 504 and then a
+      # timeout, after everything of ours had built. Keyed on the Qt
+      # version, which is what decides the Gradle version.
+      - name: Cache Gradle's distribution
+        uses: actions/cache@v4
+        with:
+          path: ~/.gradle/wrapper/dists
+          key: gradle-dists-qt6.12.0
+
       # Compiles and links libbeerssh_arm64-v8a.so. Packaging into an AAB
       # additionally needs the SDK, which the runner image provides.
       - name: Build
