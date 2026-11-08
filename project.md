@@ -14693,14 +14693,19 @@ without an icon is defective, so there is a plain one meant to be replaced.
   getpeereid for the peer's uid); `-dead_strip` for `--gc-sections`; and
   either `strerror_r`. On the way clang refused `"\x1b7"` in a test, one hex
   escape where ESC 7 was meant, which GCC had kept as 0xb7 for months.
-  **The suite builds there and runs with 20 failures in 11 classes**, run
-  42472515273, so CI builds only: the secret store's file backend will not
-  unlock (5), beersshd's listener and window (4), handoff (2, both the test's: it
-  expects the socket under XDG_RUNTIME_DIR, and splits its helper's line on
-  a space that `Application Support` contains; the app's own payload takes
-  the path as everything after the third field), store-view isolation, the installed-font
-  fallback chain, a preset error's wording, a wrapped-line backspace under
-  the pty, a rebound chord, and ink drift in a long text run. Windows does
+  **The suite builds there and runs with 15 failures in 10 classes**, run
+  42472515273 less the store's five, so CI builds only. The store's five
+  were the test, not the store: `app_data_redirect` isolated through
+  `XDG_DATA_HOME`, which macOS ignores, so there the suite reached the
+  account's real `~/Library/Application Support/beerssh/secrets.enc`; it
+  uses Qt's test mode there now and removes its files by name (20 of 20 on
+  macOS, run 42474761167). Left: beersshd's listener and window (4),
+  handoff (2, both the test's: it expects the socket under XDG_RUNTIME_DIR,
+  and splits its helper's line on a space that `Application Support`
+  contains; the app's own payload takes the path as everything after the
+  third field), store-view isolation, the installed-font fallback chain, a
+  preset error's wording, a wrapped-line backspace under the pty, a rebound
+  chord, and ink drift in a long text run. Windows does
   not build: no forkpty, no unix sockets in the handoff, and no CI job.
 
 ### 12.2h Store screenshots from the build — **[BUILT 2026-10-22]**

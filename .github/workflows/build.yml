@@ -111,7 +111,7 @@ jobs:
         run: |
           brew install qt make pkgconf cmake libsixel libsecret openssl@3 zlib
           echo "PKG_CONFIG_PATH=$(brew --prefix openssl@3)/lib/pkgconfig:$(brew --prefix zlib)/lib/pkgconfig" >> "$GITHUB_ENV"
-      # Build only. The suite builds and runs here too, and 20 of its
+      # Build only. The suite builds and runs here too, and 15 of its
       # tests fail on macOS (project.md sec 12, the macOS entry); a step
       # that is red every run is one nobody reads, and continue-on-error
       # is what this file refuses above. It joins once they pass.

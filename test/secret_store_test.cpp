@@ -43,13 +43,31 @@ class app_data_redirect {
 public:
 	explicit app_data_redirect(const QTemporaryDir &dir)
 	        : m_had(qEnvironmentVariableIsSet("XDG_DATA_HOME")), m_old(qgetenv("XDG_DATA_HOME")) {
+#ifdef Q_OS_MACOS
+		/*
+		 * macOS reads no XDG_DATA_HOME, so this pointed at the account's
+		 * real ~/Library/Application Support, and the first test made a
+		 * store there with its own passphrase. Test mode moves it under
+		 * qttest instead; one directory for every test, so the
+		 * destructor removes the files by name and the next test starts
+		 * without a store, as on Linux.
+		 */
+		Q_UNUSED(dir);
+		QStandardPaths::setTestModeEnabled(true);
+#else
 		QStandardPaths::setTestModeEnabled(false);
 		qputenv("XDG_DATA_HOME", dir.path().toUtf8());
+#endif
 		path = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
 		       + QStringLiteral("/secrets.enc");
 	}
 
 	~app_data_redirect() {
+#ifdef Q_OS_MACOS
+		QFile::remove(path);
+		QFile::remove(path + QStringLiteral(".lock"));
+		QStandardPaths::setTestModeEnabled(false);
+#endif
 		if (m_had) qputenv("XDG_DATA_HOME", m_old);
 		else qunsetenv("XDG_DATA_HOME");
 	}
