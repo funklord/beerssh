@@ -33,7 +33,8 @@ QMAKE_CFLAGS_RELEASE   += -Os
 # The app's unused-code flags, so the suite runs against what they keep.
 QMAKE_CFLAGS_RELEASE   += -ffunction-sections -fdata-sections
 QMAKE_CXXFLAGS_RELEASE += -ffunction-sections -fdata-sections
-QMAKE_LFLAGS_RELEASE   += -Wl,--gc-sections
+!macx: QMAKE_LFLAGS_RELEASE += -Wl,--gc-sections
+macx:  QMAKE_LFLAGS_RELEASE += -Wl,-dead_strip
 
 # Same define as the app's, and passed in the same way by the top-level
 # Makefile. The emulator answers XTVERSION with the program's own name and
@@ -49,7 +50,7 @@ include($$PWD/../libssh.pri)
 CONFIG += c++17 console
 CONFIG -= app_bundle
 
-INCLUDEPATH += $$PWD/../src $$PWD/.. $$PWD $$PWD/../vterm/include
+INCLUDEPATH += $$PWD/../src $$PWD $$PWD/../vterm/include
 
 # The on-screen keyboard is softkeys, vendored as a submodule (project.md
 # sec 6.2): its .pri adds its sources, its headers for moc, and its
@@ -62,8 +63,8 @@ include($$PWD/../softkeys/softkeys.pri)
 # has never run the fetch script still has a green test suite.
 DEFINES += BSSH_TEST_FONT_DIR=\\\"$$PWD/../fonts\\\"
 # forkpty(3) for the local shell transport (sec 2, sec 3); glibc puts
-# it in libutil.
-LIBS += -lutil
+# it in libutil. macOS keeps it in libSystem.
+!macx: LIBS += -lutil
 
 LIBS += $$PWD/../build-vterm/libvterm.a
 PRE_TARGETDEPS += $$PWD/../build-vterm/libvterm.a

@@ -17,7 +17,9 @@
 
 #include <poll.h>
 #include <signal.h>
+#ifdef __linux__
 #include <sys/prctl.h>
+#endif
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/wait.h>
@@ -40,7 +42,9 @@ struct host_process_t {
 		 * Dies with the test. A run the watchdog killed left this child and its
 		 * shell behind, reparented and still waiting for a client.
 		 */
+#ifdef __linux__
 		prctl(PR_SET_PDEATHSIG, SIGKILL);
+#endif
 
 		char *const argv[] = { const_cast<char *>("sh"), const_cast<char *>("-c"),
 		                       const_cast<char *>(command), nullptr };

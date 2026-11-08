@@ -46,7 +46,7 @@ void emulator_test::the_cursor_lands_where_xterm_puts_it_data() {
 	add("invalid DECSTBM changes nothing", "\x1b[4;5H\x1b[4;1r", 3, 4, "", "");
 	add("a one line region is invalid", "\x1b[4;5H\x1b[5;5r", 3, 4, "", "");
 	add("DECALN goes home", "\x1b[3;3H\x1b#8", 0, 0, "EEEEEEEEEEEEEEEEEEEE", "EEEEEEEEEEEEEEEEEEEE");
-	add("DECRC after RIS goes home", "\x1b[3;3H\x1b7\x1b" "c\x1b" "8", 0, 0, "", "");
+	add("DECRC after RIS goes home", "\x1b[3;3H\x1b" "7\x1b" "c\x1b" "8", 0, 0, "", "");
 	add("DECRC keeps the pending wrap", "\x1b[1;20Hx\x1b" "7\x1b[H\x1b" "8y", 1, 1, "                   x", "y");
 	add("EL cancels the pending wrap", "\x1b[1;20Hx\x1b[Ky", 0, 19, "                   y", "");
 	add("RI that scrolls cancels the pending wrap", "\x1b[1;20Hx\x1bMy", 0, 19, "                   y", "                   x");
@@ -453,7 +453,7 @@ void emulator_test::wrapped_lines_scrolling_off_leave_no_debris() {
 		                   || ch == QLatin1Char('\n') || ch == QLatin1Char(' ');
 		QVERIFY2(sent, qPrintable(QStringLiteral("debris on the grid at %1: U+%2 in [%3]")
 		                                   .arg(i)
-		                                   .arg(ch.unicode(), 4, 16, QLatin1Char('0'))
+		                                   .arg(uint(ch.unicode()), 4, 16, QLatin1Char('0'))
 		                                   .arg(grid)));
 	}
 }

@@ -13,7 +13,7 @@
 #include <QList>
 
 #include <poll.h>
-#include <pty.h>
+#include "posix_compat.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/wait.h>
