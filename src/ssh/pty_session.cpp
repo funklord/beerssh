@@ -21,7 +21,7 @@
 #include <cstring>
 
 #include <fcntl.h>
-#include <pty.h>
+#include "posix_compat.h"
 #include <sys/ioctl.h>
 #include <sys/uio.h>
 #include <sys/wait.h>
@@ -94,9 +94,22 @@ int collect(pid_t child) {
  * that asked for it -- with a CR, since nothing on the far side of a pty
  * translates newlines for us.
  */
+/*
+ * glibc's strerror_r returns the text, the XSI one that macOS has returns a
+ * status and leaves the text in the buffer. Whichever this libc has picks
+ * its overload.
+ */
+[[maybe_unused]] const char *strerror_text(const char *text, const char *) {
+	return text;
+}
+
+[[maybe_unused]] const char *strerror_text(int status, const char *buffer) {
+	return status == 0 ? buffer : "unknown error";
+}
+
 void child_fail(const char *what, const char *name, int code) {
 	char buffer[128];
-	const char *why = strerror_r(errno, buffer, sizeof(buffer));
+	const char *why = strerror_text(strerror_r(errno, buffer, sizeof(buffer)), buffer);
 
 	const struct iovec parts[] = {
 		{ const_cast<char *>("beerssh: "), 9 },

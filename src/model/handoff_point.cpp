@@ -14,6 +14,7 @@
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
+#include "posix_compat.h"
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
@@ -135,7 +136,7 @@ bool bssh_handoff_point::listen(QString *why) {
 	/* A socket left by a process that had this pid before and died. */
 	::unlink(address.sun_path);
 
-	m_listener = ::socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
+	m_listener = bssh_socket(AF_UNIX, SOCK_STREAM, BSSH_CLOEXEC | BSSH_NONBLOCK);
 	if (m_listener < 0 ||
 	    ::bind(m_listener, reinterpret_cast<sockaddr *>(&address), sizeof(address)) != 0 ||
 	    ::listen(m_listener, 4) != 0) {
@@ -153,7 +154,7 @@ bool bssh_handoff_point::listen(QString *why) {
 }
 
 void bssh_handoff_point::on_connection() {
-	const int socket = ::accept4(m_listener, nullptr, nullptr, SOCK_CLOEXEC);
+	const int socket = bssh_accept(m_listener, BSSH_CLOEXEC);
 	if (socket < 0) return;
 	if (bssh_handoff_wire::peer_is_same_user(socket)) serve(socket);
 	::close(socket);
@@ -269,7 +270,7 @@ bssh_session *bssh_handoff_point::take(const QString &path, const QString &hando
 	sockaddr_un address;
 	if (!fill_address(address, path, why)) return nullptr;
 
-	const int socket = ::socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+	const int socket = bssh_socket(AF_UNIX, SOCK_STREAM, BSSH_CLOEXEC);
 	if (socket < 0 || ::connect(socket, reinterpret_cast<sockaddr *>(&address), sizeof(address)) != 0) {
 		if (why) *why = QStringLiteral("the other BeerSSH is not listening");
 		if (socket >= 0) ::close(socket);
@@ -345,7 +346,7 @@ bool ask(const QString &path, const QByteArray &request, QByteArray &verb, QStri
          QString *why) {
 	sockaddr_un address;
 	if (!fill_address(address, path, why)) return false;
-	const int socket = ::socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+	const int socket = bssh_socket(AF_UNIX, SOCK_STREAM, BSSH_CLOEXEC);
 	if (socket < 0 || ::connect(socket, reinterpret_cast<sockaddr *>(&address), sizeof(address)) != 0) {
 		if (why) *why = QStringLiteral("the other BeerSSH is not listening");
 		if (socket >= 0) ::close(socket);
@@ -388,7 +389,7 @@ int bssh_handoff_point::sweep_stale() {
 		const QString path = dir.filePath(name);
 		sockaddr_un address;
 		if (!fill_address(address, path, nullptr)) continue;
-		const int probe = ::socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+		const int probe = bssh_socket(AF_UNIX, SOCK_STREAM, BSSH_CLOEXEC);
 		if (probe < 0) continue;
 		const bool refused = ::connect(probe, reinterpret_cast<sockaddr *>(&address), sizeof(address)) != 0
 		                     && errno == ECONNREFUSED;

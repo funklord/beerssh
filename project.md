@@ -14683,6 +14683,25 @@ without an icon is defective, so there is a plain one meant to be replaced.
   the next person will meet it.
 - **macOS/Windows:** `.dmg` / installer, best-effort per §1, unsigned until
   someone actually wants them (code signing on both is a cost, not a checkbox).
+  **macOS builds in CI since 2026-11-08** (the `macos` job, Homebrew's Qt,
+  `gmake`); nothing had built it before, so §1's "breakage there is a bug"
+  had no way to be seen. What it took: qmake's `no_include_pwd`, since the
+  root's `VERSION` answered libc++'s `<version>` on a case-blind filesystem;
+  `src/posix_compat.h` for SOCK_CLOEXEC, accept4, pipe2, SO_PEERCRED,
+  MSG_NOSIGNAL, MSG_CMSG_CLOEXEC and `<pty.h>`, which macOS lacks (there the
+  flags are set after the call, SO_NOSIGPIPE stands in for MSG_NOSIGNAL and
+  getpeereid for the peer's uid); `-dead_strip` for `--gc-sections`; and
+  either `strerror_r`. On the way clang refused `"\x1b7"` in a test, one hex
+  escape where ESC 7 was meant, which GCC had kept as 0xb7 for months.
+  **The suite builds there and runs with 20 failures in 11 classes**, run
+  42472515273, so CI builds only: the secret store's file backend will not
+  unlock (5), beersshd's listener and window (4), handoff (2, both the test's: it
+  expects the socket under XDG_RUNTIME_DIR, and splits its helper's line on
+  a space that `Application Support` contains; the app's own payload takes
+  the path as everything after the third field), store-view isolation, the installed-font
+  fallback chain, a preset error's wording, a wrapped-line backspace under
+  the pty, a rebound chord, and ink drift in a long text run. Windows does
+  not build: no forkpty, no unix sockets in the handoff, and no CI job.
 
 ### 12.2h Store screenshots from the build — **[BUILT 2026-10-22]**
 `make android-screenshots` (the shared `tool/android.mk`, play-store skill)

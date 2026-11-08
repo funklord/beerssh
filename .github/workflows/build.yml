@@ -97,6 +97,27 @@ jobs:
       - name: Headless smoke test
         run: make test
 
+  # sec 1: macOS is best-effort -- "it should build, and breakage there is
+  # a bug". Nothing built it until this job, so nothing could know.
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      # gmake because the system make is 3.81. openssl@3 and zlib are
+      # keg-only, so their pkg-config files are named by hand.
+      - name: Install Qt and libraries
+        run: |
+          brew install qt make pkgconf cmake libsixel libsecret openssl@3 zlib
+          echo "PKG_CONFIG_PATH=$(brew --prefix openssl@3)/lib/pkgconfig:$(brew --prefix zlib)/lib/pkgconfig" >> "$GITHUB_ENV"
+      # Build only. The suite builds and runs here too, and 20 of its
+      # tests fail on macOS (project.md sec 12, the macOS entry); a step
+      # that is red every run is one nobody reads, and continue-on-error
+      # is what this file refuses above. It joins once they pass.
+      - name: Build
+        run: gmake QMAKE=qmake
+
   android:
     runs-on: ubuntu-latest
     steps:

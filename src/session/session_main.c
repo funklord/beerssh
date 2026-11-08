@@ -22,6 +22,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include "posix_compat.h"
 #include <limits.h>
 #include <poll.h>
 #include <stdio.h>
@@ -78,7 +79,7 @@ static int connect_to(const char *path) {
 	if (strlen(path) >= sizeof(address.sun_path)) return -1;
 	strcpy(address.sun_path, path);
 
-	const int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+	const int fd = bssh_socket(AF_UNIX, SOCK_STREAM, BSSH_CLOEXEC);
 	if (fd < 0) return -1;
 	if (connect(fd, (struct sockaddr *)&address, sizeof(address)) != 0) {
 		close(fd);

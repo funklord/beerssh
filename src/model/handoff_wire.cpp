@@ -3,6 +3,7 @@
 #include <cerrno>
 #include <cstring>
 #include <poll.h>
+#include "posix_compat.h"
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -33,7 +34,7 @@ bool write_all(int socket, const char *data, qint64 size, const QElapsedTimer &c
                int timeout_ms) {
 	while (size > 0) {
 		if (!wait_for(socket, POLLOUT, clock, timeout_ms)) return false;
-		const ssize_t wrote = ::send(socket, data, size_t(size), MSG_NOSIGNAL | MSG_DONTWAIT);
+		const ssize_t wrote = ::send(socket, data, size_t(size), BSSH_MSG_NOSIGNAL | MSG_DONTWAIT);
 		if (wrote < 0) {
 			if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) continue;
 			return false;
@@ -98,7 +99,7 @@ bool bssh_handoff_wire::send(int socket, const QByteArray &bytes, const QList<in
 			set_why(why, QStringLiteral("the other process did not take the message"));
 			return false;
 		}
-		const ssize_t wrote = ::sendmsg(socket, &message, MSG_NOSIGNAL | MSG_DONTWAIT);
+		const ssize_t wrote = ::sendmsg(socket, &message, BSSH_MSG_NOSIGNAL | MSG_DONTWAIT);
 		if (wrote == ssize_t(sizeof(length))) break;
 		if (wrote < 0 && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)) continue;
 		set_why(why, QStringLiteral("sending to the other process failed: %1")
@@ -135,7 +136,7 @@ bool bssh_handoff_wire::receive(int socket, bssh_handoff_message_t &out, int tim
 			set_why(why, QStringLiteral("nothing arrived from the other process"));
 			return false;
 		}
-		got = ::recvmsg(socket, &message, MSG_CMSG_CLOEXEC | MSG_DONTWAIT);
+		got = ::recvmsg(socket, &message, BSSH_MSG_CMSG_CLOEXEC | MSG_DONTWAIT);
 		if (got >= 0) break;
 		if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) continue;
 		set_why(why, QStringLiteral("reading from the other process failed"));
@@ -151,6 +152,7 @@ bool bssh_handoff_wire::receive(int socket, bssh_handoff_message_t &out, int tim
 		for (size_t i = 0; i < count; ++i) {
 			int fd = -1;
 			std::memcpy(&fd, CMSG_DATA(header) + i * sizeof(int), sizeof(int));
+			if (!BSSH_MSG_CMSG_CLOEXEC) bssh_set_fd_flags(fd, BSSH_CLOEXEC);
 			out.fds.append(fd);
 		}
 	}
@@ -180,8 +182,7 @@ bool bssh_handoff_wire::receive(int socket, bssh_handoff_message_t &out, int tim
 }
 
 bool bssh_handoff_wire::peer_is_same_user(int socket) {
-	ucred peer = {};
-	socklen_t size = sizeof(peer);
-	if (::getsockopt(socket, SOL_SOCKET, SO_PEERCRED, &peer, &size) != 0) return false;
-	return peer.uid == ::getuid();
+	uid_t peer = 0;
+	if (bssh_peer_uid(socket, &peer) != 0) return false;
+	return peer == ::getuid();
 }

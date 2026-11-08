@@ -15,6 +15,7 @@
 
 #include <csignal>
 #include <fcntl.h>
+#include "posix_compat.h"
 #include <termios.h>
 #include <unistd.h>
 
@@ -257,7 +258,7 @@ int main(int argc, char *argv[]) {
 	out.flush();
 
 	/* SIGINT and SIGTERM stop the server cleanly, through the event loop. */
-	if (::pipe2(g_signal_pipe, O_CLOEXEC) == 0) {
+	if (bssh_pipe_cloexec(g_signal_pipe) == 0) {
 		auto *notifier = new QSocketNotifier(g_signal_pipe[0], QSocketNotifier::Read, &app);
 		QObject::connect(notifier, &QSocketNotifier::activated, &app, &QCoreApplication::quit);
 		std::signal(SIGINT, on_signal);

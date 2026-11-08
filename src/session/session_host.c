@@ -7,7 +7,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
-#include <pty.h>
+#include "posix_compat.h"
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
@@ -66,7 +66,7 @@ static int listen_on(const char *path) {
 	struct sockaddr_un address;
 
 	if (strlen(path) >= sizeof(address.sun_path)) return -1;
-	const int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+	const int fd = bssh_socket(AF_UNIX, SOCK_STREAM, BSSH_CLOEXEC);
 	if (fd < 0) return -1;
 
 	memset(&address, 0, sizeof(address));
@@ -97,13 +97,12 @@ static void drop_client(host_t *host) {
 }
 
 static void accept_client(host_t *host) {
-	const int fd = accept4(host->listener, NULL, NULL, SOCK_CLOEXEC | SOCK_NONBLOCK);
+	const int fd = bssh_accept(host->listener, BSSH_CLOEXEC | BSSH_NONBLOCK);
 	if (fd < 0) return;
 
 	/* The socket's mode says the same; this holds if the mode ever does not. */
-	struct ucred peer;
-	socklen_t len = sizeof(peer);
-	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &peer, &len) != 0 || peer.uid != geteuid()) {
+	uid_t peer;
+	if (bssh_peer_uid(fd, &peer) != 0 || peer != geteuid()) {
 		close(fd);
 		return;
 	}
@@ -277,7 +276,7 @@ static void write_client(host_t *host) {
 		if (host->out_done == host->out_used) return;
 
 		const ssize_t wrote = send(host->client, host->out + host->out_done,
-		                           host->out_used - host->out_done, MSG_NOSIGNAL);
+		                           host->out_used - host->out_done, BSSH_MSG_NOSIGNAL);
 		if (wrote < 0) {
 			if (errno == EAGAIN || errno == EINTR) return;
 			drain_and_drop(host);

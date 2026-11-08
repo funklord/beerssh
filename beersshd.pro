@@ -26,9 +26,14 @@ QMAKE_CXXFLAGS_RELEASE += -fno-strict-aliasing
 # Unused code goes at the link, as beerssh.pro explains.
 QMAKE_CFLAGS_RELEASE   += -ffunction-sections -fdata-sections
 QMAKE_CXXFLAGS_RELEASE += -ffunction-sections -fdata-sections
-QMAKE_LFLAGS_RELEASE   += -Wl,--gc-sections
+!macx: QMAKE_LFLAGS_RELEASE += -Wl,--gc-sections
+macx:  QMAKE_LFLAGS_RELEASE += -Wl,-dead_strip
 
 INCLUDEPATH += $$PWD/src
+
+# Not the project root either, which qmake adds by itself: macOS reads
+# paths without case, so the root's VERSION answered libc++'s <version>.
+CONFIG += no_include_pwd
 
 SOURCES += \
     src/sshd/root_path.cpp \

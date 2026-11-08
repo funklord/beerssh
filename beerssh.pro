@@ -65,9 +65,14 @@ QMAKE_CFLAGS_RELEASE   += -Os
 # by name or by section; the suite runs against the same flags.
 QMAKE_CFLAGS_RELEASE   += -ffunction-sections -fdata-sections
 QMAKE_CXXFLAGS_RELEASE += -ffunction-sections -fdata-sections
-QMAKE_LFLAGS_RELEASE   += -Wl,--gc-sections
+!macx: QMAKE_LFLAGS_RELEASE += -Wl,--gc-sections
+macx:  QMAKE_LFLAGS_RELEASE += -Wl,-dead_strip
 
-INCLUDEPATH += $$PWD/src $$PWD
+INCLUDEPATH += $$PWD/src
+
+# Not the project root either, which qmake adds by itself: macOS reads
+# paths without case, so the root's VERSION answered libc++'s <version>.
+CONFIG += no_include_pwd
 
 SOURCES += \
     src/main.cpp \
@@ -247,7 +252,7 @@ android {
 # forkpty(3) for the local shell transport (sec 2, sec 3). glibc puts it
 # in libutil; bionic has it in libc, so Android needs nothing and linking
 # -lutil there fails.
-!android: LIBS += -lutil
+!android:!macx: LIBS += -lutil
 
 LIBS += $$BSSH_VTERM_LIB
 PRE_TARGETDEPS += $$BSSH_VTERM_LIB

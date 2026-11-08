@@ -27,6 +27,7 @@
 #include <cstdio>
 #include <cstring>
 #include <fcntl.h>
+#include "posix_compat.h"
 #include <netinet/in.h>
 #include <poll.h>
 #include <sys/socket.h>
@@ -352,7 +353,7 @@ bool bssh_sshd::start(const bssh_sshd_config_t &config, QString *error) {
 		       : ntohs(reinterpret_cast<sockaddr_in *>(&address)->sin_port);
 	}
 
-	if (::pipe2(m_wake, O_CLOEXEC) != 0) {
+	if (bssh_pipe_cloexec(m_wake) != 0) {
 		*error = QStringLiteral("Could not create the stop pipe.");
 		ssh_bind_free(bind);
 		return false;
