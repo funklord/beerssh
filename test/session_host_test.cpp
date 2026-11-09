@@ -382,12 +382,22 @@ void session_host_test::a_client_too_far_behind_is_told_what_was_lost() {
 
 void session_host_test::a_faithful_mode_pauses_the_program_and_loses_nothing() {
 	const size_t capacity = 4096;
-	host_process_t host("stty -echo -onlcr; read go; seq 1 20000; echo finished; read wait", capacity);
+	host_process_t host("stty -echo -onlcr; echo READY; read go; seq 1 20000; echo finished; read wait",
+	                    capacity);
 	client_t client;
 
 	QVERIFY(client.connect_to(host.path));
 	client.attach(0);
 	client.set_mode(BSSH_WIRE_MODE_SERIAL);
+
+	/*
+	 * Typed only once the echo is off. Typed before, the line discipline
+	 * echoed the newline ahead of seq's first line -- seen on macOS, whose
+	 * runner reaches stty later.
+	 */
+	QVERIFY2(client.wait_for("READY\n", 10000), client.output.constData());
+	client.ack(client.next);
+	client.output.clear();
 	client.type("\n");
 
 	/* No acknowledgement, so the program can get no further than the log. */

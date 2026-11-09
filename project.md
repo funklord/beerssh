@@ -1545,6 +1545,14 @@ timeout or the state check wants to survive `destroySurface()`. Not reported to 
 nothing, display size included, so 8 cycles of it alone proved nothing. The size and
 density come from `wm`. Nor is a panel swap the same as `wm size`, which is why this says
 reproduced and not identical.
+**On the Fold, 2026-11-09, `a4b401b`:** signed in on the cover screen at 15:29 to a kept
+session running `while date; do sleep 2; done`, then left; on battery from 15:47. To 16:44
+the server's capture shows at least 60 packets in every whole minute, each line ACKed by
+the phone within about 70 ms; the process stayed 21838; the activity was stopped and
+shown again (its surfaces destroyed at 15:42 and 15:44) with the output going on; the
+watchdog logged no silence in what logcat kept, from 15:55. Not measured: the screen on
+coming back, since nobody opened it, and Doze proper -- `deviceidle` never left
+`ACTIVE`/`INACTIVE`, the phone mostly `Dozing` with adb polling it over Wi-Fi every 30 s.
 **Tried on the API 36 emulator, none blocked:** Home, screen off, display size, density
 and rotation changes under a backgrounded app (Qt's display listener is off from
 `onPause`), and 36 resume-then-Home flickers from 0 to 800 ms apart, each with the main
@@ -14701,13 +14709,15 @@ without an icon is defective, so there is a plain one meant to be replaced.
   `XDG_DATA_HOME`, which macOS ignores, so there the suite reached the
   account's real `~/Library/Application Support/beerssh/secrets.enc`; it
   uses Qt's test mode there now and removes its files by name (20 of 20 on
-  macOS, run 42474761167). Left: beersshd's listener and window (4),
-  handoff (2, both the test's: it expects the socket under XDG_RUNTIME_DIR,
-  and splits its helper's line on a space that `Application Support`
-  contains; the app's own payload takes the path as everything after the
-  third field), store-view isolation, the installed-font fallback chain, a
-  preset error's wording, a wrapped-line backspace under the pty, a rebound
-  chord, and ink drift in a long text run. Windows does
+  macOS, run 42474761167). **Then, 2026-11-09, the rest, nearly all the tests' own
+  Linux assumptions:** `/proc` (twice), XDG_RUNTIME_DIR, an untitled QMessageBox,
+  a native-text chord, 127.0.0.2, a delta count that macOS's zsh notice scrolled,
+  a grab at device pixel ratio 2, no fetched fonts, and two timings (a newline typed
+  before `stty -echo`, a key repeat waited 900 ms for). Qt's test mode leaves
+  `~/Library/Preferences` alone, so the store view refuses there, as it should. One
+  was the app's: the handoff socket sat in `~/Library/Application Support`, now
+  `TMPDIR` (`4e2a3de`). Still open: the sshd listener test finds no listening
+  descriptor by its port on macOS; its failure now lists the sockets it saw. Windows does
   not build: no forkpty, no unix sockets in the handoff, and no CI job.
 
 ### 12.2h Store screenshots from the build — **[BUILT 2026-10-22]**

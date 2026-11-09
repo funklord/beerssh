@@ -60,6 +60,26 @@ int listener_on(int port) {
 	return -1;
 }
 
+/* What the sockets of this process are, for a failure to show. */
+QString describe_sockets() {
+	QString text;
+	const int limit = int(::sysconf(_SC_OPEN_MAX));
+	for (int fd = 0; fd < limit && fd < 65536; ++fd) {
+		struct sockaddr_storage address;
+		socklen_t length = sizeof address;
+		if (::getsockname(fd, reinterpret_cast<sockaddr *>(&address), &length) != 0) continue;
+		int listening = -1;
+		socklen_t size = sizeof listening;
+		const int asked = ::getsockopt(fd, SOL_SOCKET, SO_ACCEPTCONN, &listening, &size);
+		int port = -1;
+		if (address.ss_family == AF_INET) port = ntohs(reinterpret_cast<sockaddr_in *>(&address)->sin_port);
+		if (address.ss_family == AF_INET6) port = ntohs(reinterpret_cast<sockaddr_in6 *>(&address)->sin6_port);
+		text += QStringLiteral(" fd %1 family %2 port %3 acceptconn %4/%5;")
+		                .arg(fd).arg(address.ss_family).arg(port).arg(asked).arg(listening);
+	}
+	return text;
+}
+
 /* Process CPU time, user and system, in seconds. */
 double cpu_seconds() {
 	return double(std::clock()) / CLOCKS_PER_SEC;
@@ -612,7 +632,7 @@ void sshd_test::a_listener_the_system_takes_away_comes_back_without_spinning() {
 	QVERIFY(m_server->listening());
 
 	const int fd = listener_on(port);
-	QVERIFY(fd >= 0);
+	QVERIFY2(fd >= 0, qPrintable(QStringLiteral("nothing listening on %1 among:%2").arg(port).arg(describe_sockets())));
 	QCOMPARE(::shutdown(fd, SHUT_RDWR), 0);
 	QTRY_VERIFY(!m_server->listening());
 	QVERIFY(m_server->running());

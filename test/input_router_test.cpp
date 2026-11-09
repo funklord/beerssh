@@ -944,13 +944,20 @@ void input_router_test::a_held_key_repeats() {
 	QMouseEvent press(QEvent::MouseButtonPress, QPointF(at), global,
 	                   Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
 	QApplication::sendEvent(viewport, &press);
+
+	/*
+	 * Held until a repeat has come or five seconds have gone, rather than
+	 * for a fixed 900ms: a macOS runner once sent the first press and no
+	 * repeat inside 900ms (CI run 42643040734), and how soon the scroller
+	 * replays the press is the machine's scheduler, not the feature.
+	 */
+	QByteArray held;
 	QTest::qWait(900);
+	QTRY_VERIFY_WITH_TIMEOUT((held += emulator.take_output()).size() >= once.size() * 2, 5000);
 
 	QVERIFY2(left->isDown(),
 	          "a press at the viewport never reached the key, so the scroller "
 	          "swallowed it and nothing below measures the repeat");
-
-	const QByteArray held = emulator.take_output();
 
 	/*
 	 * TWO THINGS HAVE TO BE RIGHT AT ONCE, and each alone looks like the
@@ -1001,7 +1008,7 @@ void input_router_test::a_held_key_repeats() {
 	 * tapping, which is the whole feature.
 	 */
 	QVERIFY2(held.size() >= once.size() * 2,
-	          qPrintable(QStringLiteral("held for 900ms and sent %1 bytes; one press is %2")
+	          qPrintable(QStringLiteral("held and sent %1 bytes; one press is %2")
 	                             .arg(held.size()).arg(once.size())));
 	QVERIFY(held.startsWith(once));
 
