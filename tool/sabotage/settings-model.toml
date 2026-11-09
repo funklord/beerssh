@@ -99,3 +99,28 @@ file = "src/model/profile_store.cpp"
 find = "\t\tif (preset.is_builtin) {\n\t\t\tQJsonObject named;"
 replace = "\t\tif (false) {\n\t\t\tQJsonObject named;"
 expect = "a_shipped_preset_follows_the_build_not_the_file"
+
+# The custom palette writes all nineteen again, pinning every slot nobody
+# touched to the build's shipped colours.
+[[sabotage]]
+name = "the custom palette stores every colour"
+file = "src/model/app_settings.cpp"
+find = "\t\tif (chosen.contains(slot)) store(custom_slot_key(slot), QColor(colours[slot]).name());"
+replace = "\t\tif (true) store(custom_slot_key(slot), QColor(colours[slot]).name());"
+expect = "a_custom_palette_keeps_only_the_colours_chosen"
+
+# Classic ANSI writes today's sixteen instead of following the palette.
+[[sabotage]]
+name = "Classic ANSI pins the sixteen"
+file = "src/ui/colour_editor.cpp"
+find = "\t\tm_chosen.remove(i);\n"
+replace = "\t\tm_chosen.insert(i);\n"
+expect = "a_custom_palette_keeps_only_the_colours_chosen"
+
+# Choosing a default size writes the family too, pinning it.
+[[sabotage]]
+name = "a default size pins the family"
+file = "src/ui/app_settings_view.cpp"
+find = "\t\t\t\tif (family_moved) s.set_default_font_family(id);\n"
+replace = "\t\t\t\ts.set_default_font_family(id);\n"
+expect = "the_dialog_shows_a_hosts_own_size_and_follows_the_default"

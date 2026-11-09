@@ -2,6 +2,7 @@
 #define BSSH_COLOUR_EDITOR_H
 
 #include <QDialog>
+#include <QSet>
 
 #include "term/colour_scheme.h"
 
@@ -32,19 +33,32 @@ class bssh_colour_editor : public QDialog {
 	Q_OBJECT
 
 public:
+	/*
+	 * `chosen` is the slots somebody set before: 0-15 the sixteen, then
+	 * background, text and cursor (BSSH_CUSTOM_SLOTS).
+	 */
 	explicit bssh_colour_editor(const bssh_colour_scheme_t &scheme,
+	                             const QSet<int> &chosen = QSet<int>(),
 	                             QWidget *parent = nullptr);
 
 	/* What the user settled on. Only meaningful after exec() accepted. */
 	bssh_colour_scheme_t scheme() const { return m_scheme; }
 
+	/*
+	 * The slots chosen, by a pick here or before. Classic ANSI takes the
+	 * sixteen out again, so they follow the shipped palette rather than
+	 * pinning today's values of it.
+	 */
+	QSet<int> chosen() const { return m_chosen; }
+
 private:
-	QToolButton *add_swatch(QRgb *target, const QString &label, const QString &tip);
+	QToolButton *add_swatch(int slot, QRgb *target, const QString &label, const QString &tip);
 	void paint_swatch(QToolButton *swatch, QRgb colour);
-	void pick(QRgb *target, QToolButton *swatch, const QString &label);
+	void pick(int slot, QRgb *target, QToolButton *swatch, const QString &label);
 	void reset_to_classic();
 
 	bssh_colour_scheme_t m_scheme;
+	QSet<int> m_chosen;
 
 	/*
 	 * Kept so a reset can repaint them without rebuilding the dialog.

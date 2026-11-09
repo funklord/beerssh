@@ -1,6 +1,7 @@
 #ifndef BSSH_APP_SETTINGS_VIEW_H
 #define BSSH_APP_SETTINGS_VIEW_H
 
+#include <QPair>
 #include <QWidget>
 
 class QResizeEvent;
@@ -165,6 +166,12 @@ private:
 
 	/* The font, size and colours every host has unless it says otherwise. */
 	bssh_font_picker *m_default_font = nullptr;
+	/*
+	 * The family and size the default picker last showed, so a change
+	 * writes only the half that moved: writing both pinned the size of
+	 * whoever chose only a family.
+	 */
+	QPair<QString, int> m_default_font_shown;
 
 	/* The terminal and connection settings every host has unless it says
 	 * otherwise. */

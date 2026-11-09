@@ -78,6 +78,7 @@
 #include "ui/ssh_config_import.h"
 #include <QCheckBox>
 #include <QDialogButtonBox>
+#include "ui/colour_editor.h"
 #include <QLabel>
 #include <QListWidget>
 #include <QMenu>
@@ -175,6 +176,45 @@ struct setting_left_as_found_t {
 	QString path;
 	QVariant was;
 };
+
+void layout_test::a_custom_palette_keeps_only_the_colours_chosen() {
+	/*
+	 * A config records choices, not values: the custom palette wrote all
+	 * nineteen colours, so every slot nobody touched was pinned to the
+	 * shipped palette of the build that wrote it.
+	 */
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	bssh_app_settings settings(dir.path());
+	const bssh_colour_scheme_t shipped = settings.custom_scheme();
+	QVERIFY(settings.custom_scheme_chosen().isEmpty());
+
+	bssh_colour_scheme_t mine = shipped;
+	mine.background = qRgb(0x12, 0x34, 0x56);
+	settings.set_custom_scheme(mine, { 16, 2 });
+
+	QSettings file(settings.path(), QSettings::IniFormat);
+	QVERIFY(file.contains(QStringLiteral("custom_colours/background")));
+	QVERIFY2(file.contains(QStringLiteral("custom_colours/ansi2")),
+	         "a pick that happens to equal the shipped colour is still a choice");
+	QVERIFY(!file.contains(QStringLiteral("custom_colours/ansi1")));
+	QVERIFY(!file.contains(QStringLiteral("custom_colours/foreground")));
+	QCOMPARE(settings.custom_scheme_chosen(), QSet<int>({ 16, 2 }));
+	QCOMPARE(settings.custom_scheme().background, mine.background);
+	QCOMPARE(settings.custom_scheme().ansi[1], shipped.ansi[1]);
+
+	/* Classic ANSI puts the sixteen back to following, and only them. */
+	bssh_colour_editor editor(settings.custom_scheme(), settings.custom_scheme_chosen());
+	QDialogButtonBox *buttons = editor.findChild<QDialogButtonBox *>();
+	QVERIFY(buttons);
+	buttons->button(QDialogButtonBox::RestoreDefaults)->click();
+	QCOMPARE(editor.chosen(), QSet<int>({ 16 }));
+
+	settings.set_custom_scheme(editor.scheme(), editor.chosen());
+	QSettings again(settings.path(), QSettings::IniFormat);
+	QVERIFY(!again.contains(QStringLiteral("custom_colours/ansi2")));
+	QVERIFY(again.contains(QStringLiteral("custom_colours/background")));
+}
 
 void layout_test::size_classes_follow_the_window_not_the_platform() {
 	/* Android's thresholds, applied to whatever window is in front of us. */
@@ -14159,6 +14199,7 @@ void layout_test::the_custom_row_reaches_the_catalogue_at_startup() {
 void layout_test::the_custom_palette_reaches_the_catalogue_at_startup() {
 	bssh_app_settings settings;
 	const bssh_colour_scheme_t original = settings.custom_scheme();
+	const QSet<int> original_chosen = settings.custom_scheme_chosen();
 
 	/*
 	 * A colour the entry is not born holding. The custom entry starts as
@@ -14168,7 +14209,7 @@ void layout_test::the_custom_palette_reaches_the_catalogue_at_startup() {
 	bssh_colour_scheme_t wanted = original;
 	wanted.background = qRgb(0x12, 0x34, 0x56);
 	wanted.foreground = qRgb(0xab, 0xcd, 0xef);
-	settings.set_custom_scheme(wanted);
+	settings.set_custom_scheme(wanted, { 16, 17 });
 
 	bssh_main_window window;
 
@@ -14179,7 +14220,7 @@ void layout_test::the_custom_palette_reaches_the_catalogue_at_startup() {
 	QCOMPARE(custom->foreground, wanted.foreground);
 
 	/* Both the setting and the process-wide catalogue outlive this test. */
-	settings.set_custom_scheme(original);
+	settings.set_custom_scheme(original, original_chosen);
 	bssh_colour_scheme_catalog::instance().set_custom(original);
 }
 

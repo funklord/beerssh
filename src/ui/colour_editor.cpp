@@ -30,9 +30,11 @@ const int BSSH_SWATCH_PX = 28;
 
 } /* namespace */
 
-bssh_colour_editor::bssh_colour_editor(const bssh_colour_scheme_t &scheme, QWidget *parent)
+bssh_colour_editor::bssh_colour_editor(const bssh_colour_scheme_t &scheme,
+                                       const QSet<int> &chosen, QWidget *parent)
     : QDialog(parent),
-      m_scheme(scheme) {
+      m_scheme(scheme),
+      m_chosen(chosen) {
 	setWindowTitle(QStringLiteral("Custom colours"));
 
 	QVBoxLayout *outer = new QVBoxLayout(this);
@@ -69,10 +71,10 @@ bssh_colour_editor::bssh_colour_editor(const bssh_colour_scheme_t &scheme, QWidg
 
 	for (int i = 0; i < 8; ++i) {
 		const QString normal_name = QString::fromLatin1(BSSH_ANSI_NAMES[i]);
-		grid->addWidget(add_swatch(&m_scheme.ansi[i], QString(),
+		grid->addWidget(add_swatch(i, &m_scheme.ansi[i], QString(),
 		                            QStringLiteral("Normal %1").arg(normal_name.toLower())),
 		                 1, i + 1);
-		grid->addWidget(add_swatch(&m_scheme.ansi[i + 8], QString(),
+		grid->addWidget(add_swatch(i + 8, &m_scheme.ansi[i + 8], QString(),
 		                            QStringLiteral("Bright %1").arg(normal_name.toLower())),
 		                 2, i + 1);
 	}
@@ -93,14 +95,15 @@ bssh_colour_editor::bssh_colour_editor(const bssh_colour_scheme_t &scheme, QWidg
 	own->setSpacing(4);
 
 	struct named_t {
+		int slot;
 		QRgb *target;
 		const char *label;
 	};
 
 	const named_t owned[] = {
-		{ &m_scheme.background, "Background" },
-		{ &m_scheme.foreground, "Text" },
-		{ &m_scheme.cursor, "Cursor" }
+		{ 16, &m_scheme.background, "Background" },
+		{ 17, &m_scheme.foreground, "Text" },
+		{ 18, &m_scheme.cursor, "Cursor" }
 	};
 
 	int column = 0;
@@ -108,7 +111,7 @@ bssh_colour_editor::bssh_colour_editor(const bssh_colour_scheme_t &scheme, QWidg
 		const QString label = QString::fromLatin1(entry.label);
 		QLabel *name = new QLabel(label, this);
 		own->addWidget(name, 0, column);
-		own->addWidget(add_swatch(entry.target, label, label), 1, column);
+		own->addWidget(add_swatch(entry.slot, entry.target, label, label), 1, column);
 		++column;
 	}
 
@@ -142,7 +145,7 @@ bssh_colour_editor::bssh_colour_editor(const bssh_colour_scheme_t &scheme, QWidg
 	bssh_apply_touch_heights(this, false);
 }
 
-QToolButton *bssh_colour_editor::add_swatch(QRgb *target, const QString &label,
+QToolButton *bssh_colour_editor::add_swatch(int slot, QRgb *target, const QString &label,
                                              const QString &tip) {
 	QToolButton *swatch = new QToolButton(this);
 	swatch->setToolTip(tip);
@@ -158,8 +161,8 @@ QToolButton *bssh_colour_editor::add_swatch(QRgb *target, const QString &label,
 
 	paint_swatch(swatch, *target);
 
-	connect(swatch, &QToolButton::clicked, this, [this, target, swatch, tip] {
-		pick(target, swatch, tip);
+	connect(swatch, &QToolButton::clicked, this, [this, slot, target, swatch, tip] {
+		pick(slot, target, swatch, tip);
 	});
 
 	m_swatches.append(swatch);
@@ -186,7 +189,7 @@ void bssh_colour_editor::paint_swatch(QToolButton *swatch, QRgb colour) {
 	swatch->setIconSize(pixmap.size());
 }
 
-void bssh_colour_editor::pick(QRgb *target, QToolButton *swatch, const QString &label) {
+void bssh_colour_editor::pick(int slot, QRgb *target, QToolButton *swatch, const QString &label) {
 	/*
 	 * The system picker, not one written here. It is the control the user
 	 * already knows, it remembers custom colours across the session, and
@@ -198,6 +201,7 @@ void bssh_colour_editor::pick(QRgb *target, QToolButton *swatch, const QString &
 	if (!chosen.isValid()) return;
 
 	*target = chosen.rgb();
+	m_chosen.insert(slot);
 	paint_swatch(swatch, *target);
 }
 
@@ -212,7 +216,10 @@ void bssh_colour_editor::reset_to_classic() {
 	        bssh_colour_scheme_catalog::instance().by_id(QStringLiteral("default"));
 	if (!classic) return;
 
-	for (int i = 0; i < 16; ++i) m_scheme.ansi[i] = classic->ansi[i];
+	for (int i = 0; i < 16; ++i) {
+		m_scheme.ansi[i] = classic->ansi[i];
+		m_chosen.remove(i);
+	}
 
 	for (int i = 0; i < m_swatches.size(); ++i) {
 		paint_swatch(m_swatches.at(i), *m_targets.at(i));

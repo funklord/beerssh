@@ -44,7 +44,7 @@ expect = "the_dialog_shows_a_hosts_own_size_and_follows_the_default"
 [[sabotage]]
 name = "the default size is not saved"
 file = "src/ui/app_settings_view.cpp"
-find = "\t\t\t\ts.set_default_font_size(point_size);\n"
+find = "\t\t\t\tif (size_moved) s.set_default_font_size(point_size);\n"
 replace = ""
 expect = "the_dialog_shows_a_hosts_own_size_and_follows_the_default"
 

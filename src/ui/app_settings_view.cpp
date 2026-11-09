@@ -889,10 +889,10 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	                        "host in its Appearance settings to see it."));
 	connect(m_custom_colours, &QPushButton::clicked, this, [this] {
 		bssh_app_settings stored;
-		bssh_colour_editor editor(stored.custom_scheme(), this);
+		bssh_colour_editor editor(stored.custom_scheme(), stored.custom_scheme_chosen(), this);
 		if (editor.exec() != QDialog::Accepted) return;
 
-		stored.set_custom_scheme(editor.scheme());
+		stored.set_custom_scheme(editor.scheme(), editor.chosen());
 
 		/*
 		 * Into the catalog immediately, or every view keeps drawing the
@@ -1233,6 +1233,7 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 		m_default_font->set_font_choice(family.isEmpty() ? built_in.font_family : family,
 		                                size > 0 ? size : built_in.font_size);
 		m_default_font->set_scheme(scheme.isEmpty() ? built_in.colour_scheme : scheme);
+		m_default_font_shown = { m_default_font->font_id(), m_default_font->point_size() };
 	}
 
 	const int index = m_key_row->findData(int(settings.key_row_visibility()));
@@ -1270,9 +1271,17 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	if (m_default_font) {
 		connect(m_default_font, &bssh_font_picker::font_chosen, this,
 		         [this](const QString &id, int point_size) {
-			commit([id, point_size](bssh_app_settings &s) {
-				s.set_default_font_family(id);
-				s.set_default_font_size(point_size);
+			/*
+			 * Only the half that moved. The picker reports both on any
+			 * change, and writing both pinned the size of whoever only
+			 * chose a family (a config records choices, not values).
+			 */
+			const bool family_moved = id != m_default_font_shown.first;
+			const bool size_moved = point_size != m_default_font_shown.second;
+			m_default_font_shown = { id, point_size };
+			commit([id, point_size, family_moved, size_moved](bssh_app_settings &s) {
+				if (family_moved) s.set_default_font_family(id);
+				if (size_moved) s.set_default_font_size(point_size);
 			});
 		});
 		connect(m_default_font, &bssh_font_picker::scheme_chosen, this,

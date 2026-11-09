@@ -550,14 +550,41 @@ void bssh_app_settings::set_custom_key_row(const QString &spec) {
 	store(QStringLiteral("keyboard/custom_key_row"), spec);
 }
 
-void bssh_app_settings::set_custom_scheme(const bssh_colour_scheme_t &scheme) {
-	for (int i = 0; i < 16; ++i) {
-		store(ansi_key(i), QColor(scheme.ansi[i]).name());
-	}
+namespace {
 
-	store(QStringLiteral("custom_colours/background"), QColor(scheme.background).name());
-	store(QStringLiteral("custom_colours/foreground"), QColor(scheme.foreground).name());
-	store(QStringLiteral("custom_colours/cursor"), QColor(scheme.cursor).name());
+/* The custom palette's keys, in the slot order set_custom_scheme takes. */
+QString custom_slot_key(int slot) {
+	if (slot < 16) return ansi_key(slot);
+	static const char *const own[] = { "background", "foreground", "cursor" };
+	return QStringLiteral("custom_colours/") + QLatin1String(own[slot - 16]);
+}
+
+} /* namespace */
+
+void bssh_app_settings::set_custom_scheme(const bssh_colour_scheme_t &scheme,
+                                          const QSet<int> &chosen) {
+	const QRgb colours[] = {
+		scheme.ansi[0], scheme.ansi[1], scheme.ansi[2], scheme.ansi[3],
+		scheme.ansi[4], scheme.ansi[5], scheme.ansi[6], scheme.ansi[7],
+		scheme.ansi[8], scheme.ansi[9], scheme.ansi[10], scheme.ansi[11],
+		scheme.ansi[12], scheme.ansi[13], scheme.ansi[14], scheme.ansi[15],
+		scheme.background, scheme.foreground, scheme.cursor,
+	};
+	for (int slot = 0; slot < 19; ++slot) {
+		if (chosen.contains(slot)) store(custom_slot_key(slot), QColor(colours[slot]).name());
+		else {
+			QSettings file(m_path, QSettings::IniFormat);
+			file.remove(custom_slot_key(slot));
+		}
+	}
+}
+
+QSet<int> bssh_app_settings::custom_scheme_chosen() const {
+	QSet<int> chosen;
+	for (int slot = 0; slot < 19; ++slot) {
+		if (QColor(value(custom_slot_key(slot), QString()).toString()).isValid()) chosen.insert(slot);
+	}
+	return chosen;
 }
 
 namespace {

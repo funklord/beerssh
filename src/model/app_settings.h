@@ -1,6 +1,8 @@
 #ifndef BSSH_APP_SETTINGS_H
 #define BSSH_APP_SETTINGS_H
 
+#include <QSet>
+
 #include <QList>
 #include <QPair>
 #include <QString>
@@ -254,7 +256,16 @@ public:
 	 * black screen.
 	 */
 	bssh_colour_scheme_t custom_scheme() const;
-	void set_custom_scheme(const bssh_colour_scheme_t &scheme);
+	/*
+	 * Only the slots in `chosen` are stored (0-15 the sixteen, then
+	 * background, text, cursor); every other slot is removed and follows
+	 * the shipped palette. Writing all nineteen pinned the ones nobody
+	 * touched to the values of the build that wrote them.
+	 */
+	void set_custom_scheme(const bssh_colour_scheme_t &scheme, const QSet<int> &chosen);
+
+	/* The slots this device's custom palette sets, as set_custom_scheme takes them. */
+	QSet<int> custom_scheme_chosen() const;
 
 	/*
 	 * The custom key row, as the words sk_parse_key_row reads (sec 6.2).

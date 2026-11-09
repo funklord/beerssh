@@ -12258,6 +12258,22 @@ cursor a bar at once. `every_setting_has_a_default_and_a_hosts_own`,
 test above extended to the terminal's settings;
 `tool/sabotage/settings-model.toml`, nine edits.
 
+**A config records choices, not values (the holder's rule, 2026-11-06; found
+here by claude-guidelines' sweep 2026-11-09).** Three writers stored values
+nobody chose. Shipped presets were written to `presets.ini` with every field,
+so hosts following one were held to the build that seeded the file; they are
+written by name now and read from `bssh_preset_t::builtins()`. The custom
+palette wrote all nineteen colours; it writes the slots someone picked (a pick
+equal to the shipped colour included) and removes the rest, and *Classic ANSI*
+puts the sixteen back to following the shipped palette rather than writing
+today's values of it. Choosing a default font family wrote the size too; the
+half that moved is written now. **Open, and the holder's to settle:** the
+paragraph above stores a device default, and §10.1 a host's override, only
+where it differs from what it inherits, and a preset lays every field over the
+device defaults -- all three lose a pick that equals today's default, which the
+2026-11-06 rule calls wrong. Following it means presets that record only the
+fields they chose and a *Default (x)* entry on every field.
+
 **Host Settings, from the terminal, 2026-11-02.** Opened from a terminal's
 menu, the configuration window is the new-connection door, so its *This host*
 was a blank destination -- a change there reached nothing on screen, which is

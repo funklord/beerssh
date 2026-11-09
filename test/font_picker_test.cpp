@@ -299,8 +299,14 @@ void font_picker_test::the_dialog_shows_a_hosts_own_size_and_follows_the_default
 	QCOMPARE(host->point_size(), bssh_preset_t().font_size);
 	QSpinBox *size = device->findChild<QSpinBox *>();
 	QVERIFY(size);
+	const QVariant family_before =
+	        QSettings(left.path, QSettings::IniFormat).value(QStringLiteral("defaults/font_family"));
 	size->setValue(bssh_preset_t().font_size + 5);
 	QCOMPARE(bssh_app_settings().default_font_size(), bssh_preset_t().font_size + 5);
+
+	/* A size chosen is not a family chosen: the family goes on following. */
+	QCOMPARE(QSettings(left.path, QSettings::IniFormat).value(QStringLiteral("defaults/font_family")),
+	         family_before);
 	QCOMPARE(host->point_size(), bssh_preset_t().font_size + 5);
 
 	/* A host with a size of its own shows that. */
