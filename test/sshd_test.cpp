@@ -43,10 +43,12 @@ bool have_openssh() {
  * its socket out.
  */
 int listener_on(int port) {
-	const QStringList fds = QDir(QStringLiteral("/dev/fd")).entryList(QDir::NoDotAndDotDot | QDir::System
-	                                                                           | QDir::Files);
-	for (const QString &name : fds) {
-		const int fd = name.toInt();
+	/*
+	 * Every descriptor number rather than a directory listing: /proc is
+	 * Linux's, and macOS's /dev/fd lists nothing QDir will return.
+	 */
+	const int limit = int(::sysconf(_SC_OPEN_MAX));
+	for (int fd = 0; fd < limit && fd < 65536; ++fd) {
 		int listening = 0;
 		socklen_t size = sizeof listening;
 		if (::getsockopt(fd, SOL_SOCKET, SO_ACCEPTCONN, &listening, &size) != 0 || !listening) continue;

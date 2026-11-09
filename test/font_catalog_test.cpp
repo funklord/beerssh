@@ -37,8 +37,18 @@ void font_catalog_test::an_installed_font_resolves_like_a_set_font() {
 	QCOMPARE(catalog.display_name(id), installed.first());
 	QVERIFY(catalog.substitution_note(id).isEmpty());
 
-	/* And the set behind it, for the glyphs an unvetted family lacks. */
-	QVERIFY(catalog.fallback_chain(id).size() > 1);
+	/*
+	 * And the set behind it, for the glyphs an unvetted family lacks --
+	 * where any of the set is here: a machine with no fetched fonts and
+	 * none of the set installed (the macOS runner) has nothing to put
+	 * behind it, and the chain is the chosen family alone.
+	 */
+	const QStringList chain = catalog.fallback_chain(id);
+	QCOMPARE(chain.value(0), installed.first());
+	bool set_here = false;
+	for (const bssh_font_t &font : catalog.all())
+		set_here = set_here || (font.family != installed.first() && catalog.is_available(font.id));
+	if (set_here) QVERIFY(chain.size() > 1);
 }
 
 void font_catalog_test::an_installed_font_that_is_gone_falls_back_and_says_so() {

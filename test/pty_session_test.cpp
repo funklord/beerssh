@@ -500,23 +500,26 @@ void pty_session_test::backspace_crosses_a_wrapped_line() {
 	        emulator.screen().to_text().contains(QStringLiteral("READY>")), 15000);
 
 	/*
-	 * Counted as a DELTA from what is already on screen, because a prompt
-	 * carries a hostname and a path and this test cannot know whether
-	 * either contains the character it is counting.
+	 * Counted after the prompt only. The prompt line carries a hostname and
+	 * a path, and what is above it may hold the counted character too and
+	 * scroll away as the typing wraps: macOS's bash opens with a notice
+	 * naming zsh twice, and a delta from the whole screen came up two
+	 * short when that notice left it. The marker itself carries no 'z'.
 	 */
-	const int before = emulator.screen().to_text().count(QLatin1Char('z'));
+	const auto typed = [&emulator] {
+		const QString text = emulator.screen().to_text();
+		return text.mid(text.lastIndexOf(QStringLiteral("READY>"))).count(QLatin1Char('z'));
+	};
 
 	session.send(QByteArray(60, 'z'));
-	QTRY_VERIFY2_WITH_TIMEOUT(
-	        emulator.screen().to_text().count(QLatin1Char('z')) >= before + 60,
+	QTRY_VERIFY2_WITH_TIMEOUT(typed() >= 60,
 	        qPrintable(QStringLiteral("the screen:\n") + emulator.screen().to_text()), 15000);
 
 	/* 55 of the 60, so the erase has to cross the wrap rather than stop at it. */
 	session.send(QByteArray(55, '\x7f'));
-	QTRY_VERIFY_WITH_TIMEOUT(
-	        emulator.screen().to_text().count(QLatin1Char('z')) <= before + 5, 15000);
+	QTRY_VERIFY_WITH_TIMEOUT(typed() <= 5, 15000);
 
-	const int left = emulator.screen().to_text().count(QLatin1Char('z')) - before;
+	const int left = typed();
 	QVERIFY2(left <= 5,
 	          qPrintable(QStringLiteral("%1 characters still on screen after deleting 55 of "
 	                                     "60 -- the erase stopped at the wrap")

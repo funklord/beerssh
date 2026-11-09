@@ -176,9 +176,18 @@ void sshd_window_test::the_time_limit_stops_the_server_and_says_why() {
 	std::thread android_thread;
 	platform.time_out_from(android_thread);
 	QVERIFY(!window.serving());
+	/*
+	 * Not served is no banner, not a refused connect: on macOS a connect
+	 * to the port the server just closed was once reported made, while
+	 * lsof showed it CLOSED and nothing listening anywhere (CI run
+	 * 42636780896).
+	 */
 	QTcpSocket probe;
 	probe.connectToHost(QHostAddress::LocalHost, quint16(window.server().port()));
-	QVERIFY(!probe.waitForConnected(2000));
+	if (probe.waitForConnected(2000)) {
+		probe.waitForReadyRead(2000);
+		QVERIFY2(!probe.readAll().startsWith("SSH-2.0-"), "the server answered after it was stopped");
+	}
 
 	/* The screen catches up when Qt does. */
 	QVERIFY(platform.serving);
