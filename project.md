@@ -14703,8 +14703,9 @@ without an icon is defective, so there is a plain one meant to be replaced.
   getpeereid for the peer's uid); `-dead_strip` for `--gc-sections`; and
   either `strerror_r`. On the way clang refused `"\x1b7"` in a test, one hex
   escape where ESC 7 was meant, which GCC had kept as 0xb7 for months.
-  **The suite builds there and runs with 15 failures in 10 classes**, run
-  42472515273 less the store's five, so CI builds only. The store's five
+  **The suite builds there and ran with 15 failures in 10 classes**, run
+  42472515273 less the store's five, so CI built only until 2026-11-09; it
+  runs the suite now (run 42657284149: 1060 passed, 0 failed, 15 skipped). The store's five
   were the test, not the store: `app_data_redirect` isolated through
   `XDG_DATA_HOME`, which macOS ignores, so there the suite reached the
   account's real `~/Library/Application Support/beerssh/secrets.enc`; it
@@ -14716,10 +14717,10 @@ without an icon is defective, so there is a plain one meant to be replaced.
   before `stty -echo`, a key repeat waited 900 ms for). Qt's test mode leaves
   `~/Library/Preferences` alone, so the store view refuses there, as it should. One
   was the app's: the handoff socket sat in `~/Library/Application Support`, now
-  `TMPDIR` (`4e2a3de`). Still open: ink one pixel past the grid in the long-run
-  test, #161616 at x=590. `3e301cc` blamed a device pixel ratio of 2, which
-  reproduces that pixel here, but macOS failed the same way with it fixed, so
-  the cause is not known; its failure now says the font, the ratio and the cell. Windows does
+  `TMPDIR` (`4e2a3de`). The last, ink one pixel past the grid, was the test
+  measuring a font it never loaded: only the font tests register the set,
+  so it ran in a fallback everywhere, "Sans Serif" on the runner (`4e22b9b`;
+  `3e301cc` had blamed a device pixel ratio, wrongly). Windows does
   not build: no forkpty, no unix sockets in the handoff, and no CI job.
 
 ### 12.2h Store screenshots from the build — **[BUILT 2026-10-22]**
