@@ -12270,7 +12270,9 @@ palette wrote all nineteen colours; it writes the slots someone picked (a pick
 equal to the shipped colour included) and removes the rest, and *Classic ANSI*
 puts the sixteen back to following the shipped palette rather than writing
 today's values of it. Choosing a default font family wrote the size too; the
-half that moved is written now. The holder settled the rest the same day --
+half that moved is written now, and *Use the built-in font and colours*, shown
+while this device has any of the three, forgets them. The holder settled the
+rest the same day --
 "follow the 2026-11-06 rule, go ahead with sparse presets", with exceptions
 where a setting calls for one -- and the paragraph above and §10.1 say how.
 

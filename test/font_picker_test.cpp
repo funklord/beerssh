@@ -314,6 +314,16 @@ void font_picker_test::the_dialog_shows_a_hosts_own_size_and_follows_the_default
 	/* A size chosen is not a family chosen: the family goes on following. */
 	QCOMPARE(QSettings(left.path, QSettings::IniFormat).value(QStringLiteral("defaults/font_family")),
 	         family_before);
+
+	/* And the way back forgets it, rather than writing the built-in size. */
+	QPushButton *follow = everywhere->findChild<QPushButton *>(QStringLiteral("default_font_follow"));
+	QVERIFY(follow && !follow->isHidden());
+	follow->click();
+	QVERIFY(!QSettings(left.path, QSettings::IniFormat).contains(QStringLiteral("defaults/font_size")));
+	QCOMPARE(bssh_app_settings().default_font_size(), 0);
+	QVERIFY(follow->isHidden());
+	QCOMPARE(host->point_size(), bssh_preset_t().font_size);
+	size->setValue(bssh_preset_t().font_size + 5);
 	QCOMPARE(host->point_size(), bssh_preset_t().font_size + 5);
 
 	/* A host with a size of its own shows that. */

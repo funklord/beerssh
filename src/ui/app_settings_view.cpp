@@ -405,6 +405,16 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 		m_default_font = new bssh_font_picker(this);
 		m_default_font->setObjectName(QStringLiteral("default_font_picker"));
 		form->addRow(m_default_font);
+
+		/*
+		 * The way back to following the build, shown while this device
+		 * has a font, size or colours of its own: once picked they are
+		 * kept whatever they equal, so something has to forget them (a
+		 * config records choices, not values).
+		 */
+		m_default_font_follow = new QPushButton(QStringLiteral("Use the built-in font and colours"), this);
+		m_default_font_follow->setObjectName(QStringLiteral("default_font_follow"));
+		form->addRow(m_default_font_follow);
 	}
 
 	/*
@@ -1243,6 +1253,8 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 		                                size > 0 ? size : built_in.font_size);
 		m_default_font->set_scheme(scheme.isEmpty() ? built_in.colour_scheme : scheme);
 		m_default_font_shown = { m_default_font->font_id(), m_default_font->point_size() };
+		if (m_default_font_follow)
+			m_default_font_follow->setVisible(!family.isEmpty() || size > 0 || !scheme.isEmpty());
 	}
 
 	const int index = m_key_row->findData(int(settings.key_row_visibility()));
@@ -1288,6 +1300,7 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 			const bool family_moved = id != m_default_font_shown.first;
 			const bool size_moved = point_size != m_default_font_shown.second;
 			m_default_font_shown = { id, point_size };
+			if (family_moved || size_moved) m_default_font_follow->setVisible(true);
 			commit([id, point_size, family_moved, size_moved](bssh_app_settings &s) {
 				if (family_moved) s.set_default_font_family(id);
 				if (size_moved) s.set_default_font_size(point_size);
@@ -1295,7 +1308,23 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 		});
 		connect(m_default_font, &bssh_font_picker::scheme_chosen, this,
 		         [this](const QString &id) {
+			m_default_font_follow->setVisible(true);
 			commit([id](bssh_app_settings &s) { s.set_default_colour_scheme(id); });
+		});
+		connect(m_default_font_follow, &QPushButton::clicked, this, [this] {
+			const bssh_preset_t built_in;
+			{
+				const QSignalBlocker quiet(m_default_font);
+				m_default_font->set_font_choice(built_in.font_family, built_in.font_size);
+				m_default_font->set_scheme(built_in.colour_scheme);
+			}
+			m_default_font_shown = { m_default_font->font_id(), m_default_font->point_size() };
+			m_default_font_follow->setVisible(false);
+			commit([](bssh_app_settings &s) {
+				s.forget_default_setting(QStringLiteral("font_family"));
+				s.forget_default_setting(QStringLiteral("font_size"));
+				s.forget_default_setting(QStringLiteral("colour_scheme"));
+			});
 		});
 	}
 	connect(m_key_row, &QComboBox::currentIndexChanged, this, [this] {

@@ -172,6 +172,7 @@ private:
 	 * whoever chose only a family.
 	 */
 	QPair<QString, int> m_default_font_shown;
+	QPushButton *m_default_font_follow = nullptr;
 
 	/* The terminal and connection settings every host has unless it says
 	 * otherwise. */
