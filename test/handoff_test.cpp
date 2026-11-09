@@ -54,16 +54,23 @@ bool screen_shows(bssh_session *session, const QString &wanted, int timeout_ms =
 
 /* The handoff directory, private to the test: XDG_RUNTIME_DIR, which
  * bssh_handoff_point::directory() is under. */
+/* TMPDIR is the runtime directory on macOS (bssh_handoff_point::directory). */
+#ifdef Q_OS_MACOS
+#define RUNTIME_VARIABLE "TMPDIR"
+#else
+#define RUNTIME_VARIABLE "XDG_RUNTIME_DIR"
+#endif
+
 struct runtime_dir_t {
 	QTemporaryDir dir;
-	QByteArray before = qgetenv("XDG_RUNTIME_DIR");
+	QByteArray before = qgetenv(RUNTIME_VARIABLE);
 	runtime_dir_t() {
 		QFile::setPermissions(dir.path(), QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
-		qputenv("XDG_RUNTIME_DIR", dir.path().toUtf8());
+		qputenv(RUNTIME_VARIABLE, dir.path().toUtf8());
 	}
 	~runtime_dir_t() {
-		if (before.isEmpty()) qunsetenv("XDG_RUNTIME_DIR");
-		else qputenv("XDG_RUNTIME_DIR", before);
+		if (before.isEmpty()) qunsetenv(RUNTIME_VARIABLE);
+		else qputenv(RUNTIME_VARIABLE, before);
 	}
 };
 
@@ -381,8 +388,11 @@ void handoff_test::a_dropped_session_lands_in_this_process() {
 		giver.waitForReadyRead(100);
 		line += giver.readAllStandardOutput();
 	}
-	const QList<QByteArray> fields = line.trimmed().split(' ');
-	QVERIFY2(fields.size() == 2, line.constData());
+	/* The id last, after the path, which may hold a space. */
+	const QByteArray trimmed = line.trimmed();
+	const qsizetype gap = trimmed.lastIndexOf(' ');
+	QVERIFY2(gap > 0, line.constData());
+	const QList<QByteArray> fields = { trimmed.left(gap), trimmed.mid(gap + 1) };
 
 	bssh_session_registry *registry = bssh_session_registry::shared();
 	const int before = registry->count();

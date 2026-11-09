@@ -7986,7 +7986,9 @@ window with no name is a blank row in the task switcher.
      EOF on the master and loses the exit code.
      Between processes, `bssh_handoff_point` listens on
      `handoff-<pid>.sock` in a 0700 directory under the runtime
-     directory (checked, not assumed), refuses a peer of another uid
+     directory (checked, not assumed; on macOS the per-user `TMPDIR`,
+     since Qt's runtime location there is `~/Library/Application
+     Support`, which outlives a reboot), refuses a peer of another uid
      (`SO_PEERCRED`), and runs take, state, taken, released, each step
      bounded. The giver commits only on "taken", shutting the socket
      before it resumes otherwise, and the taker uses the session only on

@@ -100,9 +100,20 @@ bssh_handoff_point::~bssh_handoff_point() {
 	if (!m_path.isEmpty()) ::unlink(QFile::encodeName(m_path).constData());
 }
 
+/*
+ * A directory that is this user's and is emptied at reboot, as a stale
+ * socket should be. XDG_RUNTIME_DIR on Linux. Not on macOS, where Qt's
+ * runtime location is ~/Library/Application Support, which outlives
+ * reboots and is shared with everything the app keeps; there the
+ * per-user TMPDIR launchd gives each login is the runtime directory.
+ */
 QString bssh_handoff_point::directory() {
+#ifdef Q_OS_MACOS
+	QString base = QDir::tempPath();
+#else
 	QString base = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
 	if (base.isEmpty()) base = QDir::tempPath();
+#endif
 	return base + QStringLiteral("/beerssh");
 }
 
