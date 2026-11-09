@@ -83,3 +83,19 @@ file = "src/ui/main_window.cpp"
 find = "\tm_session_dialog->set_current_profile(stored);\n\tshow_front_door();\n"
 replace = "\tshow_front_door();\n"
 expect = "host_settings_open_the_terminals_own_host"
+
+# A shipped preset read from the file: every host following it held to the
+# build that seeded presets.ini (a config records choices, not values).
+[[sabotage]]
+name = "a shipped preset is read from the file, not the build"
+file = "src/model/profile_store.cpp"
+find = "\t\t\t\tif (shipped.name == preset.name) preset = shipped;\n"
+replace = ""
+expect = "a_shipped_preset_follows_the_build_not_the_file"
+
+[[sabotage]]
+name = "a shipped preset's values are written into the file"
+file = "src/model/profile_store.cpp"
+find = "\t\tif (preset.is_builtin) {\n\t\t\tQJsonObject named;"
+replace = "\t\tif (false) {\n\t\t\tQJsonObject named;"
+expect = "a_shipped_preset_follows_the_build_not_the_file"

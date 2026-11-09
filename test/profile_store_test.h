@@ -46,6 +46,7 @@ private slots:
 	void the_stored_password_flag_round_trips();
 	void the_starter_presets_are_seeded_once();
 	void the_retired_shipped_presets_go_and_their_hosts_follow_none();
+	void a_shipped_preset_follows_the_build_not_the_file();
 	void a_host_follows_a_preset_and_may_override_it();
 	void a_preset_in_use_cannot_be_deleted();
 	void a_shipped_preset_cannot_be_edited();

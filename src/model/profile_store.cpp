@@ -412,6 +412,19 @@ void bssh_profile_store::load_presets() {
 		}
 
 		bssh_preset_t preset = bssh_preset_t::from_json(json);
+
+		/*
+		 * A shipped preset is this build's, not the file's: it cannot be
+		 * edited, so what the file holds of it is only what some earlier
+		 * build shipped. Taken from the build, a change to a shipped
+		 * preset reaches the hosts following it (working-practice: a
+		 * config records choices, not values).
+		 */
+		if (builtin) {
+			for (const bssh_preset_t &shipped : bssh_preset_t::builtins()) {
+				if (shipped.name == preset.name) preset = shipped;
+			}
+		}
 		preset.id = assigned;
 		preset.is_builtin = builtin;
 
@@ -629,7 +642,19 @@ bool bssh_profile_store::write_presets() {
 	for (const bssh_preset_t &preset : m_presets) {
 		file.beginGroup(m_slugs.value(preset.id, slug_for(preset.name)));
 
-		const QJsonObject json = preset.to_json();
+		/*
+		 * A shipped preset by name only: its values are the build's, read
+		 * from bssh_preset_t::builtins() at load, and written here they
+		 * would hold every host following it to the build that seeded the
+		 * file. Its values went in until 2026-11-09, and a file that has
+		 * them is read the same way.
+		 */
+		QJsonObject json = preset.to_json();
+		if (preset.is_builtin) {
+			QJsonObject named;
+			named.insert(QStringLiteral("name"), preset.name);
+			json = named;
+		}
 		for (auto it = json.constBegin(); it != json.constEnd(); ++it) {
 			/*
 			 * The schema version belongs to the export format (sec 10.5),

@@ -470,6 +470,48 @@ void profile_store_test::the_retired_shipped_presets_go_and_their_hosts_follow_n
 	QCOMPARE(again.presets().size(), store.presets().size());
 }
 
+void profile_store_test::a_shipped_preset_follows_the_build_not_the_file() {
+	/*
+	 * A shipped preset cannot be edited, so values a file holds for it
+	 * are only what the build that seeded the file shipped. Read from the
+	 * file, every host following it was held to that build for ever.
+	 */
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	const QString path = dir.filePath(QStringLiteral("presets.ini"));
+	{
+		QSettings presets(path, QSettings::IniFormat);
+		presets.setValue(QStringLiteral("old-or-limited-equipment/id"), 2);
+		presets.setValue(QStringLiteral("old-or-limited-equipment/name"),
+		                 QStringLiteral("Old or limited equipment"));
+		presets.setValue(QStringLiteral("old-or-limited-equipment/builtin"), true);
+		presets.setValue(QStringLiteral("old-or-limited-equipment/term"), QStringLiteral("vt52"));
+		presets.setValue(QStringLiteral("old-or-limited-equipment/scrollback_lines"), 1234);
+		presets.setValue(QStringLiteral("tmux-first/id"), 1);
+		presets.setValue(QStringLiteral("tmux-first/name"), QStringLiteral("tmux-first"));
+		presets.setValue(QStringLiteral("tmux-first/builtin"), true);
+		presets.sync();
+	}
+
+	bssh_profile_store store(dir.path());
+	bssh_preset_t shipped;
+	for (const bssh_preset_t &preset : bssh_preset_t::builtins())
+		if (preset.name == QStringLiteral("Old or limited equipment")) shipped = preset;
+	QCOMPARE(store.preset(2).term, shipped.term);
+	QCOMPARE(store.preset(2).scrollback_lines, shipped.scrollback_lines);
+	QCOMPARE(store.preset(1).on_connect_command, QStringLiteral("tmux attach || tmux new"));
+
+	/* And written by name alone, so the next build's values reach it too. */
+	bssh_preset_t mine;
+	mine.name = QStringLiteral("Mine");
+	QVERIFY(store.save_preset(mine) != 0);
+	QSettings written(path, QSettings::IniFormat);
+	QVERIFY(written.contains(QStringLiteral("old-or-limited-equipment/builtin")));
+	QVERIFY(!written.contains(QStringLiteral("old-or-limited-equipment/term")));
+	QVERIFY(!written.contains(QStringLiteral("old-or-limited-equipment/scrollback_lines")));
+	QVERIFY(!written.contains(QStringLiteral("tmux-first/on_connect_command")));
+}
+
 void profile_store_test::a_host_follows_a_preset_and_may_override_it() {
 	QTemporaryDir dir;
 	const QString path = dir.filePath(QStringLiteral("test.db"));
