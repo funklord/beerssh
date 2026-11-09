@@ -1531,13 +1531,20 @@ void terminal_view_test::a_long_run_of_text_stays_on_the_grid() {
 	const QColor background = rendered.pixelColor(rendered.width() - 1,
 	                                               rendered.height() - 1);
 
+	/*
+	 * In the image's own pixels: grab() renders at the screen's device
+	 * pixel ratio, 2 on a Mac, while the cell is measured in logical ones.
+	 */
+	const qreal ratio = rendered.devicePixelRatio();
+	const int cell_width = qRound(view.cell_width() * ratio);
+	const int cell_height = qRound(view.cell_height() * ratio);
+
 	/* Ink somewhere in the last column's own slice of the row. */
-	const int cell_width = view.cell_width();
 	const int last_left = (cols - 1) * cell_width;
 
 	bool ink_in_last_cell = false;
 	for (int x = last_left; x < last_left + cell_width && x < rendered.width(); ++x) {
-		for (int y = 0; y < view.cell_height(); ++y) {
+		for (int y = 0; y < cell_height; ++y) {
 			if (rendered.pixelColor(x, y) != background) ink_in_last_cell = true;
 		}
 	}
@@ -1558,7 +1565,7 @@ void terminal_view_test::a_long_run_of_text_stays_on_the_grid() {
 	 */
 	const int tolerance = 12;
 	for (int x = cols * cell_width; x < rendered.width(); ++x) {
-		for (int y = 0; y < view.cell_height(); ++y) {
+		for (int y = 0; y < cell_height; ++y) {
 			const QColor pixel = rendered.pixelColor(x, y);
 			const int drift = qMax(qAbs(pixel.red() - background.red()),
 			                        qMax(qAbs(pixel.green() - background.green()),
