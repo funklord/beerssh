@@ -12276,6 +12276,22 @@ rest the same day --
 "follow the 2026-11-06 rule, go ahead with sparse presets", with exceptions
 where a setting calls for one -- and the paragraph above and §10.1 say how.
 
+**The rest of `app.ini`, swept 2026-11-09 for the same fault.** None writes
+a value nobody chose: every setter runs on a change somebody made, the page
+fills its controls before connecting them, and the writes outside it are a
+drag (keyboard size), a toggle (menu bar), a "don't ask again" and the store
+view's test mode. None drops a pick equal to the default. The question left
+is the rule's own -- when the default changes, should this person get it --
+and it was answered per setting. **Measured from the device, so given a
+*Default (x)* that stores nothing:** the keyboard (built-in on touch,
+the device's elsewhere) and keeping sessions on close (asked on touch), whose
+tick box became a choice. **Not given one, by the rule's exceptions:** a
+default that is a behaviour of its own -- *Automatic* key row, context menu,
+scrollbar and arrangement, *Follow the system* theme -- where picking it is
+following; defaults nothing plans to move (the bools, tab position, window
+title, snap radius, image history, the keyboard layout); the brightness pair,
+whose reset already forgets them; and sizes the person dragged.
+
 **Host Settings, from the terminal, 2026-11-02.** Opened from a terminal's
 menu, the configuration window is the new-connection door, so its *This host*
 was a blank destination -- a change there reached nothing on screen, which is

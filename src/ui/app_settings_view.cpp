@@ -273,6 +273,17 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	 */
 	m_keyboard = new QComboBox(this);
 	m_keyboard->setObjectName(QStringLiteral("keyboard"));
+
+	/*
+	 * Following what this device gets, which is measured (touch or not)
+	 * and so can differ between devices and move on one: stored as
+	 * nothing, where picking the same keyboard by name is kept. hydra's
+	 * "Default (...)" shape, the holder's worked example.
+	 */
+	m_keyboard->addItem(bssh_app_settings::default_keyboard() == bssh_app_settings::KEYBOARD_SYSTEM
+	                            ? QStringLiteral("Default (this device's)")
+	                            : QStringLiteral("Default (BeerSSH's own)"),
+	                     -1);
 	m_keyboard->addItem(QStringLiteral("This device's keyboard"),
 	                     int(bssh_app_settings::KEYBOARD_SYSTEM));
 	/*
@@ -718,10 +729,26 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	if (on_this_page(SECTION_TERMINAL, paste_note)) form->addRow(paste_note);
 
 	/* sec 5.5: what closing a window does to the sessions it shows. */
-	m_keep_sessions_on_close = new QCheckBox(
-	        QStringLiteral("Ask to keep sessions running on close"), this);
+	/*
+	 * A choice rather than a tick box because its default is measured --
+	 * asked on touch, not on a desktop -- so it can differ between people,
+	 * and a tick box, once touched, can only store yes or no. Default
+	 * stores nothing and follows the device (a config records choices,
+	 * not values).
+	 */
+	m_keep_sessions_on_close = new QComboBox(this);
+	m_keep_sessions_on_close->setObjectName(QStringLiteral("keep_sessions_on_close"));
+	{
+		const bssh_platform *platform = bssh_platform::instance();
+		const bool asks = platform && platform->is_touch_primary();
+		m_keep_sessions_on_close->addItem(asks ? QStringLiteral("Default (ask)")
+		                                       : QStringLiteral("Default (close them)"), -1);
+	}
+	m_keep_sessions_on_close->addItem(QStringLiteral("Ask to keep them running"), 1);
+	m_keep_sessions_on_close->addItem(QStringLiteral("Close them"), 0);
+	bssh_fit_items(m_keep_sessions_on_close);
 	if (on_this_page(SECTION_TERMINAL, m_keep_sessions_on_close))
-		form->addRow(m_keep_sessions_on_close);
+		form->addRow(QStringLiteral("Closing a window's sessions"), m_keep_sessions_on_close);
 
 	QLabel *close_note = bssh_wrapped_note(
 	        QStringLiteral("Off, closing a window closes its sessions. On, it asks, and "
@@ -1201,7 +1228,9 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	m_caps_as_ctrl->setChecked(settings.caps_as_ctrl());
 	m_keyboard_grips->setChecked(settings.keyboard_grips());
 	m_warn_multiline_paste->setChecked(settings.warn_multiline_paste());
-	m_keep_sessions_on_close->setChecked(settings.keep_sessions_on_close());
+	m_keep_sessions_on_close->setCurrentIndex(
+	        !settings.keep_sessions_on_close_chosen() ? 0
+	                : m_keep_sessions_on_close->findData(settings.keep_sessions_on_close() ? 1 : 0));
 	m_offer_multiplexers->setChecked(settings.offer_multiplexer_sessions());
 	m_honour_font_scale->setChecked(settings.honour_system_font_scale());
 	m_font_ligatures->setChecked(settings.font_ligatures());
@@ -1260,7 +1289,8 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	const int index = m_key_row->findData(int(settings.key_row_visibility()));
 	m_key_row->setCurrentIndex(index < 0 ? 0 : index);
 
-	const int keyboard_index = m_keyboard->findData(int(settings.keyboard()));
+	const int keyboard_index = settings.keyboard_chosen()
+	        ? m_keyboard->findData(int(settings.keyboard())) : 0;
 	m_keyboard->setCurrentIndex(keyboard_index < 0 ? 0 : keyboard_index);
 
 	const int layout_index = m_keyboard_layout->findData(settings.keyboard_layout());
@@ -1334,9 +1364,10 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 		});
 	});
 	connect(m_keyboard, &QComboBox::currentIndexChanged, this, [this] {
-		commit([this](bssh_app_settings &s) {
-			s.set_keyboard(bssh_app_settings::keyboard_t(
-			        m_keyboard->currentData().toInt()));
+		const int chosen = m_keyboard->currentData().toInt();
+		commit([chosen](bssh_app_settings &s) {
+			if (chosen < 0) s.forget_keyboard();
+			else s.set_keyboard(bssh_app_settings::keyboard_t(chosen));
 		});
 	});
 	connect(m_keyboard_layout, &QComboBox::currentIndexChanged, this, [this] {
@@ -1420,9 +1451,11 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 			s.set_warn_multiline_paste(m_warn_multiline_paste->isChecked());
 		});
 	});
-	connect(m_keep_sessions_on_close, &QCheckBox::toggled, this, [this] {
-		commit([this](bssh_app_settings &s) {
-			s.set_keep_sessions_on_close(m_keep_sessions_on_close->isChecked());
+	connect(m_keep_sessions_on_close, &QComboBox::currentIndexChanged, this, [this] {
+		const int chosen = m_keep_sessions_on_close->currentData().toInt();
+		commit([chosen](bssh_app_settings &s) {
+			if (chosen < 0) s.forget_keep_sessions_on_close();
+			else s.set_keep_sessions_on_close(chosen == 1);
 		});
 	});
 	connect(m_offer_multiplexers, &QCheckBox::toggled, this, [this] {
@@ -1533,8 +1566,9 @@ void bssh_app_settings_view::refresh_keyboard_fallback() {
 	 */
 	if (!whole() && m_section != SECTION_KEYBOARD) return;
 
-	const bssh_app_settings::keyboard_t chosen =
-	        bssh_app_settings::keyboard_t(m_keyboard->currentData().toInt());
+	const int picked = m_keyboard->currentData().toInt();
+	const bssh_app_settings::keyboard_t chosen = picked < 0
+	        ? bssh_app_settings::default_keyboard() : bssh_app_settings::keyboard_t(picked);
 	sk_catalog::style_t wanted;
 	if (chosen == bssh_app_settings::KEYBOARD_BUILT_IN) {
 		wanted = sk_catalog::STYLE_COMPACT;

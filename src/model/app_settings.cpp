@@ -228,6 +228,24 @@ bssh_app_settings::keyboard_t bssh_app_settings::keyboard() const {
 	return default_keyboard();
 }
 
+bool bssh_app_settings::keyboard_chosen() const {
+	return contains(QStringLiteral("input/keyboard"));
+}
+
+void bssh_app_settings::forget_keyboard() {
+	QSettings file(m_path, QSettings::IniFormat);
+	file.remove(QStringLiteral("input/keyboard"));
+}
+
+bool bssh_app_settings::keep_sessions_on_close_chosen() const {
+	return contains(QStringLiteral("window/keep_sessions_on_close"));
+}
+
+void bssh_app_settings::forget_keep_sessions_on_close() {
+	QSettings file(m_path, QSettings::IniFormat);
+	file.remove(QStringLiteral("window/keep_sessions_on_close"));
+}
+
 void bssh_app_settings::set_keyboard(keyboard_t keyboard) {
 	store(QStringLiteral("input/keyboard"), QLatin1String(BSSH_KEYBOARD_KEYS[int(keyboard)]));
 }

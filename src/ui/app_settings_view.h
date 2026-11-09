@@ -190,7 +190,7 @@ private:
 	QCheckBox *m_keyboard_grips;
 	QPushButton *m_keyboard_reset;
 	QCheckBox *m_warn_multiline_paste;
-	QCheckBox *m_keep_sessions_on_close;
+	QComboBox *m_keep_sessions_on_close;
 	QCheckBox *m_offer_multiplexers;
 	QCheckBox *m_honour_font_scale;
 	QCheckBox *m_font_ligatures;

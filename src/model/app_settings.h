@@ -212,6 +212,16 @@ public:
 	keyboard_t keyboard() const;
 	void set_keyboard(keyboard_t keyboard);
 
+	/*
+	 * Whether this device chose a keyboard, and forgetting that choice.
+	 * The default is measured (default_keyboard(): touch or not), so it
+	 * can differ between people and move on one device, and a choice
+	 * made once could not otherwise follow it again (a config records
+	 * choices, not values).
+	 */
+	bool keyboard_chosen() const;
+	void forget_keyboard();
+
 	explicit bssh_app_settings(const QString &directory = QString());
 
 	/*
@@ -483,6 +493,10 @@ public:
 	 */
 	bool keep_sessions_on_close() const;
 	void set_keep_sessions_on_close(bool keep);
+
+	/* The same pair, for a default measured the same way. */
+	bool keep_sessions_on_close_chosen() const;
+	void forget_keep_sessions_on_close();
 
 	/*
 	 * List tmux and screen sessions when a shell connects and offer them

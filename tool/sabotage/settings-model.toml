@@ -157,3 +157,20 @@ file = "src/ui/terminal_fields.cpp"
 find = "\tm_chosen.remove(key);\n\tfill(m_inherited, { key });\n"
 replace = "\tfill(m_inherited, { key });\n"
 expect = "every_setting_has_a_default_and_a_hosts_own"
+
+# The keyboard's Default stores the measured keyboard by name, so it stops
+# following the device -- the setting a phone and a desktop answer differently.
+[[sabotage]]
+name = "the keyboard's Default pins today's keyboard"
+file = "src/ui/app_settings_view.cpp"
+find = "\t\t\tif (chosen < 0) s.forget_keyboard();\n"
+replace = "\t\t\tif (chosen < 0) s.set_keyboard(bssh_app_settings::default_keyboard());\n"
+expect = "a_measured_default_has_a_way_back"
+
+# Keeping sessions on close: the same, one setting over.
+[[sabotage]]
+name = "keeping sessions on close cannot go back to the default"
+file = "src/ui/app_settings_view.cpp"
+find = "\t\t\tif (chosen < 0) s.forget_keep_sessions_on_close();\n"
+replace = "\t\t\tif (chosen < 0) s.set_keep_sessions_on_close(false);\n"
+expect = "a_measured_default_has_a_way_back"

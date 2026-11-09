@@ -177,6 +177,42 @@ struct setting_left_as_found_t {
 	QVariant was;
 };
 
+void layout_test::a_measured_default_has_a_way_back() {
+	/*
+	 * Two settings whose default is measured -- touch or not -- so it
+	 * differs between devices and can move on one. Picking the default by
+	 * name is a choice and is kept; Default stores nothing and follows the
+	 * device (a config records choices, not values).
+	 */
+	const setting_left_as_found_t keyboard_left(QStringLiteral("input/keyboard"));
+	const setting_left_as_found_t sessions_left(QStringLiteral("window/keep_sessions_on_close"));
+	bssh_app_settings().forget_keyboard();
+	bssh_app_settings().forget_keep_sessions_on_close();
+
+	bssh_app_settings_view page(bssh_app_settings_view::EVERYTHING, nullptr);
+	QComboBox *keyboard = page.findChild<QComboBox *>(QStringLiteral("keyboard"));
+	QComboBox *sessions = page.findChild<QComboBox *>(QStringLiteral("keep_sessions_on_close"));
+	QVERIFY(keyboard && sessions);
+	QCOMPARE(keyboard->currentData().toInt(), -1);
+	QCOMPARE(sessions->currentData().toInt(), -1);
+
+	keyboard->setCurrentIndex(keyboard->findData(int(bssh_app_settings::default_keyboard())));
+	sessions->setCurrentIndex(sessions->findData(bssh_app_settings().keep_sessions_on_close() ? 1 : 0));
+	QVERIFY2(bssh_app_settings().keyboard_chosen(), "the default picked by name is still a choice");
+	QVERIFY(bssh_app_settings().keep_sessions_on_close_chosen());
+
+	keyboard->setCurrentIndex(0);
+	sessions->setCurrentIndex(0);
+	QVERIFY(!bssh_app_settings().keyboard_chosen());
+	QVERIFY(!bssh_app_settings().keep_sessions_on_close_chosen());
+
+	/* And a page opened on a chosen value shows it, not Default. */
+	bssh_app_settings().set_keyboard(bssh_app_settings::KEYBOARD_BUILT_IN_SPLIT);
+	bssh_app_settings_view again(bssh_app_settings_view::EVERYTHING, nullptr);
+	QCOMPARE(again.findChild<QComboBox *>(QStringLiteral("keyboard"))->currentData().toInt(),
+	         int(bssh_app_settings::KEYBOARD_BUILT_IN_SPLIT));
+}
+
 void layout_test::a_custom_palette_keeps_only_the_colours_chosen() {
 	/*
 	 * A config records choices, not values: the custom palette wrote all
