@@ -1571,8 +1571,14 @@ void terminal_view_test::a_long_run_of_text_stays_on_the_grid() {
 			                        qMax(qAbs(pixel.green() - background.green()),
 			                              qAbs(pixel.blue() - background.blue())));
 			QVERIFY2(drift <= tolerance,
-			          qPrintable(QStringLiteral("ink at x=%1 y=%2: %3 against %4")
-			                             .arg(x).arg(y).arg(pixel.name(), background.name())));
+			          qPrintable(QStringLiteral("ink at x=%1 y=%2: %3 against %4; %5 columns of %6 px "
+			                                     "at ratio %7 in %8 px, drawn in %9 (set font %10)")
+			                             .arg(x).arg(y).arg(pixel.name(), background.name())
+			                             .arg(cols).arg(cell_width).arg(ratio).arg(rendered.width())
+			                             .arg(view.font().family())
+			                             .arg(bssh_font_catalog::instance().is_available(
+			                                          QStringLiteral("jetbrains-mono"))
+			                                          ? QStringLiteral("here") : QStringLiteral("absent"))));
 		}
 	}
 }

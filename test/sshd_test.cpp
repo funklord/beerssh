@@ -10,6 +10,7 @@
 #include <QTest>
 
 #include <chrono>
+#include <cerrno>
 #include <ctime>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -49,9 +50,19 @@ int listener_on(int port) {
 	 */
 	const int limit = int(::sysconf(_SC_OPEN_MAX));
 	for (int fd = 0; fd < limit && fd < 65536; ++fd) {
+		/*
+		 * SO_ACCEPTCONN where it can be asked; macOS refuses it, and there
+		 * a bound socket with no peer is the listener.
+		 */
 		int listening = 0;
 		socklen_t size = sizeof listening;
-		if (::getsockopt(fd, SOL_SOCKET, SO_ACCEPTCONN, &listening, &size) != 0 || !listening) continue;
+		if (::getsockopt(fd, SOL_SOCKET, SO_ACCEPTCONN, &listening, &size) != 0) {
+			struct sockaddr_storage peer;
+			socklen_t peer_length = sizeof peer;
+			listening = ::getpeername(fd, reinterpret_cast<sockaddr *>(&peer), &peer_length) != 0
+			            && errno == ENOTCONN;
+		}
+		if (!listening) continue;
 		struct sockaddr_in address;
 		socklen_t length = sizeof address;
 		if (::getsockname(fd, reinterpret_cast<sockaddr *>(&address), &length) != 0) continue;

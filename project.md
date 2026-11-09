@@ -14712,12 +14712,14 @@ without an icon is defective, so there is a plain one meant to be replaced.
   macOS, run 42474761167). **Then, 2026-11-09, the rest, nearly all the tests' own
   Linux assumptions:** `/proc` (twice), XDG_RUNTIME_DIR, an untitled QMessageBox,
   a native-text chord, 127.0.0.2, a delta count that macOS's zsh notice scrolled,
-  a grab at device pixel ratio 2, no fetched fonts, and two timings (a newline typed
+  SO_ACCEPTCONN (macOS refuses to say), no fetched fonts, and two timings (a newline typed
   before `stty -echo`, a key repeat waited 900 ms for). Qt's test mode leaves
   `~/Library/Preferences` alone, so the store view refuses there, as it should. One
   was the app's: the handoff socket sat in `~/Library/Application Support`, now
-  `TMPDIR` (`4e2a3de`). Still open: the sshd listener test finds no listening
-  descriptor by its port on macOS; its failure now lists the sockets it saw. Windows does
+  `TMPDIR` (`4e2a3de`). Still open: ink one pixel past the grid in the long-run
+  test, #161616 at x=590. `3e301cc` blamed a device pixel ratio of 2, which
+  reproduces that pixel here, but macOS failed the same way with it fixed, so
+  the cause is not known; its failure now says the font, the ratio and the cell. Windows does
   not build: no forkpty, no unix sockets in the handoff, and no CI job.
 
 ### 12.2h Store screenshots from the build — **[BUILT 2026-10-22]**
