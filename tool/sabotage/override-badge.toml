@@ -12,8 +12,8 @@
 [[sabotage]]
 name = "the badge ignores the colours the save writes"
 file = "src/ui/override_badge.cpp"
-find = "\t                    scheme_differs;"
-replace = "\t                    false;"
+find = "\t                    own.contains(QStringLiteral(\"font_size\")) || scheme_differs;"
+replace = "\t                    own.contains(QStringLiteral(\"font_size\"));"
 expect = "the_badge_covers_what_the_save_writes"
 
 # The touch page following its picker at all. This is the last surviving
@@ -33,3 +33,21 @@ name = "the desktop badge never hears the scheme pick"
 file = "src/ui/session_dialog.cpp"
 find = "\tconnect(m_font_picker, &bssh_font_picker::scheme_chosen,\n\t         this, [this] { update_override_badges(); });"
 expect = "the_badge_covers_what_the_save_writes"
+
+# A font moved on the picker is not recorded for a host that had none of its
+# own. A host that already had one keeps it by the other branch, which is why
+# agreeing_with_the_preset_keeps_the_pick_until_reverted cannot see this.
+[[sabotage]]
+name = "a font moved on the picker is not recorded"
+file = "src/ui/override_badge.cpp"
+find = "\tif (picked.font_id != shown.font_id) overrides.insert(QStringLiteral(\"font_family\"), picked.font_id);\n"
+replace = "\tif (false) overrides.insert(QStringLiteral(\"font_family\"), picked.font_id);\n"
+expect = "the_touch_badge_follows_the_picker"
+
+# The revert leaves the font in place, so there is no way back to following.
+[[sabotage]]
+name = "the revert does not drop the font"
+file = "src/ui/session_dialog.cpp"
+find = "\t\tm_current.overrides =\n\t\t        bssh_settings_resolver::revert_field(m_current.overrides,\n\t\t                                              QStringLiteral(\"font_family\"));\n"
+replace = ""
+expect = "agreeing_with_the_preset_keeps_the_pick_until_reverted"

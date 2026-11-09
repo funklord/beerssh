@@ -288,7 +288,7 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 	bssh_wrap_note(m_font_scope);
 	body->addWidget(m_font_scope);
 
-	m_font_revert = new QPushButton(QStringLiteral("Use the preset's font"), this);
+	m_font_revert = new QPushButton(QStringLiteral("Use the preset's font and colours"), this);
 	m_font_revert->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
 	body->addWidget(m_font_revert);
 	/*
@@ -405,6 +405,7 @@ void bssh_host_editor::set_profile(const bssh_profile_t &profile) {
 	        resolved.value(QStringLiteral("font_family")).toString(),
 	        resolved.value(QStringLiteral("font_size")).toInt());
 	m_font_picker->set_scheme(resolved.value(QStringLiteral("colour_scheme")).toString());
+	m_shown = { m_font_picker->font_id(), m_font_picker->point_size(), m_font_picker->scheme_id() };
 
 	reload_templates();
 	m_host_fields->set_source_name(profile.preset_id ? QStringLiteral("the template")
@@ -445,6 +446,7 @@ void bssh_host_editor::on_template_chosen() {
 	m_font_picker->set_font_choice(resolved.value(QStringLiteral("font_family")).toString(),
 	                                resolved.value(QStringLiteral("font_size")).toInt());
 	m_font_picker->set_scheme(resolved.value(QStringLiteral("colour_scheme")).toString());
+	m_shown = { m_font_picker->font_id(), m_font_picker->point_size(), m_font_picker->scheme_id() };
 	m_host_fields->set_source_name(m_profile.preset_id ? QStringLiteral("the template")
 	                                                   : QStringLiteral("this device's default"));
 	m_host_fields->show_settings(bssh_inherited_settings(m_store, m_profile), m_profile.overrides);
@@ -492,15 +494,16 @@ void bssh_host_editor::update_override_badge() {
 	}
 
 	const bssh_override_badge_t badge = bssh_appearance_override_badge(
-	        m_store, m_profile, m_font_picker->font_id(), m_font_picker->point_size(),
-	        m_font_picker->scheme_id());
+	        m_store, m_profile,
+	        { m_font_picker->font_id(), m_font_picker->point_size(), m_font_picker->scheme_id() },
+	        m_shown);
 
 	m_font_scope->setText(badge.text);
 	m_font_scope->setVisible(true);
 	m_font_revert->setVisible(badge.overridden);
 	/* Most hosts follow no preset, and "the preset's" named nothing. */
-	m_font_revert->setText(m_profile.preset_id ? QStringLiteral("Use the preset's font")
-	                                           : QStringLiteral("Use the default font"));
+	m_font_revert->setText(m_profile.preset_id ? QStringLiteral("Use the preset's font and colours")
+	                                           : QStringLiteral("Use the default font and colours"));
 }
 
 void bssh_host_editor::revert_font_to_preset() {
@@ -510,11 +513,16 @@ void bssh_host_editor::revert_font_to_preset() {
 	m_profile.overrides =
 	        bssh_settings_resolver::revert_field(m_profile.overrides,
 	                                              QStringLiteral("font_size"));
+	m_profile.overrides =
+	        bssh_settings_resolver::revert_field(m_profile.overrides,
+	                                              QStringLiteral("colour_scheme"));
 
 	const QJsonObject resolved = resolved_settings();
 	m_font_picker->set_font_choice(
 	        resolved.value(QStringLiteral("font_family")).toString(),
 	        resolved.value(QStringLiteral("font_size")).toInt());
+	m_font_picker->set_scheme(resolved.value(QStringLiteral("colour_scheme")).toString());
+	m_shown = { m_font_picker->font_id(), m_font_picker->point_size(), m_font_picker->scheme_id() };
 
 	update_override_badge();
 }
@@ -546,8 +554,9 @@ bssh_profile_t bssh_host_editor::profile() const {
 	 * desktop dialog uses so the two cannot drift (sec 10.1).
 	 */
 	edited.overrides = bssh_appearance_overrides(
-	        m_store, edited, m_font_picker->font_id(),
-	        m_font_picker->point_size(), m_font_picker->scheme_id());
+	        m_store, edited,
+	        { m_font_picker->font_id(), m_font_picker->point_size(), m_font_picker->scheme_id() },
+	        m_shown);
 	if (m_host_fields)
 		edited.overrides = bssh_terminal_overrides(edited, m_host_fields->chosen_values());
 

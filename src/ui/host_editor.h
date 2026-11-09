@@ -1,6 +1,7 @@
 #ifndef BSSH_HOST_EDITOR_H
 #define BSSH_HOST_EDITOR_H
 
+#include "ui/override_badge.h"
 #include <QWidget>
 
 #include <QJsonObject>
@@ -86,6 +87,9 @@ private:
 	QLabel *m_title;
 	QLabel *m_font_scope;
 	QPushButton *m_font_revert;
+
+	/* What the picker was set to show, so a pick is told from the inherited value it shows. */
+	bssh_appearance_pick_t m_shown;
 	QPushButton *m_save;
 	QLineEdit *m_name;
 	QComboBox *m_folder = nullptr;

@@ -5,6 +5,7 @@
 
 #include <QImage>
 #include <QLabel>
+#include <QPushButton>
 #include "term/colour_scheme.h"
 #include "font_picker_test.h"
 #include "model/profile_store.h"
@@ -224,10 +225,13 @@ void font_picker_test::the_badge_covers_what_the_save_writes() {
 	}
 	QVERIFY2(!other.isEmpty(), "the catalog must offer a scheme that is not the default");
 
-	const bssh_override_badge_t badge =
-	        bssh_appearance_override_badge(&store, saved, QStringLiteral("hack"), 17, other);
-	const QJsonObject written =
-	        bssh_appearance_overrides(&store, saved, QStringLiteral("hack"), 17, other);
+	/* Shown what it follows; only the colours moved. */
+	const bssh_appearance_pick_t shown = {
+		QStringLiteral("hack"), 17, bssh_colour_scheme_catalog::instance().effective_id(QString())
+	};
+	const bssh_appearance_pick_t picked = { QStringLiteral("hack"), 17, other };
+	const bssh_override_badge_t badge = bssh_appearance_override_badge(&store, saved, picked, shown);
+	const QJsonObject written = bssh_appearance_overrides(&store, saved, picked, shown);
 
 	/*
 	 * The assertion is the AGREEMENT, not either value: whatever the two
@@ -603,7 +607,7 @@ void font_picker_test::the_session_dialog_round_trips_the_key_file() {
 	QVERIFY(dialog.current_profile().proxy_jump.isEmpty());
 }
 
-void font_picker_test::agreeing_with_the_preset_clears_the_override() {
+void font_picker_test::agreeing_with_the_preset_keeps_the_pick_until_reverted() {
 	QTemporaryDir dir;
 	bssh_profile_store store(dir.filePath(QStringLiteral("hosts.db")));
 
@@ -637,27 +641,31 @@ void font_picker_test::agreeing_with_the_preset_clears_the_override() {
 	        dialog.findChild<bssh_font_picker *>(QStringLiteral("host_font_picker"));
 	QVERIFY2(picker, "the host's own font picker must be findable by name");
 
-	/* The user picks what the preset gives, meaning "go back to following it". */
-	picker->set_font_choice(QStringLiteral("hack"), 17);
-
-	const bssh_override_badge_t badge = bssh_appearance_override_badge(
-	        &store, store.profile(id), picker->font_id(), picker->point_size(),
-	        picker->scheme_id());
-	QVERIFY2(!badge.overridden, "the badge must see agreement with the preset");
-
 	/*
-	 * And the save must agree with the badge. It did not: the write path
-	 * compared the picker against what the host resolves to WITH its
-	 * override still applied -- itself -- so it could never see
-	 * agreement, and recorded an override pinning the preset's own value
-	 * while the badge said "Following". The screen and the store said
-	 * different things about the same host.
+	 * The user picks what the preset gives. Until 2026-11-09 that cleared
+	 * the override, sec 10.1's "cleared by agreeing"; the holder's rule is
+	 * that a pick is a choice whatever it equals, so it stays the host's
+	 * own -- and badge and save say so together, which is the half that
+	 * was wrong before that (the save re-pinned while the badge said
+	 * "Following").
 	 */
+	picker->set_font_choice(QStringLiteral("hack"), 17);
 	const bssh_profile_t saved = dialog.current_profile();
-	QVERIFY2(!saved.overrides.contains(QStringLiteral("font_family")),
-	          "agreeing with the preset must CLEAR the override, not re-pin it");
-	QVERIFY2(!saved.overrides.contains(QStringLiteral("font_size")),
-	          "agreeing with the preset must CLEAR the override, not re-pin it");
+	QCOMPARE(saved.overrides.value(QStringLiteral("font_family")).toString(), QStringLiteral("hack"));
+	QLabel *scope = dialog.findChild<QLabel *>(QStringLiteral("host_font_scope"));
+	QVERIFY(scope);
+	QVERIFY2(scope->text().startsWith(QStringLiteral("<b>Overrides")), qPrintable(scope->text()));
+
+	/* The revert is the way back to following, and it drops the override. */
+	QPushButton *revert = nullptr;
+	for (QPushButton *button : dialog.findChildren<QPushButton *>())
+		if (button->text().startsWith(QStringLiteral("Use the preset's font"))) revert = button;
+	QVERIFY(revert && revert->isEnabled());
+	revert->click();
+	const bssh_profile_t followed = dialog.current_profile();
+	QVERIFY(!followed.overrides.contains(QStringLiteral("font_family")));
+	QVERIFY(!followed.overrides.contains(QStringLiteral("font_size")));
+	QVERIFY(scope->text().startsWith(QStringLiteral("Following")));
 }
 
 void font_picker_test::the_desktop_form_never_saves_a_nameless_host() {

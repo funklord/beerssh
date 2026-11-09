@@ -12344,8 +12344,10 @@ App defaults  ←  Preset ("work-bastion")  ←  Host profile overrides
   only the way back -- a field's *Default* button, or the font's revert -- returns
   it to following. Clearing by agreement lost exactly that pick when the inherited
   value later moved, which the holder's rule of 2026-11-06 names as the second way
-  of getting a config wrong. Done for the terminal fields; the host's font, size
-  and colour scheme still clear by agreeing, and are next.
+  of getting a config wrong. The terminal fields have a *Default* button each;
+  the host's font, size and colour scheme are its own once moved on the picker,
+  told from the inherited value it was shown, and *Use the preset's font and
+  colours* -- which until then left a chosen scheme in place -- drops all three.
 
 ### 10.2 What lives in a preset (shareable, non-secret)
 Terminal type/`TERM` string, colour scheme, font family + size (§9), on-screen key

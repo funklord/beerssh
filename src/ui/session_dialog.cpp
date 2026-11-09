@@ -638,8 +638,9 @@ bssh_profile_t bssh_session_dialog::current_profile() const {
 	 */
 	if (m_font_picker) {
 		profile.overrides = bssh_appearance_overrides(
-		        m_store, m_current, m_font_picker->font_id(),
-		        m_font_picker->point_size(), m_font_picker->scheme_id());
+		        m_store, m_current,
+		        { m_font_picker->font_id(), m_font_picker->point_size(), m_font_picker->scheme_id() },
+		        { m_shown_font, m_shown_size, m_shown_scheme });
 	}
 
 	/* And the terminal fields chosen on this page, and only those. */
@@ -986,7 +987,7 @@ QWidget *bssh_session_dialog::build_window_page() {
 	bssh_wrap_note(m_font_scope);
 	scope_row->addWidget(m_font_scope, 1);
 
-	m_font_revert = new QPushButton(QStringLiteral("Use the preset's font"), page);
+	m_font_revert = new QPushButton(QStringLiteral("Use the preset's font and colours"), page);
 	scope_row->addWidget(m_font_revert, 0);
 	layout->addLayout(scope_row);
 
@@ -1004,6 +1005,9 @@ QWidget *bssh_session_dialog::build_window_page() {
 		m_current.overrides =
 		        bssh_settings_resolver::revert_field(m_current.overrides,
 		                                              QStringLiteral("font_size"));
+		m_current.overrides =
+		        bssh_settings_resolver::revert_field(m_current.overrides,
+		                                              QStringLiteral("colour_scheme"));
 
 		show_resolved_font(resolved_settings(m_current));
 		update_override_badges();
@@ -1031,15 +1035,16 @@ void bssh_session_dialog::update_override_badges() {
 	if (!m_font_scope || !m_font_picker) return;
 
 	const bssh_override_badge_t badge = bssh_appearance_override_badge(
-	        m_store, m_current, m_font_picker->font_id(), m_font_picker->point_size(),
-	        m_font_picker->scheme_id());
+	        m_store, m_current,
+	        { m_font_picker->font_id(), m_font_picker->point_size(), m_font_picker->scheme_id() },
+	        { m_shown_font, m_shown_size, m_shown_scheme });
 
 	m_font_scope->setText(badge.text);
 	if (m_font_revert) {
 		m_font_revert->setEnabled(badge.overridden);
 		/* Most hosts follow no preset, and "the preset's" named nothing. */
-		m_font_revert->setText(m_current.preset_id ? QStringLiteral("Use the preset's font")
-		                                           : QStringLiteral("Use the default font"));
+		m_font_revert->setText(m_current.preset_id ? QStringLiteral("Use the preset's font and colours")
+		                                           : QStringLiteral("Use the default font and colours"));
 	}
 }
 

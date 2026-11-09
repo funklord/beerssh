@@ -31,40 +31,42 @@ struct bssh_override_badge_t {
 	QString text;
 };
 
+/* What a host's font picker shows: a font, a size and a colour scheme. */
+struct bssh_appearance_pick_t {
+	QString font_id;
+	int size = 0;
+	QString scheme_id;
+};
+
 /*
- * Compared against what the host would resolve to with NO font override
- * of its own, not against what it resolves to now -- the latter already
- * includes the override and would always compare equal.
+ * Whether the host has an appearance of its own -- a field it carries, or
+ * one moved on the picker from what it was `shown` -- and what it would
+ * follow without: what it resolves to with NO font override of its own,
+ * since what it resolves to now includes the override.
  */
 bssh_override_badge_t bssh_appearance_override_badge(const bssh_profile_store *store,
                                                       const bssh_profile_t &profile,
-                                                      const QString &picked_font_id,
-                                                      int picked_size,
-                                                      const QString &picked_scheme_id);
+                                                      const bssh_appearance_pick_t &picked,
+                                                      const bssh_appearance_pick_t &shown);
 
 /*
- * The sparse appearance overrides this host should carry, given what the
- * picker is showing. Returns the profile's overrides with font_family,
- * font_size and colour_scheme inserted where they differ from what the
- * host INHERITS, and removed where they now agree with it.
+ * The sparse appearance overrides this host should carry: the profile's,
+ * with font_family, font_size and colour_scheme set where the picker moved
+ * from what it was `shown`, and the rest as they were. A field moved is a
+ * choice whatever it now equals -- the value the template gives included
+ * -- and only the revert puts it back to following (the holder's rule,
+ * 2026-11-06, settled for beerssh 2026-11-09). Until then a pick equal to
+ * what the host inherits was dropped, and the host stopped holding it the
+ * moment the template moved.
  *
- * Paired with the badge above and sharing its idea of "inherits", because
- * the two disagreeing is not a cosmetic bug: the desktop dialog compared
- * the picker against what the host resolves to WITH its current override
- * still applied, so choosing the value the preset already gives recorded
- * an override pinning it -- while the badge, comparing against the value
- * without it, said "Following". The screen said one thing and the store
- * held another.
- *
- * Removing when they agree is the other half. Insert-only leaves a host
- * that has been talked back into agreeing with its preset still carrying
- * an override, which stops following the next time the preset changes.
+ * Paired with the badge above, because the two disagreeing is not a
+ * cosmetic bug: the screen saying "Following" while the store holds an
+ * override is what both are built to rule out.
  */
 QJsonObject bssh_appearance_overrides(const bssh_profile_store *store,
                                        const bssh_profile_t &profile,
-                                       const QString &picked_font_id,
-                                       int picked_size,
-                                       const QString &picked_scheme_id);
+                                       const bssh_appearance_pick_t &picked,
+                                       const bssh_appearance_pick_t &shown);
 
 /*
  * The same for the terminal and connection fields (bssh_terminal_fields),

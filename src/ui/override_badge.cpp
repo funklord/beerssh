@@ -65,29 +65,21 @@ inherited_t inherited_appearance(const bssh_profile_store *store,
 
 bssh_override_badge_t bssh_appearance_override_badge(const bssh_profile_store *store,
                                                       const bssh_profile_t &profile,
-                                                      const QString &picked_font_id,
-                                                      int picked_size,
-                                                      const QString &picked_scheme_id) {
+                                                      const bssh_appearance_pick_t &picked,
+                                                      const bssh_appearance_pick_t &shown) {
 	const inherited_t inherited = inherited_appearance(store, profile);
 
 	/*
-	 * The SAME three fields bssh_appearance_overrides() writes, and the
-	 * same rule about an empty scheme meaning "the picker has no opinion
-	 * yet". This used to weigh the font and the size only, so changing
-	 * nothing but the colour scheme wrote an override while the badge one
-	 * line below went on saying "Following preset X" -- the screen and
-	 * the store disagreeing, which is the single thing this helper exists
-	 * to prevent (see the header).
-	 *
-	 * If the two ever diverge again they must diverge here, together.
+	 * Read off what bssh_appearance_overrides() would write, so the badge
+	 * and the save cannot disagree: they did, twice, one field over each
+	 * time (see the header).
 	 */
-	const bool scheme_differs = !picked_scheme_id.isEmpty() &&
-	                             picked_scheme_id != inherited.scheme_id;
+	const QJsonObject own = bssh_appearance_overrides(store, profile, picked, shown);
+	const bool scheme_differs = own.contains(QStringLiteral("colour_scheme"));
 
 	bssh_override_badge_t badge;
-	badge.overridden = picked_font_id != inherited.font_id ||
-	                    picked_size != inherited.font_size ||
-	                    scheme_differs;
+	badge.overridden = own.contains(QStringLiteral("font_family")) ||
+	                    own.contains(QStringLiteral("font_size")) || scheme_differs;
 
 	if (!badge.overridden) {
 		badge.text = QStringLiteral("Following %1.").arg(inherited.source);
@@ -123,35 +115,28 @@ bssh_override_badge_t bssh_appearance_override_badge(const bssh_profile_store *s
 
 QJsonObject bssh_appearance_overrides(const bssh_profile_store *store,
                                        const bssh_profile_t &profile,
-                                       const QString &picked_font_id,
-                                       int picked_size,
-                                       const QString &picked_scheme_id) {
-	const inherited_t inherited = inherited_appearance(store, profile);
-
+                                       const bssh_appearance_pick_t &picked,
+                                       const bssh_appearance_pick_t &shown) {
+	Q_UNUSED(store);
 	QJsonObject overrides = profile.overrides;
 
-	if (picked_font_id != inherited.font_id) {
-		overrides.insert(QStringLiteral("font_family"), picked_font_id);
-	} else {
-		overrides.remove(QStringLiteral("font_family"));
-	}
+	if (picked.font_id != shown.font_id) overrides.insert(QStringLiteral("font_family"), picked.font_id);
+	else if (overrides.contains(QStringLiteral("font_family")))
+		overrides.insert(QStringLiteral("font_family"), picked.font_id);
 
-	if (picked_size != inherited.font_size) {
-		overrides.insert(QStringLiteral("font_size"), picked_size);
-	} else {
-		overrides.remove(QStringLiteral("font_size"));
-	}
+	if (picked.size != shown.size) overrides.insert(QStringLiteral("font_size"), picked.size);
+	else if (overrides.contains(QStringLiteral("font_size")))
+		overrides.insert(QStringLiteral("font_size"), picked.size);
 
 	/*
 	 * An empty pick means the picker has no opinion yet rather than "the
 	 * default scheme": writing one then would record an override the user
 	 * never made.
 	 */
-	if (!picked_scheme_id.isEmpty() && picked_scheme_id != inherited.scheme_id) {
-		overrides.insert(QStringLiteral("colour_scheme"), picked_scheme_id);
-	} else if (picked_scheme_id == inherited.scheme_id) {
-		overrides.remove(QStringLiteral("colour_scheme"));
-	}
+	if (!picked.scheme_id.isEmpty() && picked.scheme_id != shown.scheme_id)
+		overrides.insert(QStringLiteral("colour_scheme"), picked.scheme_id);
+	else if (!picked.scheme_id.isEmpty() && overrides.contains(QStringLiteral("colour_scheme")))
+		overrides.insert(QStringLiteral("colour_scheme"), picked.scheme_id);
 
 	return overrides;
 }
