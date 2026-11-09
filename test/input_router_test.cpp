@@ -1506,7 +1506,8 @@ void input_router_test::a_rebound_chord_is_the_one_that_is_stolen() {
 
 	/* And what the settings page shows is what the router matches. */
 	QCOMPARE(bssh_input_router::binding_for(QStringLiteral("copy")),
-	          QStringLiteral("Ctrl+Alt+K"));
+	          QKeySequence(QStringLiteral("Ctrl+Alt+K"), QKeySequence::PortableText)
+	                  .toString(QKeySequence::NativeText));
 
 	bssh_input_router::set_bindings(QHash<QString, QString>());
 }

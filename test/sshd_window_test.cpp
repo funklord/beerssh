@@ -1,6 +1,7 @@
 #include "sshd_window_test.h"
 
 #include <QDir>
+#include <QFileInfo>
 #include <QFile>
 #include <QLabel>
 #include <QLineEdit>
@@ -201,7 +202,16 @@ void sshd_window_test::losing_wifi_waits_and_a_new_address_restarts() {
 	QVERIFY(window.serving());
 	QCOMPARE(window.server().port(), port);
 
-	/* Another address of this machine's, standing in for a new network. */
+	/*
+	 * Another address of this machine's, standing in for a new network.
+	 * Linux answers on all of 127/8; macOS only on 127.0.0.1 unless an
+	 * alias is added, which a test has no business doing.
+	 */
+	{
+		QTcpServer second;
+		if (!second.listen(QHostAddress(QStringLiteral("127.0.0.2")), 0))
+			QSKIP("127.0.0.2 is not this machine's address here");
+	}
 	platform.address = QHostAddress(QStringLiteral("127.0.0.2"));
 	window.follow_address();
 	QVERIFY(window.serving());
@@ -340,6 +350,9 @@ void sshd_window_test::switched_on_lasts_and_serves_again_when_it_can() {
  * check is told any live process will do.
  */
 void sshd_window_test::the_remote_window_shows_what_the_server_process_reports() {
+	/* Android's alone (sshd/main_android.cpp), and it asks /proc whether the process lives. */
+	if (!QFileInfo::exists(QStringLiteral("/proc/self/cmdline")))
+		QSKIP("the remote window is Android's and reads /proc, which this system lacks");
 	QTemporaryDir dir;
 	fake_platform platform(dir.path());
 	bssh_sshd_remote::set_process_suffix(QByteArray());

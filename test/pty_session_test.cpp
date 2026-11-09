@@ -507,8 +507,9 @@ void pty_session_test::backspace_crosses_a_wrapped_line() {
 	const int before = emulator.screen().to_text().count(QLatin1Char('z'));
 
 	session.send(QByteArray(60, 'z'));
-	QTRY_VERIFY_WITH_TIMEOUT(
-	        emulator.screen().to_text().count(QLatin1Char('z')) >= before + 60, 15000);
+	QTRY_VERIFY2_WITH_TIMEOUT(
+	        emulator.screen().to_text().count(QLatin1Char('z')) >= before + 60,
+	        qPrintable(QStringLiteral("the screen:\n") + emulator.screen().to_text()), 15000);
 
 	/* 55 of the 60, so the erase has to cross the wrap rather than stop at it. */
 	session.send(QByteArray(55, '\x7f'));

@@ -43,7 +43,7 @@ bool have_openssh() {
  * its socket out.
  */
 int listener_on(int port) {
-	const QStringList fds = QDir(QStringLiteral("/proc/self/fd")).entryList(QDir::NoDotAndDotDot | QDir::System
+	const QStringList fds = QDir(QStringLiteral("/dev/fd")).entryList(QDir::NoDotAndDotDot | QDir::System
 	                                                                           | QDir::Files);
 	for (const QString &name : fds) {
 		const int fd = name.toInt();

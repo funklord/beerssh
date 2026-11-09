@@ -820,10 +820,21 @@ void session_registry_test::a_store_view_touches_nothing_of_the_users() {
 	const QString shared = home + QStringLiteral("/.ssh/beerssh_hosts");
 	const bool shared_before = QFile::exists(shared);
 
-	QVERIFY(bssh_store_view_isolate());
 	struct leave_test_mode_t {
 		~leave_test_mode_t() { QStandardPaths::setTestModeEnabled(false); }
 	} leave;
+#ifdef Q_OS_MACOS
+	/*
+	 * Qt's test mode leaves ~/Library/Preferences where it is on macOS, so
+	 * there the store view has nowhere safe to write and must refuse: the
+	 * guard doing its job, and what this asserts there.
+	 */
+	QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("^store view: .* refusing$")));
+	QVERIFY(!bssh_store_view_isolate());
+	QCOMPARE(QFile::exists(shared), shared_before);
+	return;
+#endif
+	QVERIFY(bssh_store_view_isolate());
 
 	const QString config = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
 	QVERIFY2(config.contains(QStringLiteral("qttest")), qPrintable(config));

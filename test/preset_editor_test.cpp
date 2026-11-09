@@ -478,14 +478,26 @@ void preset_editor_test::a_save_or_delete_the_store_refused_is_said() {
 	 * Through the real buttons, because the defect was the editor's: the
 	 * store has always returned 0 here, and the button said nothing.
 	 */
+	/*
+	 * The title is checked where there is one: a QMessageBox on macOS has
+	 * none, so there the text alone says what happened.
+	 */
 	const QString said_on_save = warning_raised_by(save);
+	QVERIFY2(said_on_save.contains(QStringLiteral("was not saved")),
+	          qPrintable(QStringLiteral("Save raised: [%1]").arg(said_on_save)));
+#ifndef Q_OS_MACOS
 	QVERIFY2(said_on_save.startsWith(QStringLiteral("Not saved")),
 	          qPrintable(QStringLiteral("Save raised: [%1]").arg(said_on_save)));
+#endif
 	QVERIFY2(said_on_save.contains(QStringLiteral("could not write")),
 	          "the store's reason has to reach the user, not only the fact");
 
 	const QString said_on_delete = warning_raised_by(remove);
+	QVERIFY2(said_on_delete.contains(QStringLiteral("was not deleted")),
+	          qPrintable(QStringLiteral("Delete raised: [%1]").arg(said_on_delete)));
+#ifndef Q_OS_MACOS
 	QVERIFY2(said_on_delete.startsWith(QStringLiteral("Not deleted")),
 	          qPrintable(QStringLiteral("Delete raised: [%1]").arg(said_on_delete)));
+#endif
 	QVERIFY(store.preset(preset_id).id == preset_id);
 }
