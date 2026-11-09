@@ -165,13 +165,9 @@ QJsonObject bssh_inherited_settings(const bssh_profile_store *store,
 	return bssh_settings_resolver::for_host(&preset, without);
 }
 
-QJsonObject bssh_terminal_overrides(const bssh_profile_store *store,
-                                     const bssh_profile_t &profile,
-                                     const QJsonObject &shown) {
+QJsonObject bssh_terminal_overrides(const bssh_profile_t &profile, const QJsonObject &own) {
 	QJsonObject out = profile.overrides;
 	for (const QString &key : bssh_terminal_fields::keys()) out.remove(key);
-	const QJsonObject own =
-	        bssh_terminal_fields::differing(shown, bssh_inherited_settings(store, profile));
 	for (auto it = own.constBegin(); it != own.constEnd(); ++it) out.insert(it.key(), it.value());
 	return out;
 }

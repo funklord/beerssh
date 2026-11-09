@@ -56,9 +56,13 @@ QJsonObject bssh_settings_resolver::for_host(const bssh_preset_t *preset,
                                               const QJsonObject &overrides) {
 	QJsonObject resolved = app_defaults();
 
-	/* Preset over defaults. */
-	const QJsonObject preset_json = preset ? preset->to_json() : QJsonObject();
+	/*
+	 * Preset over defaults: only what the preset chose. The rest follows
+	 * this device, which is what a template that sets one thing means.
+	 */
+	const QJsonObject preset_json = preset ? preset->chosen_json() : QJsonObject();
 	for (auto it = preset_json.constBegin(); it != preset_json.constEnd(); ++it) {
+		if (it.key() == QLatin1String("name")) continue;
 		resolved.insert(it.key(), it.value());
 	}
 

@@ -13,8 +13,8 @@ expect = "every_setting_has_a_default_and_a_hosts_own"
 [[sabotage]]
 name = "a terminal default changed on the page is not stored"
 file = "src/ui/app_settings_view.cpp"
-find = "\t\t\t\t\tif (differing.contains(key)) s.set_default_setting(key, differing.value(key));\n"
-replace = "\t\t\t\t\tif (differing.contains(key)) {}\n"
+find = "\t\t\t\t\tif (own.contains(key)) s.set_default_setting(key, own.value(key));\n"
+replace = "\t\t\t\t\tif (own.contains(key)) {}\n"
 expect = "every_setting_has_a_default_and_a_hosts_own"
 
 [[sabotage]]
@@ -27,7 +27,7 @@ expect = "every_setting_has_a_default_and_a_hosts_own"
 [[sabotage]]
 name = "the dialog drops a host's own terminal settings"
 file = "src/ui/session_dialog.cpp"
-find = "\t\tprofile.overrides = bssh_terminal_overrides(m_store, profile, m_host_fields->values());\n"
+find = "\t\tprofile.overrides = bssh_terminal_overrides(profile, m_host_fields->chosen_values());\n"
 replace = ""
 expect = "every_setting_has_a_default_and_a_hosts_own"
 
@@ -41,7 +41,7 @@ expect = "every_setting_has_a_default_and_a_hosts_own"
 [[sabotage]]
 name = "the touch editor drops a host's own terminal settings"
 file = "src/ui/host_editor.cpp"
-find = "\t\tedited.overrides = bssh_terminal_overrides(m_store, edited, m_host_fields->values());\n"
+find = "\t\tedited.overrides = bssh_terminal_overrides(edited, m_host_fields->chosen_values());\n"
 replace = ""
 expect = "the_touch_editor_keeps_a_hosts_terminal_settings"
 
@@ -124,3 +124,36 @@ file = "src/ui/app_settings_view.cpp"
 find = "\t\t\t\tif (family_moved) s.set_default_font_family(id);\n"
 replace = "\t\t\t\ts.set_default_font_family(id);\n"
 expect = "the_dialog_shows_a_hosts_own_size_and_follows_the_default"
+
+# A preset lays every field over this device's defaults again: a host on
+# tmux-first loses the scrollback set for every host (2026-11-09).
+[[sabotage]]
+name = "a preset lays every field over the device defaults"
+file = "src/model/settings_resolver.cpp"
+find = "\tconst QJsonObject preset_json = preset ? preset->chosen_json() : QJsonObject();\n"
+replace = "\tconst QJsonObject preset_json = preset ? preset->to_json() : QJsonObject();\n"
+expect = "a_preset_lays_only_what_it_chose_over_the_device_defaults"
+
+# A preset read or imported chooses nothing it holds.
+[[sabotage]]
+name = "a preset's fields are never chosen"
+file = "src/model/preset.cpp"
+find = "\t\tif (object.contains(key)) preset.chosen.insert(key);\n"
+replace = ""
+expect = "a_preset_lays_only_what_it_chose_over_the_device_defaults"
+
+# The form records a pick only where it differs, losing one equal to the default.
+[[sabotage]]
+name = "a pick equal to what a field follows is not kept"
+file = "src/ui/terminal_fields.cpp"
+find = "\tif (m_quiet) return;\n\tm_chosen.insert(key);\n"
+replace = "\tif (m_quiet) return;\n\tif (values().value(key) == m_inherited.value(key)) return;\n\tm_chosen.insert(key);\n"
+expect = "the_touch_editor_keeps_a_hosts_terminal_settings"
+
+# Default does not put a field back to following.
+[[sabotage]]
+name = "Default leaves the field chosen"
+file = "src/ui/terminal_fields.cpp"
+find = "\tm_chosen.remove(key);\n\tfill(m_inherited, { key });\n"
+replace = "\tfill(m_inherited, { key });\n"
+expect = "every_setting_has_a_default_and_a_hosts_own"

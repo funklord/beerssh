@@ -150,6 +150,7 @@ void preset_editor_test::saving_changes_what_following_hosts_resolve_to() {
 	 * that follows, not the button that triggers it. */
 	bssh_preset_t preset = store.preset(preset_id);
 	preset.scrollback_lines = 12345;
+	preset.chosen.insert(QStringLiteral("scrollback_lines"));
 	store.save_preset(preset);
 
 	const bssh_profile_t stored = store.profile(host_id);
@@ -177,6 +178,7 @@ void preset_editor_test::an_overridden_field_does_not_follow_the_preset() {
 
 	bssh_preset_t preset = store.preset(preset_id);
 	preset.scrollback_lines = 12345;
+	preset.chosen.insert(QStringLiteral("scrollback_lines"));
 	store.save_preset(preset);
 
 	const bssh_profile_t stored = store.profile(host_id);
@@ -207,12 +209,20 @@ void preset_editor_test::a_preset_round_trips_through_an_exported_file() {
 	preset.keepalive_seconds = 30;
 	preset.compression = true;
 	preset.on_connect_command = QStringLiteral("tmux attach || tmux new");
+	preset.chosen = { QStringLiteral("term"), QStringLiteral("scrollback_lines"),
+	                  QStringLiteral("bell_enabled"), QStringLiteral("cursor_style"),
+	                  QStringLiteral("font_family"), QStringLiteral("font_size"),
+	                  QStringLiteral("keepalive_seconds"), QStringLiteral("compression"),
+	                  QStringLiteral("on_connect_command") };
 
 	QVERIFY(preset.write_ini(path));
 
 	bool ok = false;
 	const bssh_preset_t restored = bssh_preset_t::read_ini(path, &ok);
 	QVERIFY(ok);
+
+	/* What it chose, and nothing it did not: the rest follows wherever it lands. */
+	QCOMPARE(restored.chosen, preset.chosen);
 
 	/*
 	 * Every field, including the booleans and the numbers -- INI holds
@@ -392,6 +402,7 @@ void preset_editor_test::a_file_url_is_read_as_a_file_rather_than_as_a_name() {
 	bssh_preset_t preset;
 	preset.name = QStringLiteral("Handed Over");
 	preset.scrollback_lines = 31337;
+	preset.chosen = { QStringLiteral("scrollback_lines") };
 	QVERIFY(preset.write_ini(path));
 
 	/*

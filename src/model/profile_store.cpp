@@ -399,11 +399,14 @@ void bssh_profile_store::load_presets() {
 		const bool builtin = file.value(QStringLiteral("builtin"), false).toBool();
 
 		/*
-		 * Read on top of a default preset, so a file that omits a field
-		 * -- or a hand-written one that sets only the two fields someone
-		 * cared about -- gets the default rather than an empty string.
+		 * Only what the file sets: those are what the preset chose, and
+		 * from_json() gives every other field its default. Read on top of
+		 * a default preset, as this was until 2026-11-09, every field
+		 * read as chosen. A file written before then holds every field,
+		 * so its presets still choose them all -- nothing in it says
+		 * which were picked (working-practice, a config records choices).
 		 */
-		QJsonObject json = bssh_preset_t().to_json();
+		QJsonObject json;
 		json.insert(QStringLiteral("name"), section);
 
 		for (const QString &key : file.childKeys()) {
@@ -649,7 +652,7 @@ bool bssh_profile_store::write_presets() {
 		 * file. Its values went in until 2026-11-09, and a file that has
 		 * them is read the same way.
 		 */
-		QJsonObject json = preset.to_json();
+		QJsonObject json = preset.chosen_json();
 		if (preset.is_builtin) {
 			QJsonObject named;
 			named.insert(QStringLiteral("name"), preset.name);

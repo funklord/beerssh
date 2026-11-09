@@ -20,6 +20,8 @@
 
 #include <QSettings>
 #include <QSpinBox>
+#include <QLineEdit>
+#include <QToolButton>
 
 void font_picker_test::offers_the_set_then_what_is_installed() {
 	bssh_font_picker picker;
@@ -194,6 +196,7 @@ void font_picker_test::the_badge_covers_what_the_save_writes() {
 	preset.name = QStringLiteral("house");
 	preset.font_family = QStringLiteral("hack");
 	preset.font_size = 17;
+	preset.chosen = { QStringLiteral("font_family"), QStringLiteral("font_size") };
 	const int preset_id = store.save_preset(preset);
 	QVERIFY(preset_id > 0);
 
@@ -364,6 +367,7 @@ void font_picker_test::every_setting_has_a_default_and_a_hosts_own() {
 	bssh_preset_t router;
 	router.name = QStringLiteral("router");
 	router.term = QStringLiteral("vt100");
+	router.chosen = { QStringLiteral("term") };
 	const int router_id = store.save_preset(router);
 
 	bssh_session_dialog dialog(&store);
@@ -384,9 +388,17 @@ void font_picker_test::every_setting_has_a_default_and_a_hosts_own() {
 	         4321);
 	QCOMPARE(host->values().value(QStringLiteral("scrollback_lines")).toInt(), 4321);
 
-	/* Put back to the built-in value, it is forgotten rather than stored. */
+	/*
+	 * Put back to the built-in value by hand, it is still a choice and
+	 * stays (the holder's rule, 2026-11-06); Default is what forgets it.
+	 */
 	device_scrollback->setValue(bssh_preset_t().scrollback_lines);
+	QVERIFY(bssh_app_settings().default_settings().contains(QStringLiteral("scrollback_lines")));
+	QToolButton *forget = device->findChild<QToolButton *>(QStringLiteral("fields-default-scrollback_lines"));
+	QVERIFY(forget && !forget->isHidden());
+	forget->click();
 	QVERIFY(!bssh_app_settings().default_settings().contains(QStringLiteral("scrollback_lines")));
+	QVERIFY(forget->isHidden());
 
 	/* A host's own value is recorded, and only that. */
 	QSpinBox *host_scrollback = host->findChild<QSpinBox *>(QStringLiteral("fields-scrollback"));
@@ -418,6 +430,7 @@ void font_picker_test::the_touch_editor_keeps_a_hosts_terminal_settings() {
 	bssh_preset_t router;
 	router.name = QStringLiteral("router");
 	router.term = QStringLiteral("vt100");
+	router.chosen = { QStringLiteral("term") };
 	const int router_id = store.save_preset(router);
 
 	bssh_profile_t host;
@@ -444,6 +457,21 @@ void font_picker_test::the_touch_editor_keeps_a_hosts_terminal_settings() {
 	QCOMPARE(saved.preset_id, router_id);
 	QCOMPARE(saved.overrides.value(QStringLiteral("scrollback_lines")).toInt(), 99);
 	QVERIFY(!saved.overrides.contains(QStringLiteral("term")));
+
+	/*
+	 * A pick equal to what the template gives is still this host's own,
+	 * so it stays when the template moves; Default is the way back.
+	 */
+	QLineEdit *term = fields->findChild<QLineEdit *>(QStringLiteral("fields-term"));
+	QVERIFY(term);
+	term->setText(QStringLiteral("vt100"));
+	emit term->textEdited(term->text());
+	QCOMPARE(editor.profile().overrides.value(QStringLiteral("term")).toString(), QStringLiteral("vt100"));
+	QToolButton *follow = fields->findChild<QToolButton *>(QStringLiteral("fields-default-term"));
+	QVERIFY(follow && !follow->isHidden());
+	follow->click();
+	QVERIFY(!editor.profile().overrides.contains(QStringLiteral("term")));
+	QCOMPARE(fields->values().value(QStringLiteral("term")).toString(), QStringLiteral("vt100"));
 }
 
 void font_picker_test::the_touch_badge_follows_the_picker() {
@@ -455,6 +483,7 @@ void font_picker_test::the_touch_badge_follows_the_picker() {
 	preset.name = QStringLiteral("house");
 	preset.font_family = QStringLiteral("hack");
 	preset.font_size = 17;
+	preset.chosen = { QStringLiteral("font_family"), QStringLiteral("font_size") };
 	const int preset_id = store.save_preset(preset);
 
 	bssh_profile_t host;
@@ -495,6 +524,7 @@ void font_picker_test::reverting_drops_the_override_rather_than_copying_the_valu
 	preset.name = QStringLiteral("Servers");
 	preset.font_family = QStringLiteral("hack");
 	preset.font_size = 12;
+	preset.chosen = { QStringLiteral("font_family"), QStringLiteral("font_size") };
 	const int preset_id = store.save_preset(preset);
 
 	bssh_profile_t host;
@@ -581,6 +611,7 @@ void font_picker_test::agreeing_with_the_preset_clears_the_override() {
 	preset.name = QStringLiteral("Chunky");
 	preset.font_family = QStringLiteral("hack");
 	preset.font_size = 17;
+	preset.chosen = { QStringLiteral("font_family"), QStringLiteral("font_size") };
 	const int preset_id = store.save_preset(preset);
 
 	bssh_profile_t host;

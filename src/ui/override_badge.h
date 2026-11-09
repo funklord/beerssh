@@ -70,13 +70,12 @@ QJsonObject bssh_appearance_overrides(const bssh_profile_store *store,
  * The same for the terminal and connection fields (bssh_terminal_fields),
  * shared by the desktop dialog and the touch host editor for the same
  * reason: what a host would have without settings of its own, and its
- * overrides with those fields recorded only where `shown` differs from
- * that.
+ * overrides with the fields chosen on the form, `own`, as its own -- a pick
+ * equal to what it would have without it included, since choosing it is
+ * still a choice (the holder's rule, 2026-11-06).
  */
 QJsonObject bssh_inherited_settings(const bssh_profile_store *store,
                                      const bssh_profile_t &profile);
-QJsonObject bssh_terminal_overrides(const bssh_profile_store *store,
-                                     const bssh_profile_t &profile,
-                                     const QJsonObject &shown);
+QJsonObject bssh_terminal_overrides(const bssh_profile_t &profile, const QJsonObject &own);
 
 #endif /* BSSH_OVERRIDE_BADGE_H */

@@ -1223,7 +1223,16 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	const int theme_index = m_theme->findData(settings.theme());
 	if (theme_index >= 0) m_theme->setCurrentIndex(theme_index);
 
-	if (m_default_fields) m_default_fields->set_values(bssh_settings_resolver::app_defaults());
+	if (m_default_fields) {
+		/* Over the built-in values: what this device chose, and nothing it did not. */
+		const QJsonObject resolved = bssh_settings_resolver::app_defaults();
+		const QJsonObject stored = settings.default_settings();
+		QJsonObject own;
+		for (const QString &key : bssh_terminal_fields::keys())
+			if (stored.contains(key)) own.insert(key, resolved.value(key));
+		m_default_fields->set_source_name(QStringLiteral("the built-in value"));
+		m_default_fields->show_settings(bssh_preset_t().to_json(), own);
+	}
 
 	if (m_default_font) {
 		const bssh_preset_t built_in;
@@ -1254,15 +1263,15 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	if (m_default_fields) {
 		connect(m_default_fields, &bssh_terminal_fields::changed, this, [this] {
 			/*
-			 * Stored only where it differs from the built-in value, and
-			 * forgotten where it has been put back: a default that agrees
-			 * with the built-in one is not a choice anybody made.
+			 * What was chosen, and only that -- a choice equal to the
+			 * built-in value included, since it is still a choice (the
+			 * holder's rule, 2026-11-06). Default puts a field back to
+			 * following, which forgets it.
 			 */
-			const QJsonObject differing =
-			        m_default_fields->differing_from(bssh_preset_t().to_json());
-			commit([differing](bssh_app_settings &s) {
+			const QJsonObject own = m_default_fields->chosen_values();
+			commit([own](bssh_app_settings &s) {
 				for (const QString &key : bssh_terminal_fields::keys()) {
-					if (differing.contains(key)) s.set_default_setting(key, differing.value(key));
+					if (own.contains(key)) s.set_default_setting(key, own.value(key));
 					else s.forget_default_setting(key);
 				}
 			});

@@ -407,7 +407,9 @@ void bssh_host_editor::set_profile(const bssh_profile_t &profile) {
 	m_font_picker->set_scheme(resolved.value(QStringLiteral("colour_scheme")).toString());
 
 	reload_templates();
-	m_host_fields->set_values(resolved);
+	m_host_fields->set_source_name(profile.preset_id ? QStringLiteral("the template")
+	                                                 : QStringLiteral("this device's default"));
+	m_host_fields->show_settings(bssh_inherited_settings(m_store, profile), profile.overrides);
 	bool own_terminal = profile.preset_id != 0;
 	for (const QString &key : bssh_terminal_fields::keys())
 		own_terminal = own_terminal || profile.overrides.contains(key);
@@ -432,11 +434,10 @@ void bssh_host_editor::reload_templates() {
 
 void bssh_host_editor::on_template_chosen() {
 	/*
-	 * What was changed here stays this host's own, measured against the
-	 * template it had; the rest now comes from the template chosen.
-	 * profile() takes the template from m_profile, not from the list, for
-	 * this: measured against the NEW one, every field still showing the
-	 * old template's value read as the host's own and pinned it.
+	 * What was chosen here stays this host's own; the rest now comes from
+	 * the template chosen. profile() takes the template from m_profile,
+	 * not from the list, so the appearance half is measured against the
+	 * template it had.
 	 */
 	m_profile = profile();
 	m_profile.preset_id = m_template->currentData().toInt();
@@ -444,7 +445,9 @@ void bssh_host_editor::on_template_chosen() {
 	m_font_picker->set_font_choice(resolved.value(QStringLiteral("font_family")).toString(),
 	                                resolved.value(QStringLiteral("font_size")).toInt());
 	m_font_picker->set_scheme(resolved.value(QStringLiteral("colour_scheme")).toString());
-	m_host_fields->set_values(resolved);
+	m_host_fields->set_source_name(m_profile.preset_id ? QStringLiteral("the template")
+	                                                   : QStringLiteral("this device's default"));
+	m_host_fields->show_settings(bssh_inherited_settings(m_store, m_profile), m_profile.overrides);
 	update_override_badge();
 }
 
@@ -546,7 +549,7 @@ bssh_profile_t bssh_host_editor::profile() const {
 	        m_store, edited, m_font_picker->font_id(),
 	        m_font_picker->point_size(), m_font_picker->scheme_id());
 	if (m_host_fields)
-		edited.overrides = bssh_terminal_overrides(m_store, edited, m_host_fields->values());
+		edited.overrides = bssh_terminal_overrides(edited, m_host_fields->chosen_values());
 
 	/* An unnamed host is named after itself, so the list never shows a
 	 * blank row. */

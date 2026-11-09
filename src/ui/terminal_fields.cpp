@@ -8,6 +8,8 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QHBoxLayout>
+#include <QToolButton>
 
 #include "model/preset.h"
 #include "softkeys/key_row_layout.h"
@@ -86,7 +88,7 @@ bssh_terminal_fields::bssh_terminal_fields(QWidget *parent) : QWidget(parent) {
 		if (editor.exec() != QDialog::Accepted) return;
 		m_features_spec = editor.spec();
 		m_features->setText(features_button_text(m_features_spec));
-		emit_changed();
+		choose(QStringLiteral("term_features"));
 	});
 
 	/*
@@ -139,33 +141,101 @@ bssh_terminal_fields::bssh_terminal_fields(QWidget *parent) : QWidget(parent) {
 		return label;
 	};
 	m_first_heading = heading(QStringLiteral("Terminal"));
-	m_form->addRow(QStringLiteral("TERM"), m_term);
-	m_form->addRow(QStringLiteral("Scrollback"), m_scrollback);
-	m_form->addRow(QString(), m_bell);
-	m_form->addRow(QStringLiteral("Cursor"), m_cursor_style);
-	m_form->addRow(QString(), m_cursor_blink);
-	m_form->addRow(QStringLiteral("Features"), m_features);
-	m_form->addRow(QStringLiteral("Key row"), m_key_row);
+	m_form->addRow(QStringLiteral("TERM"), with_default(QStringLiteral("term"), m_term, QStringLiteral("TERM")));
+	m_form->addRow(QStringLiteral("Scrollback"),
+	               with_default(QStringLiteral("scrollback_lines"), m_scrollback, QStringLiteral("Scrollback")));
+	m_form->addRow(QString(), with_default(QStringLiteral("bell_enabled"), m_bell));
+	m_form->addRow(QStringLiteral("Cursor"), with_default(QStringLiteral("cursor_style"), m_cursor_style, QStringLiteral("Cursor")));
+	m_form->addRow(QString(), with_default(QStringLiteral("cursor_blink"), m_cursor_blink));
+	m_form->addRow(QStringLiteral("Features"), with_default(QStringLiteral("term_features"), m_features, QStringLiteral("Features")));
+	m_form->addRow(QStringLiteral("Key row"), with_default(QStringLiteral("key_row_layout"), m_key_row, QStringLiteral("Key row")));
 	heading(QStringLiteral("Connection"));
-	m_form->addRow(QStringLiteral("Keepalive"), m_keepalive);
-	m_form->addRow(QString(), m_compression);
-	m_form->addRow(QString(), m_clipboard);
-	m_form->addRow(QStringLiteral("On connect"), m_on_connect);
+	m_form->addRow(QStringLiteral("Keepalive"),
+	               with_default(QStringLiteral("keepalive_seconds"), m_keepalive, QStringLiteral("Keepalive")));
+	m_form->addRow(QString(), with_default(QStringLiteral("compression"), m_compression));
+	m_form->addRow(QString(), with_default(QStringLiteral("allow_clipboard_write"), m_clipboard));
+	m_form->addRow(QStringLiteral("On connect"),
+	               with_default(QStringLiteral("on_connect_command"), m_on_connect, QStringLiteral("On connect")));
 
-	connect(m_term, &QLineEdit::textEdited, this, &bssh_terminal_fields::emit_changed);
-	connect(m_scrollback, &QSpinBox::valueChanged, this, &bssh_terminal_fields::emit_changed);
-	connect(m_bell, &QCheckBox::toggled, this, &bssh_terminal_fields::emit_changed);
-	connect(m_cursor_style, &QComboBox::currentIndexChanged, this,
-	         &bssh_terminal_fields::emit_changed);
-	connect(m_cursor_blink, &QCheckBox::toggled, this, &bssh_terminal_fields::emit_changed);
-	connect(m_key_row, &QComboBox::currentIndexChanged, this,
-	         &bssh_terminal_fields::emit_changed);
-	connect(m_keepalive, &QSpinBox::valueChanged, this, &bssh_terminal_fields::emit_changed);
-	connect(m_compression, &QCheckBox::toggled, this, &bssh_terminal_fields::emit_changed);
-	connect(m_clipboard, &QCheckBox::toggled, this, &bssh_terminal_fields::emit_changed);
-	connect(m_on_connect, &QLineEdit::textEdited, this, &bssh_terminal_fields::emit_changed);
+	/* A change somebody makes is a choice; one this form makes is not (m_quiet). */
+	const auto chooses = [this](const char *key) {
+		return [this, key] { choose(QString::fromLatin1(key)); };
+	};
+	connect(m_term, &QLineEdit::textEdited, this, chooses("term"));
+	connect(m_scrollback, &QSpinBox::valueChanged, this, chooses("scrollback_lines"));
+	connect(m_bell, &QCheckBox::toggled, this, chooses("bell_enabled"));
+	connect(m_cursor_style, &QComboBox::currentIndexChanged, this, chooses("cursor_style"));
+	connect(m_cursor_blink, &QCheckBox::toggled, this, chooses("cursor_blink"));
+	connect(m_key_row, &QComboBox::currentIndexChanged, this, chooses("key_row_layout"));
+	connect(m_keepalive, &QSpinBox::valueChanged, this, chooses("keepalive_seconds"));
+	connect(m_compression, &QCheckBox::toggled, this, chooses("compression"));
+	connect(m_clipboard, &QCheckBox::toggled, this, chooses("allow_clipboard_write"));
+	connect(m_on_connect, &QLineEdit::textEdited, this, chooses("on_connect_command"));
 
-	set_values(bssh_preset_t().to_json());
+	show_settings(bssh_preset_t().to_json(), QJsonObject());
+}
+
+/*
+ * The field with its way back: a Default button, shown while the field is
+ * chosen, that puts it back to following. Qt Designer's property editor is
+ * the shape -- a set property in bold with a reset beside it -- after the
+ * "Default (x)" combo was weighed and refused: it would turn four check
+ * boxes into combos and has no form at all for a number or a line of text.
+ */
+QWidget *bssh_terminal_fields::with_default(const QString &key, QWidget *field,
+                                            const QString &label) {
+	/*
+	 * Named for its row: the form's label is the wrapper's buddy now, not
+	 * the field's, and a screen reader would otherwise say "empty".
+	 */
+	if (!label.isEmpty() && field->accessibleName().isEmpty()) field->setAccessibleName(label);
+
+	QWidget *row = new QWidget(this);
+	QHBoxLayout *layout = new QHBoxLayout(row);
+	layout->setContentsMargins(0, 0, 0, 0);
+	layout->addWidget(field, 1);
+
+	QToolButton *back = new QToolButton(row);
+	back->setObjectName(QStringLiteral("fields-default-") + key);
+	back->setText(QStringLiteral("Default"));
+	back->setAccessibleName(QStringLiteral("Use the default"));
+	back->setVisible(false);
+	connect(back, &QToolButton::clicked, this, [this, key] { follow(key); });
+	layout->addWidget(back);
+
+	m_defaults.insert(key, back);
+	m_fields_by_key.insert(key, field);
+	return row;
+}
+
+void bssh_terminal_fields::choose(const QString &key) {
+	if (m_quiet) return;
+	m_chosen.insert(key);
+	mark(key);
+	emit changed();
+}
+
+void bssh_terminal_fields::follow(const QString &key) {
+	m_chosen.remove(key);
+	fill(m_inherited, { key });
+	mark(key);
+	emit changed();
+}
+
+void bssh_terminal_fields::mark(const QString &key) {
+	const bool own = m_chosen.contains(key);
+	QToolButton *back = m_defaults.value(key);
+	QWidget *field = m_fields_by_key.value(key);
+	if (!back || !field) return;
+	back->setVisible(own);
+	back->setToolTip(QStringLiteral("Follow %1 again").arg(m_source_name));
+
+	/* Bold where chosen: the row's label, or a check box's own text. */
+	QLabel *label = qobject_cast<QLabel *>(m_form->labelForField(field->parentWidget()));
+	QWidget *shown = label && !label->text().isEmpty() ? static_cast<QWidget *>(label) : field;
+	QFont font = shown->font();
+	font.setBold(own);
+	shown->setFont(font);
 }
 
 void bssh_terminal_fields::set_first_heading_shown(bool shown) {
@@ -185,30 +255,66 @@ void bssh_terminal_fields::emit_changed() {
 	if (!m_quiet) emit changed();
 }
 
-void bssh_terminal_fields::set_values(const QJsonObject &settings) {
+void bssh_terminal_fields::show_settings(const QJsonObject &inherited, const QJsonObject &own) {
+	m_inherited = inherited;
+	m_chosen.clear();
+	QJsonObject shown = inherited;
+	for (const QString &key : keys()) {
+		if (!own.contains(key)) continue;
+		m_chosen.insert(key);
+		shown.insert(key, own.value(key));
+	}
+	const QStringList all = keys();
+	fill(shown, QSet<QString>(all.begin(), all.end()));
+	for (const QString &key : all) mark(key);
+}
+
+void bssh_terminal_fields::set_inherited(const QJsonObject &inherited) {
+	m_inherited = inherited;
+	QSet<QString> following;
+	for (const QString &key : keys())
+		if (!m_chosen.contains(key)) following.insert(key);
+	fill(inherited, following);
+}
+
+void bssh_terminal_fields::fill(const QJsonObject &settings, const QSet<QString> &keys) {
 	m_quiet = true;
 	const bssh_preset_t built_in;
-	m_term->setText(settings.value(QStringLiteral("term")).toString(built_in.term));
-	m_scrollback->setValue(settings.value(QStringLiteral("scrollback_lines"))
-	                               .toInt(built_in.scrollback_lines));
-	m_bell->setChecked(settings.value(QStringLiteral("bell_enabled")).toBool(built_in.bell_enabled));
-	const int style = m_cursor_style->findData(
-	        settings.value(QStringLiteral("cursor_style")).toString(built_in.cursor_style));
-	m_cursor_style->setCurrentIndex(style < 0 ? 0 : style);
-	m_cursor_blink->setChecked(
-	        settings.value(QStringLiteral("cursor_blink")).toBool(built_in.cursor_blink));
-	m_features_spec = settings.value(QStringLiteral("term_features")).toString();
-	m_features->setText(features_button_text(m_features_spec));
-	const int row = m_key_row->findData(normalised(QStringLiteral("key_row_layout"),
-	        settings.value(QStringLiteral("key_row_layout"))).toString());
-	m_key_row->setCurrentIndex(row < 0 ? 0 : row);
-	m_keepalive->setValue(settings.value(QStringLiteral("keepalive_seconds"))
-	                              .toInt(built_in.keepalive_seconds));
-	m_compression->setChecked(
-	        settings.value(QStringLiteral("compression")).toBool(built_in.compression));
-	m_clipboard->setChecked(settings.value(QStringLiteral("allow_clipboard_write"))
-	                                .toBool(built_in.allow_clipboard_write));
-	m_on_connect->setText(settings.value(QStringLiteral("on_connect_command")).toString());
+	const auto has = [&keys](const char *key) { return keys.contains(QString::fromLatin1(key)); };
+	if (has("term")) m_term->setText(settings.value(QStringLiteral("term")).toString(built_in.term));
+	if (has("scrollback_lines"))
+		m_scrollback->setValue(settings.value(QStringLiteral("scrollback_lines"))
+		                               .toInt(built_in.scrollback_lines));
+	if (has("bell_enabled"))
+		m_bell->setChecked(settings.value(QStringLiteral("bell_enabled")).toBool(built_in.bell_enabled));
+	if (has("cursor_style")) {
+		const int style = m_cursor_style->findData(
+		        settings.value(QStringLiteral("cursor_style")).toString(built_in.cursor_style));
+		m_cursor_style->setCurrentIndex(style < 0 ? 0 : style);
+	}
+	if (has("cursor_blink"))
+		m_cursor_blink->setChecked(
+		        settings.value(QStringLiteral("cursor_blink")).toBool(built_in.cursor_blink));
+	if (has("term_features")) {
+		m_features_spec = settings.value(QStringLiteral("term_features")).toString();
+		m_features->setText(features_button_text(m_features_spec));
+	}
+	if (has("key_row_layout")) {
+		const int row = m_key_row->findData(normalised(QStringLiteral("key_row_layout"),
+		        settings.value(QStringLiteral("key_row_layout"))).toString());
+		m_key_row->setCurrentIndex(row < 0 ? 0 : row);
+	}
+	if (has("keepalive_seconds"))
+		m_keepalive->setValue(settings.value(QStringLiteral("keepalive_seconds"))
+		                              .toInt(built_in.keepalive_seconds));
+	if (has("compression"))
+		m_compression->setChecked(
+		        settings.value(QStringLiteral("compression")).toBool(built_in.compression));
+	if (has("allow_clipboard_write"))
+		m_clipboard->setChecked(settings.value(QStringLiteral("allow_clipboard_write"))
+		                                .toBool(built_in.allow_clipboard_write));
+	if (has("on_connect_command"))
+		m_on_connect->setText(settings.value(QStringLiteral("on_connect_command")).toString());
 	m_quiet = false;
 }
 
@@ -228,16 +334,9 @@ QJsonObject bssh_terminal_fields::values() const {
 	return out;
 }
 
-QJsonObject bssh_terminal_fields::differing_from(const QJsonObject &inherited) const {
-	return differing(values(), inherited);
-}
-
-QJsonObject bssh_terminal_fields::differing(const QJsonObject &shown, const QJsonObject &inherited) {
+QJsonObject bssh_terminal_fields::chosen_values() const {
+	const QJsonObject all = values();
 	QJsonObject out;
-	for (const QString &key : keys()) {
-		const QJsonValue mine = normalised(key, shown.value(key));
-		if (mine == normalised(key, inherited.value(key))) continue;
-		out.insert(key, mine);
-	}
+	for (const QString &key : m_chosen) out.insert(key, normalised(key, all.value(key)));
 	return out;
 }

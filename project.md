@@ -12234,11 +12234,14 @@ defaults for every host (the settings page's Terminal section, at its top,
 stored in `app.ini`'s `defaults/` group by the preset's own JSON names and
 typed against the built-in values on the way back, since app.ini holds text
 and a "false" laid over unconverted would read as true), a host's own, and
-the preset editor, which lost its own copy of the eleven fields. A value
-counts as a host's own, or a device default, only where it differs from what
-it would otherwise be (`differing`, which compares as the settings mean them:
-an empty TERM is the built-in one, an unset key row the default row), and a
-default put back to the built-in value is forgotten rather than stored. The
+the preset editor, which lost its own copy of the eleven fields. **Since
+2026-11-09 a value is a host's own, a device default or a preset's when
+somebody chose it there**, whatever it equals: the form keeps which fields were
+changed, a chosen one shows its label in bold and a *Default* button that puts
+it back to following -- Qt Designer's shape, after a *Default (x)* entry per
+field was weighed and refused, since four of the fields are check boxes and two
+take free text. Until then a value counted only where it differed from what it
+would otherwise be, and a default put back to the built-in value was forgotten. The
 desktop dialog's categories are Session, Appearance, Terminal, This device,
 Presets, Licences: Appearance and Terminal each show *Every host on this
 device* above *This host*, which opens and closes and starts closed unless
@@ -12267,12 +12270,9 @@ palette wrote all nineteen colours; it writes the slots someone picked (a pick
 equal to the shipped colour included) and removes the rest, and *Classic ANSI*
 puts the sixteen back to following the shipped palette rather than writing
 today's values of it. Choosing a default font family wrote the size too; the
-half that moved is written now. **Open, and the holder's to settle:** the
-paragraph above stores a device default, and §10.1 a host's override, only
-where it differs from what it inherits, and a preset lays every field over the
-device defaults -- all three lose a pick that equals today's default, which the
-2026-11-06 rule calls wrong. Following it means presets that record only the
-fields they chose and a *Default (x)* entry on every field.
+half that moved is written now. The holder settled the rest the same day --
+"follow the 2026-11-06 rule, go ahead with sparse presets", with exceptions
+where a setting calls for one -- and the paragraph above and §10.1 say how.
 
 **Host Settings, from the terminal, 2026-11-02.** Opened from a terminal's
 menu, the configuration window is the new-connection door, so its *This host*
@@ -12299,13 +12299,17 @@ cannot be edited. `app.ini`'s `defaults/` group now holds a font, size and
 colour scheme laid over the built-in values (empty, or a size of 0, is the
 built-in one); changing them re-resolves every open terminal that follows them,
 the local shell too, and the dialog's host picker follows them unless the user
-has changed it or the host sets its own. A host following a preset takes the
-preset's -- presets always carry a size, so the default does not reach through
-one. The host picker also showed its own starting values, white on black and
+has changed it or the host sets its own. A host following a preset took the
+preset's -- presets carried a size, so the default did not reach through one
+(until 2026-11-09, below). The host picker also showed its own starting values, white on black and
 11 pt, on a new destination over a light terminal; it is filled from what the
 host resolves to when the page is built. Seen under twin: the default raised to
 16 pt, the open local shell redrawn at 16 at once, *This host* following, and
-16 back after a restart.
+16 back after a restart. **Since 2026-11-09 a preset sets only what it chose**
+(`bssh_preset_t::chosen`), stored, exported and laid over the device defaults
+alone; the size reaches through one that does not set it. A `presets.ini`
+written before holds every field, so its presets go on choosing them all --
+nothing in the file says which were picked.
 `a_host_with_no_preset_uses_its_own_size_and_the_device_default`,
 `the_dialog_shows_a_hosts_own_size_and_follows_the_default`;
 `tool/sabotage/defaults.toml`, seven edits.
@@ -12334,11 +12338,14 @@ App defaults  ←  Preset ("work-bastion")  ←  Host profile overrides
   already gives recorded an override pinning it **while the badge two lines away
   said "Following"**. The screen and the store disagreed about the same host, and
   the host quietly stopped following the preset it was displayed as following.
-- **An override is cleared by agreeing, not only by reverting.** Insert-only
-  leaves a host that has been talked back into matching its preset still carrying
-  an override, which stops following the next time the preset changes. The revert
-  button is the explicit route; picking the inherited value by hand has to mean
-  the same thing, or the two controls disagree.
+- **~~An override is cleared by agreeing, not only by reverting.~~ Superseded
+  2026-11-09, the holder: a config records choices, not values.** A pick is the
+  host's own however it compares, a pick equal to what it inherits included, and
+  only the way back -- a field's *Default* button, or the font's revert -- returns
+  it to following. Clearing by agreement lost exactly that pick when the inherited
+  value later moved, which the holder's rule of 2026-11-06 names as the second way
+  of getting a config wrong. Done for the terminal fields; the host's font, size
+  and colour scheme still clear by agreeing, and are next.
 
 ### 10.2 What lives in a preset (shareable, non-secret)
 Terminal type/`TERM` string, colour scheme, font family + size (§9), on-screen key

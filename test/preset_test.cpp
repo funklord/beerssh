@@ -3,6 +3,7 @@
 #include <QTemporaryDir>
 #include <QtTest>
 
+#include "model/app_settings.h"
 #include "model/preset.h"
 #include "model/settings_resolver.h"
 #include "preset_test.h"
@@ -87,6 +88,7 @@ void preset_test::the_preset_beats_the_defaults() {
 	bssh_preset_t preset;
 	preset.term = QStringLiteral("vt100");
 	preset.scrollback_lines = 999;
+	preset.chosen = { QStringLiteral("term"), QStringLiteral("scrollback_lines") };
 
 	const QJsonObject resolved = bssh_settings_resolver::resolve(preset, QJsonObject());
 
@@ -97,10 +99,50 @@ void preset_test::the_preset_beats_the_defaults() {
 	QCOMPARE(resolved.value(QStringLiteral("cursor_style")).toString(), QStringLiteral("block"));
 }
 
+void preset_test::a_preset_lays_only_what_it_chose_over_the_device_defaults() {
+	/*
+	 * A config records choices, not values (the holder, 2026-11-06 and
+	 * 2026-11-09). A preset laid all sixteen fields over this device's
+	 * defaults, so a host on "tmux-first" lost the scrollback set for
+	 * every host -- tmux-first chooses one thing, the command on connect.
+	 */
+	struct left_t {
+		QJsonValue was = bssh_app_settings().default_settings().value(QStringLiteral("scrollback_lines"));
+		~left_t() {
+			if (was.isUndefined()) bssh_app_settings().forget_default_setting(QStringLiteral("scrollback_lines"));
+			else bssh_app_settings().set_default_setting(QStringLiteral("scrollback_lines"), was);
+		}
+	} left;
+	bssh_app_settings().set_default_setting(QStringLiteral("scrollback_lines"), 4321);
+
+	bssh_preset_t tmux_first;
+	for (const bssh_preset_t &shipped : bssh_preset_t::builtins())
+		if (shipped.name == QStringLiteral("tmux-first")) tmux_first = shipped;
+	QCOMPARE(tmux_first.chosen, QSet<QString>({ QStringLiteral("on_connect_command") }));
+
+	const QJsonObject resolved = bssh_settings_resolver::resolve(tmux_first, QJsonObject());
+	QCOMPARE(resolved.value(QStringLiteral("scrollback_lines")).toInt(), 4321);
+	QVERIFY(resolved.value(QStringLiteral("on_connect_command")).toString().contains(
+	        QStringLiteral("tmux")));
+
+	/* A field it chose wins, even one set to today's built-in value. */
+	bssh_preset_t pinned;
+	pinned.chosen = { QStringLiteral("scrollback_lines") };
+	QCOMPARE(bssh_settings_resolver::resolve(pinned, QJsonObject())
+	                 .value(QStringLiteral("scrollback_lines")).toInt(), bssh_preset_t().scrollback_lines);
+
+	/* And what it stores and exports is what it chose. */
+	const QJsonObject stored = tmux_first.chosen_json();
+	QVERIFY(stored.contains(QStringLiteral("on_connect_command")));
+	QVERIFY(!stored.contains(QStringLiteral("scrollback_lines")));
+	QCOMPARE(bssh_preset_t::from_json(stored).chosen, tmux_first.chosen);
+}
+
 void preset_test::the_host_beats_the_preset() {
 	bssh_preset_t preset;
 	preset.term = QStringLiteral("vt100");
 	preset.font_family = QStringLiteral("Iosevka");
+	preset.chosen = { QStringLiteral("term"), QStringLiteral("font_family") };
 
 	QJsonObject overrides;
 	overrides.insert(QStringLiteral("term"), QStringLiteral("xterm-256color"));
@@ -162,6 +204,7 @@ void preset_test::editing_a_preset_reaches_every_host_that_did_not_override() {
 	bssh_preset_t preset;
 	preset.name = QStringLiteral("work-bastion");
 	preset.scrollback_lines = 5000;
+	preset.chosen = { QStringLiteral("scrollback_lines") };
 
 	/* Three hosts on one preset; the middle one has its own opinion. */
 	const QJsonObject plain_a;
@@ -229,6 +272,7 @@ void preset_test::the_exported_file_contains_nothing_private() {
 	bssh_preset_t preset;
 	preset.name = QStringLiteral("work-bastion");
 	preset.on_connect_command = QStringLiteral("tmux attach || tmux new");
+	preset.chosen = { QStringLiteral("on_connect_command") };
 	QVERIFY(preset.write_ini(path));
 
 	QFile file(path);
@@ -283,6 +327,8 @@ void preset_test::an_ini_round_trip_keeps_every_field() {
 	preset.compression = true;
 	preset.on_connect_command = QStringLiteral("tmux attach");
 	preset.key_row_layout = QStringLiteral("compact");
+	const QStringList every = bssh_preset_t::setting_keys();
+	preset.chosen = QSet<QString>(every.begin(), every.end());
 
 	QVERIFY(preset.write_ini(path));
 

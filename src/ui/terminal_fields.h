@@ -1,7 +1,9 @@
 #ifndef BSSH_TERMINAL_FIELDS_H
 #define BSSH_TERMINAL_FIELDS_H
 
+#include <QHash>
 #include <QJsonObject>
+#include <QSet>
 #include <QStringList>
 #include <QWidget>
 
@@ -12,6 +14,7 @@ class QLabel;
 class QLineEdit;
 class QPushButton;
 class QSpinBox;
+class QToolButton;
 
 /*
  * The terminal and connection fields of a host's settings (sec 10.2):
@@ -34,23 +37,30 @@ public:
 	/* The JSON keys this form holds, as bssh_preset_t names them. */
 	static QStringList keys();
 
-	/* Shows `settings` -- resolved, so every key is there -- quietly. */
-	void set_values(const QJsonObject &settings);
+	/*
+	 * Shows what these settings follow, `inherited` (resolved, so every
+	 * key is there), with `own` -- the keys chosen here -- over it,
+	 * quietly. A field is chosen once somebody changes it and stays so,
+	 * even set back to what it follows, until its Default button puts it
+	 * back to following: a config records choices, not values (the
+	 * holder's rule, 2026-11-06). Values compared against what they
+	 * follow lose a pick that equals today's default.
+	 */
+	void show_settings(const QJsonObject &inherited, const QJsonObject &own);
+
+	/* What they follow changed (a template, this device's defaults): unchosen fields show it. */
+	void set_inherited(const QJsonObject &inherited);
+
+	/* Names what the fields follow, for the Default buttons' tips. */
+	void set_source_name(const QString &name) { m_source_name = name; }
 
 	/* What the form shows, for every key it holds. */
 	QJsonObject values() const;
 
-	/*
-	 * The keys where the form differs from `inherited`, with the form's
-	 * values: what a host records as its own, or the device as its
-	 * default. Compared as the settings mean them -- an empty TERM is the
-	 * built-in one and an unset key row the default row -- so showing a
-	 * value and leaving it alone records nothing.
-	 */
-	QJsonObject differing_from(const QJsonObject &inherited) const;
+	/* The chosen keys, with what the form shows for them. */
+	QJsonObject chosen_values() const;
+	QSet<QString> chosen() const { return m_chosen; }
 
-	/* The same comparison for values held anywhere, not only on a form. */
-	static QJsonObject differing(const QJsonObject &shown, const QJsonObject &inherited);
 
 	QFormLayout *form() const { return m_form; }
 
@@ -66,6 +76,11 @@ signals:
 
 private:
 	void emit_changed();
+	void choose(const QString &key);
+	void follow(const QString &key);
+	void mark(const QString &key);
+	void fill(const QJsonObject &settings, const QSet<QString> &keys);
+	QWidget *with_default(const QString &key, QWidget *field, const QString &label = QString());
 
 	QFormLayout *m_form;
 	QLabel *m_first_heading = nullptr;
@@ -85,6 +100,12 @@ private:
 	 * dialog of their own, and the button only shows a summary. */
 	QString m_features_spec;
 	bool m_quiet = false;
+
+	QJsonObject m_inherited;
+	QSet<QString> m_chosen;
+	QString m_source_name = QStringLiteral("the default");
+	QHash<QString, QToolButton *> m_defaults;
+	QHash<QString, QWidget *> m_fields_by_key;
 };
 
 #endif /* BSSH_TERMINAL_FIELDS_H */

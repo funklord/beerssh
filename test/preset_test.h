@@ -24,6 +24,7 @@ private slots:
 	void an_ini_round_trip_keeps_every_field();
 	void a_hostile_ini_cannot_claim_to_be_builtin();
 	void the_preset_beats_the_defaults();
+	void a_preset_lays_only_what_it_chose_over_the_device_defaults();
 	void the_host_beats_the_preset();
 	void an_override_equal_to_the_preset_is_not_an_override();
 	void reverting_a_field_follows_the_preset_again();

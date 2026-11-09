@@ -1332,6 +1332,7 @@ void profile_store_test::the_touch_editor_resolves_through_the_preset() {
 	preset.name = QStringLiteral("Chunky");
 	preset.font_family = QStringLiteral("hack");
 	preset.font_size = 17;
+	preset.chosen = { QStringLiteral("font_family"), QStringLiteral("font_size") };
 	const int preset_id = store.save_preset(preset);
 	QVERIFY(preset_id != 0);
 

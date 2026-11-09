@@ -111,7 +111,7 @@ private:
 	QWidget *build_terminal_page();
 	void reload_templates();
 	void on_template_chosen();
-	void show_resolved_terminal(const QJsonObject &resolved);
+	void show_terminal(const bssh_profile_t &profile);
 	void update_terminal_scope();
 
 	/* What this host would have without settings of its own. */
@@ -138,7 +138,6 @@ private:
 	QString m_shown_font;
 	int m_shown_size = 0;
 	QString m_shown_scheme;
-	QJsonObject m_shown_terminal;
 
 	void reload_sessions();
 	int selected_profile_id() const;

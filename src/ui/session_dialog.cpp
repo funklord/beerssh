@@ -642,13 +642,9 @@ bssh_profile_t bssh_session_dialog::current_profile() const {
 		        m_font_picker->point_size(), m_font_picker->scheme_id());
 	}
 
-	/*
-	 * And the terminal fields by the same rule: recorded where they differ
-	 * from what the host would have without them, dropped where they
-	 * agree.
-	 */
+	/* And the terminal fields chosen on this page, and only those. */
 	if (m_host_fields)
-		profile.overrides = bssh_terminal_overrides(m_store, profile, m_host_fields->values());
+		profile.overrides = bssh_terminal_overrides(profile, m_host_fields->chosen_values());
 
 	return profile;
 }
@@ -679,8 +675,11 @@ void bssh_session_dialog::follow_new_defaults() {
 	 * as an override -- pinning the host to the size the user had just
 	 * moved every host away from. One the user has changed is theirs.
 	 */
-	if (m_host_fields && m_host_fields->values() == m_shown_terminal)
-		show_resolved_terminal(resolved_settings(m_current));
+	/* Fields this host follows show the new defaults; its own stay. */
+	if (m_host_fields) {
+		m_host_fields->set_inherited(inherited_settings(m_current));
+		update_terminal_scope();
+	}
 	if (!m_font_picker) return;
 	if (m_font_picker->font_id() != m_shown_font || m_font_picker->point_size() != m_shown_size
 	    || m_font_picker->scheme_id() != m_shown_scheme)
@@ -712,7 +711,7 @@ void bssh_session_dialog::set_current_profile(const bssh_profile_t &profile) {
 		const int at = m_template->findData(profile.preset_id);
 		m_template->setCurrentIndex(at < 0 ? 0 : at);
 	}
-	show_resolved_terminal(resolved_settings(profile));
+	show_terminal(profile);
 
 	/* Open where this host has something of its own to show, closed where
 	 * it follows the defaults like nearly every host. */
@@ -730,16 +729,17 @@ QJsonObject bssh_session_dialog::inherited_settings(const bssh_profile_t &profil
 	return bssh_inherited_settings(m_store, profile);
 }
 
-void bssh_session_dialog::show_resolved_terminal(const QJsonObject &resolved) {
+void bssh_session_dialog::show_terminal(const bssh_profile_t &profile) {
 	if (!m_host_fields) return;
-	m_host_fields->set_values(resolved);
-	m_shown_terminal = m_host_fields->values();
+	m_host_fields->set_source_name(profile.preset_id ? QStringLiteral("the template")
+	                                                 : QStringLiteral("this device's default"));
+	m_host_fields->show_settings(inherited_settings(profile), profile.overrides);
 	update_terminal_scope();
 }
 
 void bssh_session_dialog::update_terminal_scope() {
 	if (!m_terminal_scope || !m_host_fields) return;
-	const int own = m_host_fields->differing_from(inherited_settings(m_current)).size();
+	const int own = m_host_fields->chosen().size();
 	const QString source = m_current.preset_id && m_store
 	        ? QStringLiteral("the template \"%1\"").arg(m_store->preset(m_current.preset_id).name)
 	        : QStringLiteral("this device's defaults");
@@ -771,7 +771,7 @@ void bssh_session_dialog::on_template_chosen() {
 	m_current.preset_id = m_template->currentData().toInt();
 	show_resolved_font(resolved_settings(m_current));
 	update_override_badges();
-	show_resolved_terminal(resolved_settings(m_current));
+	show_terminal(m_current);
 }
 
 
@@ -816,7 +816,7 @@ QWidget *bssh_session_dialog::build_terminal_page() {
 	bssh_wrap_note(m_terminal_scope);
 	layout->addWidget(m_terminal_scope);
 
-	show_resolved_terminal(resolved_settings(m_current));
+	show_terminal(m_current);
 	return page;
 }
 

@@ -49,8 +49,28 @@ QJsonObject bssh_preset_t::to_json() const {
 	return object;
 }
 
+QStringList bssh_preset_t::setting_keys() {
+	QStringList keys = bssh_preset_t().to_json().keys();
+	keys.removeAll(QStringLiteral("schema"));
+	keys.removeAll(QStringLiteral("name"));
+	return keys;
+}
+
+QJsonObject bssh_preset_t::chosen_json() const {
+	const QJsonObject all = to_json();
+	QJsonObject out;
+	out.insert(QStringLiteral("name"), name);
+	for (const QString &key : chosen) {
+		if (all.contains(key)) out.insert(key, all.value(key));
+	}
+	return out;
+}
+
 bssh_preset_t bssh_preset_t::from_json(const QJsonObject &object) {
 	bssh_preset_t preset;
+	for (const QString &key : setting_keys()) {
+		if (object.contains(key)) preset.chosen.insert(key);
+	}
 
 	preset.name = object.value(QStringLiteral("name")).toString();
 	preset.term = object.value(QStringLiteral("term")).toString(preset.term);
@@ -115,6 +135,7 @@ QList<bssh_preset_t> bssh_preset_t::builtins() {
 	tmux_first.name = QStringLiteral("tmux-first");
 	tmux_first.is_builtin = true;
 	tmux_first.on_connect_command = QStringLiteral("tmux attach || tmux new");
+	tmux_first.chosen = { QStringLiteral("on_connect_command") };
 	presets.append(tmux_first);
 
 	/*
@@ -130,6 +151,8 @@ QList<bssh_preset_t> bssh_preset_t::builtins() {
 	limited.bell_enabled = false;
 	limited.term_features = QStringLiteral("none");
 	limited.scrollback_lines = 10000;
+	limited.chosen = { QStringLiteral("term"), QStringLiteral("bell_enabled"),
+	                   QStringLiteral("term_features"), QStringLiteral("scrollback_lines") };
 	presets.append(limited);
 
 	return presets;
@@ -162,7 +185,9 @@ bool bssh_preset_t::write_ini(const QString &raw_path) const {
 		file.clear();
 		file.beginGroup(QStringLiteral("preset"));
 
-		const QJsonObject json = to_json();
+		/* What the preset chose, so it travels as a template and not a snapshot. */
+		QJsonObject json = chosen_json();
+		json.insert(QStringLiteral("schema"), to_json().value(QStringLiteral("schema")));
 		for (auto it = json.constBegin(); it != json.constEnd(); ++it) {
 			if (it.value().isBool()) {
 				file.setValue(it.key(), it.value().toBool() ? QStringLiteral("true")
@@ -228,7 +253,12 @@ bssh_preset_t bssh_preset_t::read_ini(const QString &raw_path, bool *ok,
 
 	file.beginGroup(section);
 
-	QJsonObject json = bssh_preset_t().to_json();
+	/*
+	 * Only what the file sets, so those are what the preset chooses; the
+	 * types come from a default preset's fields.
+	 */
+	const QJsonObject shape = bssh_preset_t().to_json();
+	QJsonObject json;
 	json.insert(QStringLiteral("name"), section);
 
 	for (const QString &key : file.childKeys()) {
@@ -243,7 +273,7 @@ bssh_preset_t bssh_preset_t::read_ini(const QString &raw_path, bool *ok,
 		 * reads as protection, which is worse than no guard: it invites
 		 * the next reader to weaken the one that does the work.
 		 */
-		const QJsonValue reference = json.value(key);
+		const QJsonValue reference = shape.value(key);
 		const QString raw = file.value(key).toString();
 
 		if (reference.isBool()) {

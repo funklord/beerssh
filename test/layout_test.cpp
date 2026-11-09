@@ -2553,14 +2553,18 @@ void check_free_form_fields_own_their_row(const QString &name, QWidget *surface,
 		if (!label_item || !field_item) continue;
 
 		QWidget *label = label_item->widget();
-		QLineEdit *field = qobject_cast<QLineEdit *>(field_item->widget());
+		QWidget *placed = field_item->widget();
+		QLineEdit *field = qobject_cast<QLineEdit *>(placed);
+		/* Or held with a Default button beside it (bssh_terminal_fields). */
+		if (!field && placed) field = placed->findChild<QLineEdit *>(QString(), Qt::FindDirectChildrenOnly);
 		if (!label || !field || bssh_shows_a_chosen_value(field)) continue;
 
 		++checked;
-		if (label->x() != field->x())
+		const int field_x = placed->x() + (placed == field ? 0 : field->x());
+		if (label->x() != field_x)
 			beside.append(QStringLiteral("\"%1\" starts at x=%2 with its label at "
 			                              "x=%3, so it is sharing the row -- %4px wide")
-			                      .arg(field->text()).arg(field->x())
+			                      .arg(field->text()).arg(field_x)
 			                      .arg(label->x()).arg(field->width()));
 	}
 

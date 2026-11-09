@@ -2,6 +2,7 @@
 #define BSSH_PRESET_H
 
 #include <QJsonObject>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 
@@ -108,6 +109,21 @@ struct bssh_preset_t {
 	 */
 	bool is_builtin;
 
+	/*
+	 * The settings this preset sets, by their JSON names; every other
+	 * field holds this build's default and is not the preset's. A preset
+	 * records choices, not values (the holder's rule, 2026-11-06): one
+	 * that wrote all sixteen laid every one over this device's defaults,
+	 * so a host on "tmux-first" lost the scrollback set for every host.
+	 */
+	QSet<QString> chosen;
+
+	/* The names chosen can hold: every field to_json() writes but the name and schema. */
+	static QStringList setting_keys();
+
+	/* The name and the chosen settings, which is what a preset stores and exports. */
+	QJsonObject chosen_json() const;
+
 	bssh_preset_t()
 	    : id(0),
 	      term(QStringLiteral("xterm-256color")),
@@ -121,7 +137,12 @@ struct bssh_preset_t {
 	      compression(false),
 	      is_builtin(false) {}
 
-	/* JSON, human-readable and diffable, with a schema version (sec 10.5). */
+	/*
+	 * JSON, human-readable and diffable, with a schema version (sec 10.5).
+	 * to_json() is every field, defaults included: what the preset
+	 * resolves to on its own. from_json() takes every setting the object
+	 * holds as chosen.
+	 */
 	QJsonObject to_json() const;
 	static bssh_preset_t from_json(const QJsonObject &object);
 

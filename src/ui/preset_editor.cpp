@@ -1,6 +1,8 @@
 #include "ui/touch_metrics.h"
 #include "ui/preset_editor.h"
 
+#include "model/settings_resolver.h"
+
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFileDialog>
@@ -315,7 +317,8 @@ void bssh_preset_editor::show_preset(const bssh_preset_t &preset) {
 	m_current = preset;
 
 	m_name->setText(preset.name);
-	m_fields->set_values(preset.to_json());
+	m_fields->set_source_name(QStringLiteral("this device's default"));
+	m_fields->show_settings(bssh_settings_resolver::app_defaults(), preset.chosen_json());
 	m_font->set_font_choice(preset.font_family, preset.font_size);
 	m_font->set_scheme(preset.colour_scheme);
 
@@ -336,12 +339,18 @@ bssh_preset_t bssh_preset_editor::edited_preset() const {
 	 * row stays unset and follows the default row.
 	 */
 	QJsonObject json = m_current.to_json();
-	const QJsonObject changed = m_fields->differing_from(json);
-	for (auto it = changed.constBegin(); it != changed.constEnd(); ++it)
-		json.insert(it.key(), it.value());
+	const QJsonObject built_in = bssh_preset_t().to_json();
+	const QJsonObject own = m_fields->chosen_values();
+	for (const QString &key : bssh_terminal_fields::keys())
+		json.insert(key, own.contains(key) ? own.value(key) : built_in.value(key));
 	bssh_preset_t preset = bssh_preset_t::from_json(json);
 	preset.id = m_current.id;
 	preset.is_builtin = m_current.is_builtin;
+
+	/* The form's choices, and what it does not show as they were: never every field. */
+	preset.chosen = m_current.chosen;
+	for (const QString &key : bssh_terminal_fields::keys()) preset.chosen.remove(key);
+	preset.chosen.unite(m_fields->chosen());
 
 	preset.name = m_name->text().trimmed();
 	/*
@@ -353,13 +362,20 @@ bssh_preset_t bssh_preset_editor::edited_preset() const {
 	 * default if the default ever moved.
 	 */
 	const QString resolved = bssh_font_catalog::instance().effective_id(m_current.font_family);
-	if (m_font->font_id() != resolved) preset.font_family = m_font->font_id();
-	preset.font_size = m_font->point_size();
+	if (m_font->font_id() != resolved) {
+		preset.font_family = m_font->font_id();
+		preset.chosen.insert(QStringLiteral("font_family"));
+	}
+	if (m_font->point_size() != m_current.font_size) {
+		preset.font_size = m_font->point_size();
+		preset.chosen.insert(QStringLiteral("font_size"));
+	}
 
 	/* Same rule for the scheme: an untouched default stays unset. */
 	const bssh_colour_scheme_catalog &schemes = bssh_colour_scheme_catalog::instance();
 	if (m_font->scheme_id() != schemes.effective_id(m_current.colour_scheme)) {
 		preset.colour_scheme = m_font->scheme_id();
+		preset.chosen.insert(QStringLiteral("colour_scheme"));
 	}
 
 	return preset;
