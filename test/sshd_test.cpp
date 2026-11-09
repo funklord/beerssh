@@ -644,7 +644,13 @@ void sshd_test::a_listener_the_system_takes_away_comes_back_without_spinning() {
 
 	const int fd = listener_on(port);
 	QVERIFY2(fd >= 0, qPrintable(QStringLiteral("nothing listening on %1 among:%2").arg(port).arg(describe_sockets())));
-	QCOMPARE(::shutdown(fd, SHUT_RDWR), 0);
+	/*
+	 * Linux reports a listener shut down from outside to poll() as the
+	 * network going; macOS refuses to shut down a listening socket at all
+	 * (ENOTCONN), so there is nothing here to stand in for it with.
+	 */
+	if (::shutdown(fd, SHUT_RDWR) != 0 && errno == ENOTCONN)
+		QSKIP("this system cannot shut a listening socket down, which is how the network going is played");
 	QTRY_VERIFY(!m_server->listening());
 	QVERIFY(m_server->running());
 

@@ -1,0 +1,11 @@
+# A run of same-looking cells drawn in one call (project.md sec 9.5's glyph
+# runs) advances by the font's fractional metrics unless each advance is
+# pinned to the whole-pixel cell; without the pin a long run creeps off its
+# columns. Measured in the set's own font, which the test loads.
+
+[[sabotage]]
+name = "a long run advances by the font, not the cell"
+file = "src/ui/terminal_view.cpp"
+find = "\tfont.setLetterSpacing(QFont::AbsoluteSpacing, m_cell_width - natural);"
+replace = ""
+expect = "a_long_run_of_text_stays_on_the_grid"

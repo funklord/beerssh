@@ -1501,6 +1501,18 @@ void terminal_view_test::a_long_run_of_text_stays_on_the_grid() {
 	 * instead of the cell's, the last character would land nowhere near
 	 * the last column.
 	 */
+	/*
+	 * The set's font, whose cell the pin is measured against. Without it
+	 * the view falls back to whatever the system calls monospace, and on
+	 * the macOS runner, with no fonts fetched, that was "Sans Serif": its
+	 * 'i' inks a pixel past the last cell, which says nothing of the pin.
+	 * Loaded here, since only the font tests registered it before, so
+	 * this ran in a fallback font on every machine.
+	 */
+	bssh_font_catalog().load_bundled(QStringLiteral(BSSH_TEST_FONT_DIR));
+	if (!bssh_font_catalog::instance().is_available(QStringLiteral("jetbrains-mono")))
+		QSKIP("the set's font is not here (tool/fetch-fonts.sh), and the pin is measured in it");
+
 	bssh_terminal_view view;
 	view.resize(600, 60);
 
