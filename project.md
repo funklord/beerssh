@@ -17285,6 +17285,38 @@ section; the suite ran against the collected test program, 945 passing, and
 `make check-windows` against the collected app.
 
 
+**`check-ci` runs on hull as well as docker, since 2026-11-09** (the
+holder's go-ahead that day; the plan agreed 2026-10-22 was both engines on
+the same commits until they agree, then hull alone). `BSSH_CI_ENGINE=hull
+make check-ci`, `HULL` naming the binary where it is not on the PATH. One
+`run.sh` is the job for both, written by `check-ci.sh` into the stage. Under
+hull a `(build ...)` step bakes the workflow's packages into
+`beerssh/check-ci`, stored on disk under `$HOME` and keyed on the package
+list, rerun once a day since the step has a network; the job then runs in a
+chroot machine of that image, `(network none)`, its build on a volume in a
+stage under `$XDG_CACHE_HOME` (this tree's group, `users`, is not mapped in a
+machine above an overlay). Why hull: a killed run takes its machine with it
+(docker's daemon kept a container compiling, below), and nothing lands on
+`/`, which had 1.9 GB free that day with docker's images and build cache on
+it -- too little to run the docker engine beside it safely, so it was not.
+
+- **Measured at hull e47cb881:** the image baked in 73 s, the whole Qt dev
+  set installed with apt's own sandbox user (the open question of
+  2026-10-22); the job on `8122834`, 1062 passed, 0 failed, 17 skipped, 9
+  warnings, about 24 minutes on a machine another tree was loading; the
+  stage gone afterwards and no machine running.
+- **It found that `check-ci` had been failing since 2026-10-23** under
+  either engine, at `make style`: libssh became a submodule that day, the
+  day after check-ci stopped being run, and in an exported tree the gate
+  walks the filesystem, so libssh's 752 files were checked (81752
+  violations). `8122834` excludes it as vterm and softkeys are. Then the
+  gate's collapse floor fired, its raw population counting every vendored
+  file where the runner's checkout counts a gitlink. So `run.sh` gives the
+  exported tree the runner's shape: each submodule a repository of what was
+  exported, the top one indexing them as gitlinks.
+  `tool/apply-patches.sh` already handles a submodule that is its own
+  repository.
+
 **The `linux` job was red from before 2026-11-01 to 2026-11-05, and nobody
 looked.** Every run failed on the same three tests while the local suite
 stayed green, because Ubuntu 24.04's Qt is 6.4.2 and this machine's 6.8.

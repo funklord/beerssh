@@ -27,11 +27,41 @@ set -eu
 IMAGE=${BSSH_CI_IMAGE:-ubuntu:24.04}
 WORKFLOW=.github/workflows/build.yml
 
-if ! command -v docker >/dev/null 2>&1; then
-	echo "check-ci: docker is not installed, so the runner cannot be reproduced." >&2
-	echo "check-ci:   this is the one check that cannot be faked locally -- see sec 12.4." >&2
+# Two engines run the same job, `docker` and `hull` (sec 12.4, the holder's
+# word 2026-11-09). Both stay until they have agreed on enough commits for
+# hull to replace docker; until then docker is the default.
+#
+# hull because docker cannot be stopped: the container belongs to the
+# daemon, so killing this script left one compiling (the trap's comment
+# below has the measurement). A hull machine goes with the `hull run` that
+# started it, killed or not -- measured 2026-10-22, SIGKILL to the run and
+# to its whole process group each leaving nothing on the host. And its
+# store lives under $HOME, where docker's images and this script's staging
+# share `/` with everything else; on the machine this was written on, `/`
+# had 3 GB free and `/home` 59.
+ENGINE=${BSSH_CI_ENGINE:-docker}
+case "$ENGINE" in
+docker)
+	if ! command -v docker >/dev/null 2>&1; then
+		echo "check-ci: docker is not installed, so the runner cannot be reproduced." >&2
+		echo "check-ci:   try BSSH_CI_ENGINE=hull, or see sec 12.4." >&2
+		exit 1
+	fi
+	;;
+hull)
+	# hull off the PATH, or a checkout of it beside this one, built: it is
+	# not vendored, so this names where it usually is and HULL overrides.
+	HULL=${HULL:-$(command -v hull || echo "$HOME/src/hull/build/hull")}
+	if [ ! -x "$HULL" ]; then
+		echo "check-ci: no hull at $HULL; set HULL to one, or use docker." >&2
+		exit 1
+	fi
+	;;
+*)
+	echo "check-ci: BSSH_CI_ENGINE is docker or hull, not '$ENGINE'." >&2
 	exit 1
-fi
+	;;
+esac
 
 if [ ! -f "$WORKFLOW" ]; then
 	echo "check-ci: $WORKFLOW is missing; nothing to reproduce." >&2
@@ -68,8 +98,19 @@ fi
 echo "check-ci: image    $IMAGE"
 echo "check-ci: packages $PACKAGES"
 
-STAGE=$(mktemp -d)
+# hull's stage is where the machine builds, so it goes on the disk under
+# $HOME rather than in /tmp, and in a directory of the user's own group: a
+# machine above an overlay cannot write under a group it does not map,
+# which this tree's `users` is (EOVERFLOW, hull sec 7).
+if [ "$ENGINE" = hull ]; then
+	CACHE=${XDG_CACHE_HOME:-$HOME/.cache}
+	mkdir -p "$CACHE"
+	STAGE=$(mktemp -d "$CACHE/bssh-check-ci.XXXXXX")
+else
+	STAGE=$(mktemp -d)
+fi
 CONTAINER=bssh-check-ci-$$
+RUN_PID=
 # INT and TERM as well as EXIT: an EXIT-only trap leaks the staging tree
 # whenever this is interrupted or hits a timeout, which is exactly when a
 # long docker run gets cut short.
@@ -97,7 +138,12 @@ CONTAINER=bssh-check-ci-$$
 # `docker kill` on an already-exited container returns non-zero, so the
 # status is discarded: under `set -e` a failing trap command should not
 # get to decide this script's exit code.
-trap 'docker kill "$CONTAINER" >/dev/null 2>&1 || true; rm -rf "$STAGE"' EXIT
+#
+# hull's half is the kill, which is enough: the machine goes with its run.
+# `rm -rf` is of the directory mktemp made above and nothing else.
+trap 'if [ "$ENGINE" = docker ]; then docker kill "$CONTAINER" >/dev/null 2>&1 || true;
+      elif [ -n "$RUN_PID" ]; then kill -KILL "$RUN_PID" 2>/dev/null || true; fi
+      rm -rf "$STAGE"' EXIT
 # INT and TERM only exit; `exit` runs the EXIT trap above, so the
 # cleanup lives in exactly one place.
 trap 'exit 130' INT TERM
@@ -195,13 +241,11 @@ else
 	tar -cf "$STAGE/libssh.tar" --files-from /dev/null
 fi
 
-docker run --rm --name "$CONTAINER" -v "$STAGE":/in:ro "$IMAGE" sh -c "
+# What the job runs, the same for both engines, from the image with the
+# packages already in it. Quoted, so nothing here is expanded by this shell.
+cat > "$STAGE/run.sh" <<'RUN'
 set -e
-apt-get update -qq >/dev/null 2>&1
-DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $PACKAGES \
-	build-essential pkg-config python3 git >/dev/null 2>&1
-
-echo \"check-ci: Qt \$(pkg-config --modversion Qt6Core), libssh vendored (libssh/)\"
+echo "check-ci: Qt $(pkg-config --modversion Qt6Core), libssh vendored (libssh/)"
 
 mkdir -p /build && cd /build
 tar xf /in/src.tar
@@ -214,6 +258,24 @@ tar xf /in/libssh.tar
 # installed above for it: 'git apply' needs no repository, and the
 # extracted tree is not one.
 
+# But the runner's tree IS one, and the style gate asks git what the tree
+# holds: in a checkout a submodule is one gitlink, while in a walk of an
+# exported tree it is every file in it. Since libssh joined vterm and
+# softkeys (2026-10-23), the walk counted enough vendored files that the
+# gate's collapse floor fired on a tree that passes on the runner. So the
+# tree is given the runner's shape: each submodule a repository holding
+# what was exported, the top one indexing them as gitlinks. Nothing is
+# committed at the top; ls-files reads the index. apply-patches.sh is
+# written for a submodule that is its own repository, as here.
+for d in vterm softkeys libssh; do
+	[ -n "$(ls -A "$d" 2>/dev/null)" ] || continue
+	(cd "$d" && git init -q && git add -A &&
+	 git -c user.name=check-ci -c user.email=check-ci@invalid \
+		commit -q -m 'exported by check-ci')
+done
+git init -q
+git add -A  # warns once per submodule: an embedded repository is the point
+
 make style
 
 # Kept so the WARNINGS can be counted, and printed either way so the
@@ -221,7 +283,7 @@ make style
 # piped to tee: a pipeline reports its LAST command's status, which is
 # how a failing build gets swallowed into a clean-looking run, and this
 # script's own comments record that trap twice already.
-if ! make -j\"\$(nproc)\" > /build/build.log 2>&1; then
+if ! make -j"$(nproc)" > /build/build.log 2>&1; then
 	cat /build/build.log
 	exit 1
 fi
@@ -233,20 +295,69 @@ if ! QT_QPA_PLATFORM=offscreen make test > /build/test.log 2>&1; then
 fi
 cat /build/test.log
 
-# \`|| true\` because grep -c prints 0 and EXITS 1 when nothing matched,
+# `|| true` because grep -c prints 0 and EXITS 1 when nothing matched,
 # which under set -e ends the run at the moment there is nothing to
 # report. That is this workspace's own recorded trap, met here.
-warnings=\$(grep -c 'warning:' /build/build.log /build/test.log 2>/dev/null \
-	| awk -F: '{ total += \$2 } END { print total + 0 }' || true)
+warnings=$(grep -c 'warning:' /build/build.log /build/test.log 2>/dev/null \
+	| awk -F: '{ total += $2 } END { print total + 0 }' || true)
 
-echo \"check-ci: the build emitted \$warnings warning(s)\"
-if [ \"\$warnings\" -gt 0 ]; then
+echo "check-ci: the build emitted $warnings warning(s)"
+if [ "$warnings" -gt 0 ]; then
 	echo 'check-ci:   this build was warning-free on 2026-09-22 -- see sec 12.3.'
 	echo 'check-ci:   REPORTED rather than refused: making a warning fatal is a'
-	echo \"check-ci:   build-policy change and the holder's to make.\"
+	echo "check-ci:   build-policy change and the holder's to make."
 	grep -h 'warning:' /build/build.log /build/test.log | sort -u | head -20
 fi
-" &
+RUN
+
+# The image: the runner's, with the workflow's packages and what the build
+# itself needs. Under docker they are installed in every run. Under hull a
+# `(build ...)` step bakes them into a stored image once, on disk; the
+# list is part of the step, so a changed workflow changes the key, and the
+# step has a network, so hull runs it again once its refresh period has
+# passed -- a day, so the image is never older than a day's updates, which
+# answers the stale-cache question docker's own cached base never did.
+SETUP="apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $PACKAGES build-essential pkg-config python3 git >/dev/null"
+
+if [ "$ENGINE" = docker ]; then
+	docker run --rm --name "$CONTAINER" -v "$STAGE":/in:ro "$IMAGE" \
+		sh -c "$SETUP 2>&1 && sh /in/run.sh" &
+else
+	HULL_IMAGE=beerssh/check-ci
+	# Relative paths in a spec are the spec's directory's. The machine's
+	# writes to its root are memory (an overlay's upper is a tmpfs), so the
+	# build goes to /build, a directory on disk; /in is read-only as under
+	# docker. (network none): the suite needs only loopback, which a machine
+	# of its own namespace has, and a test that reached further is a test
+	# the runner may not reproduce either.
+	mkdir "$STAGE/in" "$STAGE/build"
+	for f in src.tar vterm.tar softkeys.tar libssh.tar run.sh; do
+		mv "$STAGE/$f" "$STAGE/in/"
+	done
+	# A bare name is docker's library, which hull spells out.
+	case "$IMAGE" in */*) BASE=$IMAGE;; *) BASE=docker.io/library/$IMAGE;; esac
+	cat > "$STAGE/hull.conf" <<HULL
+(build
+  (base "$BASE")
+  (steps
+    (step
+      (name "packages")
+      (network true)
+      (refresh "1d")
+      (run "$SETUP"))))
+(machine
+  (source "$HULL_IMAGE")
+  (mutable overlay)
+  (network none)
+  (volumes
+    (volume (host "./in") (guest "/in") (mode ro))
+    (volume (host "./build") (guest "/build") (mode rw)))
+  (command "sh" "/in/run.sh"))
+HULL
+	"$HULL" build -f "$STAGE/hull.conf" "$HULL_IMAGE"
+	"$HULL" run -f "$STAGE/hull.conf" &
+	RUN_PID=$!
+fi
 # `wait` rather than a plain call, because a shell trap CANNOT preempt a
 # foreground command -- it runs only once that command returns. Measured:
 # a script sleeping in the foreground ignores SIGTERM until the sleep ends,
@@ -262,4 +373,4 @@ fi
 # kill the container by the name above -- which is what the name is for.
 wait "$!"
 
-echo "check-ci: the linux job passes on $IMAGE, for $(git rev-parse --short "$STAGED")"
+echo "check-ci: the linux job passes on $IMAGE under $ENGINE, for $(git rev-parse --short "$STAGED")"

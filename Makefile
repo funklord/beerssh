@@ -39,8 +39,9 @@
 #   make style        -- gate the tree's indentation (tool/check-indent.sh)
 #   make check        -- style and test, the pair to run before any commit
 #   make check-ci     -- run the Linux CI job in the runner's own image
-#                        (needs docker; sec 12.4). By hand only: GitHub
-#                        runs the real job on every push
+#                        (needs docker, or hull with BSSH_CI_ENGINE=hull;
+#                        sec 12.4). By hand only: GitHub runs the real job
+#                        on every push
 #   make check-startup -- start the packaged binary as a user would, on
 #                        Xvfb, and see it come up
 #   make check-windows -- a start brings every saved window back, and New
@@ -1096,7 +1097,8 @@ style-docs:
 style-sabotage:
 	python3 tool/sabotage.py --check
 
-# sec 12.4's runner-parity check. Needs docker; not part of `test`, and
+# sec 12.4's runner-parity check. Needs docker, or hull with
+# BSSH_CI_ENGINE=hull (HULL names the binary); not part of `test`, and
 # deliberately not a CI step -- CI already IS the runner. Run it before
 # pushing anything that touches a platform or library API, because the
 # runner's Qt and libssh are older than any development machine's and an
