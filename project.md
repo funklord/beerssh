@@ -7916,6 +7916,15 @@ window with no name is a blank row in the task switcher.
      export is no git checkout, so the build stopped at
      "libssh/ is empty". With libssh staged from its gitlink, check-deb
      passes on a clean debian:trixie.
+     The submodule is fetched from libssh's GitLab mirror,
+     `https://gitlab.com/libssh/libssh-mirror.git`, since 2026-11-10 on the
+     holder's word. git.libssh.org was unreachable from GitHub's runners
+     and from here on 2026-11-09, and every CI job failed at checkout
+     (run 42703231572). The mirror carries the same commit: the
+     `libssh-0.11.5` tag peels to the pinned a09fdd00 there, and a fresh
+     clone fetched exactly that commit by sha at depth 1, as
+     `actions/checkout` does. A sha names the content, so the source
+     changing does not change what is built.
   2. **[DONE 2026-10-23]** The libssh patch,
      `libssh-patch/0001-add-a-transport-export-and-import.patch`:
      `ssh_session_export_transport`, `ssh_session_import_transport`,
