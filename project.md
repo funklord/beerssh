@@ -17325,6 +17325,23 @@ it -- too little to run the docker engine beside it safely, so it was not.
   exported, the top one indexing them as gitlinks.
   `tool/apply-patches.sh` already handles a submodule that is its own
   repository.
+- **The first comparison, 2026-11-10, on `76ef39d`:** docker (with `/`
+  at 9.8 GB free by then) 1062 passed, 0 failed, 17 skipped, 9 warnings
+  -- the same as hull on `8122834`, skip for skip. GitHub's linux job on
+  `76ef39d`: 1066 passed, 0 failed, 13 skipped, the same 9 warnings. The
+  four were `profile_store_test`'s writes that fail, which skip as root
+  ("this account can write a read-only directory"): both engines ran the
+  job as root, the runner as a user. So `run.sh` builds as root and runs
+  `make test` as a user it adds, with `setpriv`. Nothing that user writes
+  lands in the build volume, since under hull a file there owned by a
+  mapped uid is one the host cannot remove. On `3adfabb`, with that, hull and
+  docker each gave 1066 passed, 0 failed, 13 skipped, as GitHub does: the
+  first commit on which all three agree.
+- **Two of the nine warnings were this tree's**, from GCC 13 and not the
+  newer compiler here: an enum constant and an `xcb_window_t` in one
+  conditional (`main_window.cpp`), and `qWaitFor`'s unused result in a
+  test. Fixed. The rest are softkeys' one `-Wreorder` (three lines), sent
+  to its inbox (20261110T1924Z), not changed from here.
 
 **The `linux` job was red from before 2026-11-01 to 2026-11-05, and nobody
 looked.** Every run failed on the same three tests while the local suite
@@ -19506,5 +19523,8 @@ loopback is not reachable from it. `(network nat)` names that default
 (`ccf44b0`); `host` and `none` are unchanged; `(network bridge)` exists
 as root only (`3b83027`). For check-ci's runner image as a chroot
 machine -- the untried case -- a build now reaches the network without
-`(network host)`. No hull spec is in this tree yet, so nothing changes
-here; hull's `project.md` section 4.8 is the record.
+`(network host)`. hull's `project.md` section 4.8 is the record. Since
+`a0b2ef4` this tree has the spec, written by `tool/check-ci.sh` under
+`BSSH_CI_ENGINE=hull` (sec 12.4): the package step names its network,
+and the run says `(network none)`, since nothing the job does after
+the packages are installed needs one.

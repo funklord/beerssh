@@ -287,9 +287,26 @@ if ! make -j"$(nproc)" > /build/build.log 2>&1; then
 	cat /build/build.log
 	exit 1
 fi
-cat /build/build.log
 
-if ! QT_QPA_PLATFORM=offscreen make test > /build/test.log 2>&1; then
+# The suite runs as an ordinary user, as on the runner. As root, four
+# tests of a write that fails (profile_store_test) skip, because root
+# writes into a read-only directory regardless: both engines skipped them
+# on 2026-11-10 while GitHub ran them. So root builds the test binary too,
+# and the user's `make test` finds every target current and only runs
+# the suite, which writes into a sandbox under /tmp. Nothing it writes
+# lands in /build, which under hull is a host directory: a file there
+# owned by a mapped uid is one the host cannot remove afterwards.
+test_bin=$(make -s --eval='check-ci-test-bin: ; @echo $(TEST_BIN)' check-ci-test-bin)
+if ! make -j"$(nproc)" "$test_bin" >> /build/build.log 2>&1; then
+	cat /build/build.log
+	exit 1
+fi
+cat /build/build.log
+useradd -m check-ci
+if ! setpriv --reuid=check-ci --regid=check-ci --init-groups \
+	env HOME=/home/check-ci USER=check-ci QT_QPA_PLATFORM=offscreen \
+	GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0='*' \
+	make test > /build/test.log 2>&1; then
 	cat /build/test.log
 	exit 1
 fi
