@@ -3194,7 +3194,8 @@ void terminal_view_test::dropped_files_are_copied_where_the_shell_is() {
 		});
 		emit view->files_dropped({ QStringLiteral("/tmp/notes.txt") }, QStringLiteral("/tmp/notes.txt"),
 		                         view->mapToGlobal(QPoint(40, 40)));
-		QTest::qWaitFor([&seen] { return !seen.isEmpty(); }, 5000);
+		/* No menu in time leaves seen empty, which the caller's comparison fails. */
+		(void)QTest::qWaitFor([&seen] { return !seen.isEmpty(); }, 5000);
 		return seen;
 	};
 

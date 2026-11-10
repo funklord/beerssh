@@ -4152,7 +4152,7 @@ static qint64 other_beerssh_pid_under_pointer(const QWidget *ours) {
 	for (int depth = 0; depth < 16; ++depth) {
 		xcb_query_pointer_reply_t *reply = xcb_query_pointer_reply(connection,
 		        xcb_query_pointer(connection, at), nullptr);
-		const xcb_window_t child = reply ? reply->child : XCB_WINDOW_NONE;
+		const xcb_window_t child = reply ? reply->child : xcb_window_t(XCB_WINDOW_NONE);
 		free(reply);
 		if (child == XCB_WINDOW_NONE) break;
 		chain.prepend(child);
