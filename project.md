@@ -17334,9 +17334,10 @@ it -- too little to run the docker engine beside it safely, so it was not.
   job as root, the runner as a user. So `run.sh` builds as root and runs
   `make test` as a user it adds, with `setpriv`. Nothing that user writes
   lands in the build volume, since under hull a file there owned by a
-  mapped uid is one the host cannot remove. On `3adfabb`, with that, hull and
-  docker each gave 1066 passed, 0 failed, 13 skipped, as GitHub does: the
-  first commit on which all three agree.
+  mapped uid is one the host cannot remove. On `d083c7c`, with that, hull,
+  docker and GitHub's linux job each gave 1066 passed, 0 failed, 13
+  skipped, with softkeys' warning the only one left: the first commit on
+  which all three agree.
 - **Two of the nine warnings were this tree's**, from GCC 13 and not the
   newer compiler here: an enum constant and an `xcb_window_t` in one
   conditional (`main_window.cpp`), and `qWaitFor`'s unused result in a
