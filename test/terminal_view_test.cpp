@@ -1594,21 +1594,21 @@ void terminal_view_test::a_long_run_of_text_stays_on_the_grid() {
 	                                   "so the run is not on the grid").arg(lowest).arg(highest)));
 
 	/*
-	 * And nothing spills past the grid into the right-hand margin.
-	 *
-	 * Near the background rather than exactly it. Antialiasing bleeds a
-	 * little differently between Qt versions -- 0 on 6.8; on Qt 6.4 3/255
-	 * in a fallback font, and 17/255 in JetBrains Mono, whose 'i' reaches
-	 * a pixel past its cell there with every cell where it should be
-	 * (2026-11-11, the first run with the set present on 6.4) -- and an
-	 * exact comparison turns that into a failing build on the older one
-	 * while testing nothing extra. A glyph actually drawn here would be
-	 * the foreground colour, ~180/255 away, so a quarter of that is still
-	 * far from what this is looking for; the drift itself is the check
-	 * above.
+	 * And nothing spills past the grid into the right-hand margin --
+	 * beyond its first pixel. On Qt 6.4 a JetBrains Mono 'i' reaches a
+	 * pixel into the cell to its right, at up to 56/255, with every cell
+	 * where it should be (2026-11-11, measured by the offsets above; the
+	 * first run with the set present on 6.4); 6.8 leaves two pixels clear.
+	 * That pixel is the edge of a glyph that is in place, and its depth
+	 * is the font's and the version's, so no level for it holds: a first
+	 * tolerance of 12 failed at 17, a second of 48 at 56. Past it, near
+	 * the background rather than exactly it: antialiasing bleeds a little
+	 * differently between versions (3/255 on 6.4 in a fallback font), and
+	 * a glyph actually drawn here would be the foreground colour, ~180/255
+	 * away, across several pixels.
 	 */
-	const int tolerance = 48;
-	for (int x = cols * cell_width; x < rendered.width(); ++x) {
+	const int tolerance = 12;
+	for (int x = cols * cell_width + 1; x < rendered.width(); ++x) {
 		for (int y = 0; y < cell_height; ++y) {
 			const QColor pixel = rendered.pixelColor(x, y);
 			const int drift = qMax(qAbs(pixel.red() - background.red()),
