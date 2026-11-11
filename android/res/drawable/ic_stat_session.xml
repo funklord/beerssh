@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The status bar's mark for a kept session (project.md sec 5.1): a shell
+  prompt, ">_". It replaced android.R.drawable.stat_sys_upload_done, an
+  upload's arrow, which read as a transfer under way for as long as a
+  session was kept. White on transparent: the status bar tints it.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M4,6 L10,12 L4,18 M12.5,18 L20,18" />
+</vector>

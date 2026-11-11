@@ -140,7 +140,7 @@ public class SshdBoot extends BroadcastReceiver {
 		manager.notify(NOTIFICATION_ID, new Notification.Builder(context, CHANNEL_ID)
 			.setContentTitle("beersshd stopped when the phone restarted")
 			.setContentText("Tap to serve files again.")
-			.setSmallIcon(android.R.drawable.stat_sys_upload_done)
+			.setSmallIcon(R.drawable.ic_stat_server)
 			.setContentIntent(pending)
 			.setAutoCancel(true)
 			.build());

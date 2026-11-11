@@ -483,6 +483,18 @@ A backgrounded app cannot reliably hold a socket open; Android will kill it.
 Solution: a **foreground service** with an ongoing notification, started when the
 first session connects and stopped when the last disconnects.
 
+**Its status-bar mark is a prompt, not an upload's arrow -- [FIXED
+2026-11-11].** Both apps' notifications took the platform's
+`stat_sys_upload_done`, an upload-finished arrow, as the small icon,
+and the status bar showed it for as long as a session was kept or
+beersshd served: an upload under way, to anyone glancing at the phone,
+where there was none -- the holder, the same day: "worth looking into
+as it may trigger angry comments". BeerSSH now shows `>_`
+(`android/res/drawable/ic_stat_session.xml`), beersshd two server units
+(`android-sshd/res/drawable/ic_stat_server.xml`), white on transparent
+for the status bar to tint. An arrow would be honest only while the
+file panel or a drop copies (sec 6.4), and then for that copy's tile.
+
 **The service must not outlive the UI DYING, only the UI going to the
 background — [FIXED 2026-09-04].** It returned `START_STICKY`, and the
 comment defending that argued itself out of its own conclusion: it conceded

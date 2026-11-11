@@ -213,7 +213,7 @@ public class SshdService extends QtService {
 		return new Notification.Builder(context, CHANNEL_ID)
 			.setContentTitle("beersshd")
 			.setContentText(status)
-			.setSmallIcon(android.R.drawable.stat_sys_upload_done)
+			.setSmallIcon(R.drawable.ic_stat_server)
 			.setContentIntent(pending)
 			.setOngoing(true)
 			/*

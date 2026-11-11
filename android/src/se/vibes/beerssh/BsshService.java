@@ -221,7 +221,7 @@ public class BsshService extends Service {
 		return builder
 			.setContentTitle("BeerSSH")
 			.setContentText(status)
-			.setSmallIcon(android.R.drawable.stat_sys_upload_done)
+			.setSmallIcon(R.drawable.ic_stat_session)
 			.setContentIntent(pending)
 			.setOngoing(true)
 			.build();
