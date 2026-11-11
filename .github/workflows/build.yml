@@ -88,6 +88,19 @@ jobs:
           sudo apt-get install -y qt6-base-dev libgl1-mesa-dev cmake \
                                   libsixel-dev libssl-dev libsecret-1-dev \
                                   zlib1g-dev libxcb1-dev openssh-client
+      # The curated set, from the fonts job's cache, so the suite's tests
+      # of the set run here too. Without it seven of them skip ("the fonts
+      # have not been fetched here"), and the set the packages ship was
+      # tested only on newer Qt than this job's (found 2026-11-11).
+      - name: Restore the curated font set
+        id: font-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: fonts
+          key: fonts-${{ hashFiles('tool/fetch-fonts.sh') }}
+      - name: Fetch fonts
+        if: steps.font-cache.outputs.cache-hit != 'true'
+        run: make fonts
       - name: Build
         run: make
       # The manual pages and completion are no longer part of a bare make;
