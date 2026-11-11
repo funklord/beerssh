@@ -320,6 +320,15 @@ public:
 	virtual void download(const QStringList &paths, const QString &directory);
 	virtual void cancel_download() {}
 
+	/*
+	 * The file panel's changes on the other end (sec 6.4): a rename to
+	 * `to`, which never replaces what is there; a new directory; or a
+	 * removal, a directory's contents with it, a piece at a time.
+	 * remote_changed() once. The default refuses.
+	 */
+	enum change_t { RENAME, MAKE_DIRECTORY, REMOVE };
+	virtual void change_remote(change_t change, const QString &path, const QString &to = QString());
+
 signals:
 	void working_directory_found(const bssh_working_directory_t &found);
 	void upload_progress(qint64 done, qint64 total);
@@ -330,6 +339,7 @@ signals:
 	void download_progress(qint64 done, qint64 total);
 	void download_finished(bool ok, const QString &directory, const QStringList &written,
 	                       const QString &why);
+	void remote_changed(bool ok, const QString &path, const QString &why);
 
 	/* What run_on_the_side() printed; empty when it printed nothing or failed. */
 	void side_output_ready(const QByteArray &output);

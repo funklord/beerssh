@@ -4108,10 +4108,21 @@ model on a finger.
   `a_copy_back_can_be_stopped_and_leaves_nothing_half_written`,
   `the_file_panel_browses_and_copies_both_ways`;
   `tool/sabotage/file-panel.toml`, run with check-ssh as the suite.
+  **Step 4's changes built 2026-11-11:** Rename, Remove and New Folder
+  in the panel's menu, through `change_remote()`. A rename looks for the
+  new name first and refuses it when taken, because libssh renames by
+  OpenSSH's posix-rename where the server has it, which replaces the
+  target; a name taken between the look and the rename is the one case
+  left open. A name is one component, no slash, not `.` or `..`. Remove
+  asks, then removes deepest first a batch per turn, a folder's contents
+  expanded at its own turn; a link inside is removed as a link and never
+  followed, so nothing outside the tree is touched. Several chosen go
+  one after another, and a failure stops the rest.
+  `the_file_panel_renames_makes_and_removes`; four more sabotages.
   **Not yet:** the panel's width cannot be dragged; nothing can be
   dragged out of it to a file manager (a drag needs the file local
-  first); on a phone it would squeeze the terminal, so it waits for step
-  3; and rename, remove and new folder are step 4.
+  first); on a phone it would squeeze the terminal, so the entry is off
+  on touch until step 3.
   **A reconnect ends a copy on the old transport, and the session says
   so itself** (2026-10-31): the transport's own report comes after it is
   deleted -- dropped outright by a local copy's guard, and behind the

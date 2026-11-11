@@ -5,10 +5,12 @@
 #include <QFileDialog>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
 #include <QLocale>
 #include <QMenu>
+#include <QMessageBox>
 #include <QMimeData>
 #include <QStandardPaths>
 #include <QStyle>
@@ -127,6 +129,7 @@ bssh_file_panel::bssh_file_panel(bssh_session *session, QWidget *parent)
 		--m_listings_asked;
 		if (m_listings_asked == 0) show_listing(path, entries, why);
 	});
+	connect(m_session, &bssh_session::remote_changed, this, &bssh_file_panel::changed);
 	connect(m_session, &bssh_session::download_progress, this, [this](qint64 done, qint64 total) {
 		say(tr("Copying here: %1 of %2").arg(QLocale().formattedDataSize(done),
 		                                     QLocale().formattedDataSize(total)), true);
@@ -220,7 +223,10 @@ void bssh_file_panel::show_listing(const QString &path, const QList<bssh_remote_
 		if (entry.modified.isValid())
 			item->setText(MODIFIED, QLocale().toString(entry.modified, QLocale::ShortFormat));
 	}
-	say(entries.isEmpty() ? tr("Empty") : tr("%n item(s)", nullptr, int(entries.size())));
+	/* A change that failed says so over the listing that followed it. */
+	if (!m_failure.isEmpty()) say(m_failure);
+	else say(entries.isEmpty() ? tr("Empty") : tr("%n item(s)", nullptr, int(entries.size())));
+	m_failure.clear();
 	emit listed();
 }
 
@@ -256,17 +262,107 @@ void bssh_file_panel::copy_selected_to(const QString &directory) {
 }
 
 void bssh_file_panel::show_menu(const QPoint &at) {
-	if (m_list->selectedItems().isEmpty()) return;
+	if (m_path.isEmpty()) return;
+	const QList<QTreeWidgetItem *> selected = m_list->selectedItems();
 	QMenu menu(this);
-	QAction *downloads = menu.addAction(tr("Copy to Downloads"));
-	downloads->setEnabled(!m_download_directory.isEmpty());
-	QAction *elsewhere = menu.addAction(tr("Copy to..."));
+	QAction *downloads = nullptr;
+	QAction *elsewhere = nullptr;
+	QAction *rename = nullptr;
+	QAction *remove = nullptr;
+	if (!selected.isEmpty()) {
+		downloads = menu.addAction(tr("Copy to Downloads"));
+		downloads->setEnabled(!m_download_directory.isEmpty());
+		elsewhere = menu.addAction(tr("Copy to..."));
+		menu.addSeparator();
+		rename = menu.addAction(tr("Rename..."));
+		rename->setEnabled(selected.size() == 1);
+		remove = menu.addAction(tr("Remove..."));
+		menu.addSeparator();
+	}
+	QAction *folder = menu.addAction(tr("New Folder..."));
 	const QAction *chosen = menu.exec(m_list->viewport()->mapToGlobal(at));
+	if (!chosen) return;
 	if (chosen == downloads) copy_selected_to(m_download_directory);
 	else if (chosen == elsewhere) {
 		const QString directory = QFileDialog::getExistingDirectory(this, tr("Copy to"), m_download_directory);
 		copy_selected_to(directory);
 	}
+	else if (chosen == rename) {
+		const bssh_remote_entry_t &entry = m_entries.at(selected.first()->data(NAME, Qt::UserRole).toInt());
+		bool ok = false;
+		const QString name = QInputDialog::getText(this, tr("Rename"), tr("New name:"), QLineEdit::Normal,
+		                                           entry.name, &ok);
+		if (ok) rename_entry(entry.name, name);
+	}
+	else if (chosen == remove) {
+		QStringList names;
+		for (QTreeWidgetItem *item : selected) names << m_entries.at(item->data(NAME, Qt::UserRole).toInt()).name;
+		const QString question = names.size() == 1
+		        ? tr("Remove %1 from the host? A folder goes with everything in it.").arg(names.first())
+		        : tr("Remove these %n items from the host? A folder goes with everything in it.", nullptr,
+		             int(names.size()));
+		if (QMessageBox::question(this, tr("Remove"), question) == QMessageBox::Yes) remove_entries(names);
+	}
+	else if (chosen == folder) {
+		bool ok = false;
+		const QString name = QInputDialog::getText(this, tr("New Folder"), tr("Name:"), QLineEdit::Normal,
+		                                           QString(), &ok);
+		if (ok) make_folder(name);
+	}
+}
+
+/* A name for an entry here: one path component, nothing that leaves it. */
+static bool plain_name(const QString &name) {
+	return !name.isEmpty() && !name.contains(QLatin1Char('/')) && name != QStringLiteral(".")
+	       && name != QStringLiteral("..");
+}
+
+QString bssh_file_panel::path_here(const QString &name) const {
+	return m_path.endsWith(QLatin1Char('/')) ? m_path + name : m_path + QLatin1Char('/') + name;
+}
+
+bool bssh_file_panel::rename_entry(const QString &name, const QString &to) {
+	if (!m_session || m_path.isEmpty() || !plain_name(name) || !plain_name(to) || name == to) return false;
+	m_changes_asked = 1;
+	say(tr("Renaming %1").arg(name));
+	m_session->change_remote(bssh_ssh_session::RENAME, path_here(name), path_here(to));
+	return true;
+}
+
+bool bssh_file_panel::make_folder(const QString &name) {
+	if (!m_session || m_path.isEmpty() || !plain_name(name)) return false;
+	m_changes_asked = 1;
+	say(tr("Making %1").arg(name));
+	m_session->change_remote(bssh_ssh_session::MAKE_DIRECTORY, path_here(name));
+	return true;
+}
+
+bool bssh_file_panel::remove_entries(const QStringList &names) {
+	if (!m_session || m_path.isEmpty() || names.isEmpty()) return false;
+	for (const QString &name : names)
+		if (!plain_name(name)) return false;
+	/*
+	 * One after another: the transport removes one tree at a time, and
+	 * each answer asks for the next, so a failure stops the rest.
+	 */
+	m_removals = names;
+	m_changes_asked = 1;
+	say(tr("Removing %1").arg(names.first()));
+	m_session->change_remote(bssh_ssh_session::REMOVE, path_here(m_removals.takeFirst()));
+	return true;
+}
+
+void bssh_file_panel::changed(bool ok, const QString &path, const QString &why) {
+	if (m_changes_asked <= 0) return;
+	if (ok && !m_removals.isEmpty()) {
+		say(tr("Removing %1").arg(m_removals.first()));
+		m_session->change_remote(bssh_ssh_session::REMOVE, path_here(m_removals.takeFirst()));
+		return;
+	}
+	m_changes_asked = 0;
+	m_removals.clear();
+	open_directory(m_path);
+	if (!ok) m_failure = tr("Could not change %1: %2").arg(path, why);
 }
 
 void bssh_file_panel::say(const QString &text, bool stoppable) {

@@ -1696,6 +1696,75 @@ void live_ssh_test::the_file_panel_browses_and_copies_both_ways()
 	delete session;
 }
 
+void live_ssh_test::the_file_panel_renames_makes_and_removes()
+{
+	if (!server_available()) return;
+	if (!fresh_connection_expected()) {
+		QSKIP("this phase has taken the link down or swapped the key before "
+		       "here; a fresh connection cannot authenticate by design");
+	}
+
+	/*
+	 * The panel's changes (sec 6.4), each followed by the listing: a
+	 * rename, refused where the new name is taken -- the server's
+	 * posix-rename would replace it -- and refused for a name with a
+	 * slash; a new folder; and a removal of a file and a tree together,
+	 * the tree's link to a directory outside it removed as a link and
+	 * what it led to left alone.
+	 */
+	QTemporaryDir there;
+	QTemporaryDir outside;
+	QVERIFY(there.isValid() && outside.isValid());
+	const auto write = [](const QString &path, const QByteArray &bytes) {
+		QFile file(path);
+		QVERIFY(file.open(QIODevice::WriteOnly));
+		file.write(bytes);
+	};
+	write(there.filePath(QStringLiteral("old.txt")), "old");
+	write(there.filePath(QStringLiteral("taken.txt")), "taken");
+	QVERIFY(QDir(there.path()).mkpath(QStringLiteral("tree/deep/deeper")));
+	write(there.filePath(QStringLiteral("tree/deep/deeper/leaf")), "leaf");
+	write(outside.filePath(QStringLiteral("keep")), "keep");
+	QVERIFY(QFile::link(outside.path(), there.filePath(QStringLiteral("tree/out"))));
+
+	bssh_session *session = connected_session(QStringLiteral("panel-change-test"));
+	QVERIFY2(session, "the test server did not take the connection");
+	bssh_file_panel panel(session);
+	QSignalSpy listed(&panel, &bssh_file_panel::listed);
+	QSignalSpy changed(session, &bssh_session::remote_changed);
+	panel.open_directory(there.path());
+	QTRY_VERIFY_WITH_TIMEOUT(listed.size() == 1, 15000);
+
+	QVERIFY(!panel.rename_entry(QStringLiteral("old.txt"), QStringLiteral("a/b")));
+	QVERIFY(panel.rename_entry(QStringLiteral("old.txt"), QStringLiteral("taken.txt")));
+	QTRY_VERIFY_WITH_TIMEOUT(listed.size() == 2, 15000);
+	QVERIFY2(!changed.last().at(0).toBool(), "a rename replaced what was there");
+	QFile taken(there.filePath(QStringLiteral("taken.txt")));
+	QVERIFY(taken.open(QIODevice::ReadOnly));
+	QCOMPARE(taken.readAll(), QByteArray("taken"));
+
+	QVERIFY(panel.rename_entry(QStringLiteral("old.txt"), QStringLiteral("new.txt")));
+	QTRY_VERIFY_WITH_TIMEOUT(listed.size() == 3, 15000);
+	QVERIFY2(changed.last().at(0).toBool(), qPrintable(changed.last().at(2).toString()));
+	QVERIFY(QFileInfo::exists(there.filePath(QStringLiteral("new.txt"))));
+	QVERIFY(!QFileInfo::exists(there.filePath(QStringLiteral("old.txt"))));
+
+	QVERIFY(panel.make_folder(QStringLiteral("made")));
+	QTRY_VERIFY_WITH_TIMEOUT(listed.size() == 4, 15000);
+	QVERIFY(QFileInfo(there.filePath(QStringLiteral("made"))).isDir());
+
+	QVERIFY(panel.remove_entries({ QStringLiteral("new.txt"), QStringLiteral("tree") }));
+	QTRY_VERIFY_WITH_TIMEOUT(listed.size() == 5, 20000);
+	QVERIFY2(changed.last().at(0).toBool(), qPrintable(changed.last().at(2).toString()));
+	QVERIFY(!QFileInfo::exists(there.filePath(QStringLiteral("new.txt"))));
+	QVERIFY(!QFileInfo::exists(there.filePath(QStringLiteral("tree"))));
+	QVERIFY2(QFileInfo::exists(outside.filePath(QStringLiteral("keep"))), "a removal followed a link out");
+	QStringList names;
+	for (const bssh_remote_entry_t &entry : panel.entries()) names << entry.name;
+	QCOMPARE(names, QStringList({ QStringLiteral("made"), QStringLiteral("taken.txt") }));
+	delete session;
+}
+
 void live_ssh_test::a_restarted_shell_runs_its_command_on_the_same_connection()
 {
 	if (!server_available()) return;

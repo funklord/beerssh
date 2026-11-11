@@ -441,6 +441,7 @@ void bssh_session::wire_transport() {
 	/* The file panel's listing and copies back (sec 6.4). */
 	connect(m_transport, &bssh_ssh_session::directory_listed, this, &bssh_session::directory_listed);
 	connect(m_transport, &bssh_ssh_session::download_progress, this, &bssh_session::download_progress);
+	connect(m_transport, &bssh_ssh_session::remote_changed, this, &bssh_session::remote_changed);
 	connect(m_transport, &bssh_ssh_session::download_finished, this,
 	         [this](bool ok, const QString &directory, const QStringList &written, const QString &why) {
 		m_downloading = false;
@@ -1275,6 +1276,11 @@ void bssh_session::upload(const QStringList &paths, const QString &directory) {
 void bssh_session::list_directory(const QString &path) {
 	if (m_transport) m_transport->list_directory(path);
 	else emit directory_listed(path, QList<bssh_remote_entry_t>(), QStringLiteral("not connected"));
+}
+
+void bssh_session::change_remote(bssh_ssh_session::change_t change, const QString &path, const QString &to) {
+	if (m_transport) m_transport->change_remote(change, path, to);
+	else emit remote_changed(false, path, QStringLiteral("not connected"));
 }
 
 void bssh_session::cancel_download() {

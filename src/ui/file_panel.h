@@ -48,6 +48,17 @@ public:
 	 * false when nothing was started. */
 	bool copy_here(const QStringList &paths);
 
+	/*
+	 * Changes in the directory shown, by name; the listing follows each.
+	 * A name is one component -- no slash, not . or .. -- and a rename
+	 * never replaces what is there. Removing a folder removes everything
+	 * in it; the menu asks first, these do not. False when nothing was
+	 * started.
+	 */
+	bool rename_entry(const QString &name, const QString &to);
+	bool make_folder(const QString &name);
+	bool remove_entries(const QStringList &names);
+
 	/* The entries shown, in order: for tests and accessibility alike. */
 	QList<bssh_remote_entry_t> entries() const { return m_entries; }
 
@@ -74,12 +85,17 @@ private:
 	void show_menu(const QPoint &at);
 	void say(const QString &text, bool stoppable = false);
 	QString remote_path_of(const bssh_remote_entry_t &entry) const;
+	QString path_here(const QString &name) const;
+	void changed(bool ok, const QString &path, const QString &why);
 
 	QPointer<bssh_session> m_session;
 	QString m_path;
 	QList<bssh_remote_entry_t> m_entries;
 	int m_listings_asked = 0;
 	QString m_download_directory;
+	int m_changes_asked = 0;
+	QStringList m_removals;
+	QString m_failure;
 
 	QLineEdit *m_location;
 	QToolButton *m_up;

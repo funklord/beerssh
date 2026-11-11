@@ -78,6 +78,14 @@ void bssh_ssh_session::download(const QStringList &paths, const QString &directo
 	}, Qt::QueuedConnection);
 }
 
+void bssh_ssh_session::change_remote(change_t change, const QString &path, const QString &to) {
+	Q_UNUSED(change);
+	Q_UNUSED(to);
+	QMetaObject::invokeMethod(this, [this, path] {
+		emit remote_changed(false, path, QStringLiteral("this connection has no files to change"));
+	}, Qt::QueuedConnection);
+}
+
 void bssh_ssh_session::run_on_the_side(const QString &command) {
 	Q_UNUSED(command);
 	QMetaObject::invokeMethod(this, [this] { emit side_output_ready(QByteArray()); },

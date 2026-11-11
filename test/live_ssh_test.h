@@ -101,6 +101,7 @@ private slots:
 	void files_come_back_from_the_remote_never_over_what_is_here();
 	void a_copy_back_can_be_stopped_and_leaves_nothing_half_written();
 	void the_file_panel_browses_and_copies_both_ways();
+	void the_file_panel_renames_makes_and_removes();
 	void a_restarted_shell_runs_its_command_on_the_same_connection();
 
 	void the_remote_is_told_the_size_it_was_given();

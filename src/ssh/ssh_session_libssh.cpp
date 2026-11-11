@@ -233,6 +233,7 @@ public slots:
 	void do_download(const QStringList &paths, const QString &directory);
 	void do_cancel_download();
 	void drop_partial_download();
+	void do_change_remote(int change, const QString &path, const QString &to);
 	void do_restart_shell(const QStringList &command);
 	void do_set_compression(bool compression);
 	void do_set_identity_file(const QString &path);
@@ -268,6 +269,7 @@ signals:
 	void download_progress(qint64 done, qint64 total);
 	void download_finished(bool ok, const QString &directory, const QStringList &written,
 	                       const QString &why);
+	void remote_changed(bool ok, const QString &path, const QString &why);
 	void failed(const QString &reason);
 	void exited(int exit_status);
 	void password_required();
@@ -409,6 +411,24 @@ private:
 	void step_download();
 	void finish_download(bool ok, const QString &why);
 
+	/*
+	 * change_remote()'s removal of a tree: directories expanded at their
+	 * own turn, everything removed deepest first, a batch per turn.
+	 */
+	struct removal_item {
+		QString path;
+		bool directory = false;
+		bool expanded = false;
+	};
+	struct removal_job {
+		sftp_session sftp = nullptr;
+		QString path;
+		QList<removal_item> stack;
+	};
+	std::unique_ptr<removal_job> m_removal;
+	void step_removal();
+	void finish_removal(const QString &why);
+
 	/* Empty means the default identities; see set_identity_file. */
 	QString m_identity_file;
 
@@ -480,6 +500,7 @@ void bssh_libssh_worker::teardown() {
 		drop_partial_download();
 		finish_download(false, QStringLiteral("the connection closed during the copy"));
 	}
+	if (m_removal) finish_removal(QStringLiteral("the connection closed during the removal"));
 	m_list_queue.clear();
 	if (m_list) finish_list(QStringLiteral("the connection closed"));
 
@@ -1832,6 +1853,117 @@ void bssh_libssh_worker::finish_download(bool ok, const QString &why) {
 	emit download_finished(ok, job->directory, job->written, why);
 }
 
+void bssh_libssh_worker::do_change_remote(int change, const QString &path, const QString &to) {
+	if (!m_session) {
+		emit remote_changed(false, path, QStringLiteral("not connected"));
+		return;
+	}
+	if (m_removal) {
+		emit remote_changed(false, path, QStringLiteral("a removal is still running"));
+		return;
+	}
+	sftp_session sftp = open_sftp(m_session);
+	if (!sftp) {
+		emit remote_changed(false, path, QStringLiteral("the server offers no SFTP"));
+		return;
+	}
+	const QByteArray at = path.toUtf8();
+	QString why;
+	switch (change) {
+	case bssh_ssh_session::RENAME: {
+		/*
+		 * Never over what is there: the rename libssh uses where the
+		 * server has it, OpenSSH's posix-rename, replaces a target, so
+		 * the name is looked for first. A name taken between the look
+		 * and the rename is the one case left open.
+		 */
+		sftp_attributes there = sftp_lstat(sftp, to.toUtf8().constData());
+		if (there) {
+			sftp_attributes_free(there);
+			why = QStringLiteral("%1 is already there").arg(to);
+		} else if (sftp_rename(sftp, at.constData(), to.toUtf8().constData()) != SSH_OK) {
+			why = sftp_error_of(sftp);
+		}
+		break;
+	}
+	case bssh_ssh_session::MAKE_DIRECTORY:
+		if (sftp_mkdir(sftp, at.constData(), 0755) != SSH_OK) why = sftp_error_of(sftp);
+		break;
+	case bssh_ssh_session::REMOVE: {
+		sftp_attributes attributes = sftp_lstat(sftp, at.constData());
+		if (!attributes) {
+			why = sftp_error_of(sftp);
+			break;
+		}
+		const bool directory = attributes->type == SSH_FILEXFER_TYPE_DIRECTORY;
+		sftp_attributes_free(attributes);
+		m_removal = std::make_unique<removal_job>();
+		m_removal->sftp = sftp;
+		m_removal->path = path;
+		m_removal->stack.append({ path, directory, false });
+		QTimer::singleShot(0, this, &bssh_libssh_worker::step_removal);
+		return;
+	}
+	default:
+		why = QStringLiteral("not a change this connection knows");
+	}
+	sftp_free(sftp);
+	emit remote_changed(why.isEmpty(), path, why);
+}
+
+void bssh_libssh_worker::step_removal() {
+	if (!m_removal) return;
+	removal_job &job = *m_removal;
+	for (int n = 0; n < 32; ++n) {
+		if (job.stack.isEmpty()) {
+			finish_removal(QString());
+			return;
+		}
+		removal_item &top = job.stack.last();
+		const QByteArray at = top.path.toUtf8();
+		if (top.directory && !top.expanded) {
+			/* Its contents go on the stack above it, so they go first. A
+			 * link inside is removed as a link, never followed. */
+			top.expanded = true;
+			const QString parent = top.path;
+			sftp_dir dir = sftp_opendir(job.sftp, at.constData());
+			if (!dir) {
+				finish_removal(QStringLiteral("could not read %1: %2").arg(parent, sftp_error_of(job.sftp)));
+				return;
+			}
+			while (sftp_attributes attributes = sftp_readdir(job.sftp, dir)) {
+				const QString name = QString::fromUtf8(attributes->name);
+				const bool directory = attributes->type == SSH_FILEXFER_TYPE_DIRECTORY;
+				sftp_attributes_free(attributes);
+				if (name == QStringLiteral(".") || name == QStringLiteral("..")) continue;
+				job.stack.append({ joined(parent, name), directory, false });
+			}
+			const bool complete = sftp_dir_eof(dir);
+			sftp_closedir(dir);
+			if (!complete) {
+				finish_removal(QStringLiteral("could not read %1: %2").arg(parent, sftp_error_of(job.sftp)));
+				return;
+			}
+			continue;
+		}
+		const int done = top.directory ? sftp_rmdir(job.sftp, at.constData())
+		                               : sftp_unlink(job.sftp, at.constData());
+		if (done != SSH_OK) {
+			finish_removal(QStringLiteral("could not remove %1: %2").arg(top.path, sftp_error_of(job.sftp)));
+			return;
+		}
+		job.stack.removeLast();
+	}
+	QTimer::singleShot(0, this, &bssh_libssh_worker::step_removal);
+}
+
+void bssh_libssh_worker::finish_removal(const QString &why) {
+	if (!m_removal) return;
+	std::unique_ptr<removal_job> job = std::move(m_removal);
+	if (job->sftp) sftp_free(job->sftp);
+	emit remote_changed(why.isEmpty(), job->path, why);
+}
+
 void bssh_libssh_worker::drain_side() {
 	if (!m_side_channel) return;
 
@@ -2218,6 +2350,10 @@ bool bssh_libssh_worker::do_export(QByteArray &state, QList<int> &fds, QString &
 		why = QStringLiteral("the connection is still listing a directory");
 		return false;
 	}
+	if (m_removal) {
+		why = QStringLiteral("the connection is still removing files");
+		return false;
+	}
 	/* Stopped: nothing reads the channel from here until the release or
 	 * the resume. What libssh reads while the export waits stays in its
 	 * channel buffer and travels with the state. */
@@ -2450,6 +2586,8 @@ bssh_ssh_session_libssh::bssh_ssh_session_libssh(QObject *parent)
 	         this, &bssh_ssh_session::download_progress);
 	connect(m_worker, &bssh_libssh_worker::download_finished,
 	         this, &bssh_ssh_session::download_finished);
+	connect(m_worker, &bssh_libssh_worker::remote_changed,
+	         this, &bssh_ssh_session::remote_changed);
 	connect(m_worker, &bssh_libssh_worker::failed,
 	         this, &bssh_ssh_session::failed);
 	connect(m_worker, &bssh_libssh_worker::exited,
@@ -2556,6 +2694,12 @@ void bssh_ssh_session_libssh::list_directory(const QString &path) {
 void bssh_ssh_session_libssh::download(const QStringList &paths, const QString &directory) {
 	QMetaObject::invokeMethod(m_worker, [this, paths, directory] {
 		m_worker->do_download(paths, directory);
+	}, Qt::QueuedConnection);
+}
+
+void bssh_ssh_session_libssh::change_remote(change_t change, const QString &path, const QString &to) {
+	QMetaObject::invokeMethod(m_worker, [this, change, path, to] {
+		m_worker->do_change_remote(int(change), path, to);
 	}, Qt::QueuedConnection);
 }
 

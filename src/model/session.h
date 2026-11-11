@@ -346,6 +346,7 @@ public:
 	void download(const QStringList &paths, const QString &directory);
 	bool download_in_progress() const { return m_downloading; }
 	void cancel_download();
+	void change_remote(bssh_ssh_session::change_t change, const QString &path, const QString &to = QString());
 
 	/*
 	 * Whether this session's file panel is open, and the directory it
@@ -370,6 +371,7 @@ signals:
 	void download_progress(qint64 done, qint64 total);
 	void download_finished(bool ok, const QString &directory, const QStringList &written,
 	                       const QString &why);
+	void remote_changed(bool ok, const QString &path, const QString &why);
 
 	/* Sessions are running there; the window offers them. Never empty. */
 	void multiplexers_found(const QList<bssh_mux_session_t> &found);

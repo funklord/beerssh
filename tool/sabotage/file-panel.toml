@@ -71,3 +71,37 @@ file = "src/ui/file_panel.cpp"
 find = "\t\tif (directory == m_path || directory.isEmpty()) open_directory(m_path);\n"
 replace = ""
 expect = "the_file_panel_browses_and_copies_both_ways"
+
+# A rename not looked before: the server's posix-rename replaces the file
+# already of that name.
+[[sabotage]]
+name = "a rename replaces what is there"
+file = "src/ssh/ssh_session_libssh.cpp"
+find = "\t\tsftp_attributes there = sftp_lstat(sftp, to.toUtf8().constData());\n\t\tif (there) {"
+replace = "\t\tsftp_attributes there = nullptr;\n\t\tif (there) {"
+expect = "the_file_panel_renames_makes_and_removes"
+
+# A link inside a tree being removed taken for the directory it leads to:
+# the removal empties a directory outside the tree.
+[[sabotage]]
+name = "a removal follows a link out of the tree"
+file = "src/ssh/ssh_session_libssh.cpp"
+find = "\t\t\t\tconst bool directory = attributes->type == SSH_FILEXFER_TYPE_DIRECTORY;\n\t\t\t\tsftp_attributes_free(attributes);\n\t\t\t\tif (name == QStringLiteral(\".\") || name == QStringLiteral(\"..\")) continue;\n\t\t\t\tjob.stack.append("
+replace = "\t\t\t\tconst bool directory = attributes->type == SSH_FILEXFER_TYPE_DIRECTORY\n\t\t\t\t                       || attributes->type == SSH_FILEXFER_TYPE_SYMLINK;\n\t\t\t\tsftp_attributes_free(attributes);\n\t\t\t\tif (name == QStringLiteral(\".\") || name == QStringLiteral(\"..\")) continue;\n\t\t\t\tjob.stack.append("
+expect = "the_file_panel_renames_makes_and_removes"
+
+# A name with a slash taken as a name: a rename moves the file elsewhere.
+[[sabotage]]
+name = "a name may leave the directory shown"
+file = "src/ui/file_panel.cpp"
+find = "\treturn !name.isEmpty() && !name.contains(QLatin1Char('/')) && name != QStringLiteral(\".\")"
+replace = "\treturn !name.isEmpty() && name != QStringLiteral(\".\")"
+expect = "the_file_panel_renames_makes_and_removes"
+
+# Several chosen for removal and only the first removed.
+[[sabotage]]
+name = "a removal of several stops after the first"
+file = "src/ui/file_panel.cpp"
+find = "\tif (ok && !m_removals.isEmpty()) {"
+replace = "\tif (false) {"
+expect = "the_file_panel_renames_makes_and_removes"
