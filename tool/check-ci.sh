@@ -278,6 +278,17 @@ git add -A  # warns once per submodule: an embedded repository is the point
 
 make style
 
+# The curated set, as the linux job restores it from the fonts job's
+# cache: the host's fonts/, mounted read-only, linked where a checkout has
+# it. The tests find it by a path compiled in (tests.pro), so it is there
+# before the build. Without it seven tests of the set skip.
+if [ -n "$(ls -A /fonts 2>/dev/null)" ]; then
+	ln -s /fonts fonts
+	echo "check-ci: fonts from the host's fonts/"
+else
+	echo "check-ci: fonts/ not fetched on the host, so the set's tests skip"
+fi
+
 # Kept so the WARNINGS can be counted, and printed either way so the
 # log a person reads is the same one it counted. Redirected rather than
 # piped to tee: a pipeline reports its LAST command's status, which is
@@ -336,8 +347,14 @@ RUN
 # answers the stale-cache question docker's own cached base never did.
 SETUP="apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $PACKAGES build-essential pkg-config python3 git >/dev/null"
 
+# fonts/ is fetched, not tracked, so it is not in the archive; the job
+# gets the host's copy read-only, or none (sec 9.2, `make fonts`).
+FONTS_VOLUME=
+[ -d fonts ] && FONTS_VOLUME="$(pwd)/fonts"
+
 if [ "$ENGINE" = docker ]; then
-	docker run --rm --name "$CONTAINER" -v "$STAGE":/in:ro "$IMAGE" \
+	docker run --rm --name "$CONTAINER" -v "$STAGE":/in:ro \
+		${FONTS_VOLUME:+-v "$FONTS_VOLUME":/fonts:ro} "$IMAGE" \
 		sh -c "$SETUP 2>&1 && sh /in/run.sh" &
 else
 	HULL_IMAGE=beerssh/check-ci
@@ -353,6 +370,9 @@ else
 	done
 	# A bare name is docker's library, which hull spells out.
 	case "$IMAGE" in */*) BASE=$IMAGE;; *) BASE=docker.io/library/$IMAGE;; esac
+	FONTS_HULL=
+	[ -n "$FONTS_VOLUME" ] && FONTS_HULL="
+    (volume (host \"$FONTS_VOLUME\") (guest \"/fonts\") (mode ro))"
 	cat > "$STAGE/hull.conf" <<HULL
 (build
   (base "$BASE")
@@ -368,7 +388,7 @@ else
   (network none)
   (volumes
     (volume (host "./in") (guest "/in") (mode ro))
-    (volume (host "./build") (guest "/build") (mode rw)))
+    (volume (host "./build") (guest "/build") (mode rw))$FONTS_HULL)
   (command "sh" "/in/run.sh"))
 HULL
 	"$HULL" build -f "$STAGE/hull.conf" "$HULL_IMAGE"

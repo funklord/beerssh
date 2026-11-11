@@ -17343,6 +17343,22 @@ it -- too little to run the docker engine beside it safely, so it was not.
   conditional (`main_window.cpp`), and `qWaitFor`'s unused result in a
   test. Fixed. The rest are softkeys' one `-Wreorder` (three lines), sent
   to its inbox (20261110T1924Z), not changed from here.
+- **The curated fonts reach the suite in CI since 2026-11-11.** The
+  linux and macos jobs built without `fonts/` (fetched, not tracked), so
+  seven tests of the set had skipped on every run: the set had never been
+  laid out on Qt 6.4 or by macOS's engine. `79f7510` restores the fonts
+  job's cache in the linux job, `0c39e1f` gives macos a cache of its own
+  (a Linux cache does not restore there). check-ci mounts the host's
+  `fonts/` read-only and links it where the tests' compiled-in path
+  (`tests.pro`) looks. The first run found one: the long-run grid test
+  failed on 6.4, on GitHub and under hull alike, at 17/255 of ink a pixel
+  past the last cell. Measured per cell it was no drift -- every `i` at
+  the same offset, each reaching a pixel into the next cell on 6.4 where
+  6.8 leaves two clear. `e388748` checks the offsets themselves; its
+  margin tolerance of 48, read off the first failing pixel, then failed
+  at 56 one row down, so `0b05437` lets the margin's first pixel be and
+  holds the rest at 12. check-ci under hull on it: 1073 passed, 0
+  failed, 6 skipped. macos: 1070 passed, 0 failed, 9 skipped.
 
 **The `linux` job was red from before 2026-11-01 to 2026-11-05, and nobody
 looked.** Every run failed on the same three tests while the local suite
