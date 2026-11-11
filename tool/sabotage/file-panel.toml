@@ -1,0 +1,73 @@
+# Sabotages for sec 6.4's file panel: the remote directory listed over SFTP
+# on the session's own connection, files copied back never over what is
+# here, and the panel that shows both.
+#
+# Every test here is live, so run with check-ssh as the suite:
+#
+#   BSSH_SABOTAGE_SUITE="make check-ssh" tool/sabotage.py tool/sabotage/file-panel.toml
+
+# . and .. listed as entries: the panel offers them as directories.
+[[sabotage]]
+name = "a listing includes . and .."
+file = "src/ssh/ssh_session_libssh.cpp"
+find = "\t\tif (entry.name == QStringLiteral(\".\") || entry.name == QStringLiteral(\"..\")) continue;\n\t\tif (entry.kind == bssh_remote_entry_t::LINK) {"
+replace = "\t\tif (entry.kind == bssh_remote_entry_t::LINK) {"
+expect = "the_file_panel_lists_a_remote_directory"
+
+# A link to a directory not said to lead to one: the panel cannot open it.
+[[sabotage]]
+name = "a link to a directory is not known for one"
+file = "src/ssh/ssh_session_libssh.cpp"
+find = "\t\t\t\tentry.leads_to_directory = target->type == SSH_FILEXFER_TYPE_DIRECTORY;"
+replace = "\t\t\t\tentry.leads_to_directory = false;"
+expect = "the_file_panel_lists_a_remote_directory"
+
+# A name already here taken as free: the copy back fails or replaces it.
+[[sabotage]]
+name = "a file copied back is given a name already taken"
+file = "src/ssh/ssh_session_libssh.cpp"
+find = "\t\t                                    [&into](const QString &candidate) {\n\t\t\treturn QFileInfo::exists(into.filePath(candidate)) || QFileInfo(into.filePath(candidate)).isSymLink();"
+replace = "\t\t                                    [&into](const QString &candidate) {\n\t\t\treturn false && QFileInfo::exists(into.filePath(candidate));"
+expect = "files_come_back_from_the_remote_never_over_what_is_here"
+
+# A link to a directory followed inside a tree being copied back.
+[[sabotage]]
+name = "a copy back follows a link to a directory"
+file = "src/ssh/ssh_session_libssh.cpp"
+find = "\t\t\t\t\tif (to_directory) continue;\n"
+replace = ""
+expect = "files_come_back_from_the_remote_never_over_what_is_here"
+
+# A stopped copy back leaves its half-written file.
+[[sabotage]]
+name = "a stopped copy back leaves its file"
+file = "src/ssh/ssh_session_libssh.cpp"
+find = "\tif (job.target.isOpen()) {\n\t\tjob.target.close();\n\t\tjob.target.remove();\n\t}"
+replace = "\tif (job.target.isOpen()) job.target.close();"
+expect = "a_copy_back_can_be_stopped_and_leaves_nothing_half_written"
+
+# A session moved to another process while a copy back runs on its
+# connection: the copy's next read is from a stream it no longer owns.
+[[sabotage]]
+name = "a session is moved with a copy back running"
+file = "src/ssh/ssh_session_libssh.cpp"
+find = "\tif (m_upload || m_download) {"
+replace = "\tif (m_upload) {"
+expect = "a_copy_back_can_be_stopped_and_leaves_nothing_half_written"
+
+# Files before directories, or all by name: the panel's order is lost.
+[[sabotage]]
+name = "the panel does not put directories first"
+file = "src/ui/file_panel.cpp"
+find = "\t\tif (opens(a) != opens(b)) return opens(a);\n"
+replace = ""
+expect = "the_file_panel_browses_and_copies_both_ways"
+
+# Files dropped on the panel arrive, and the panel goes on showing the
+# directory as it was before they did.
+[[sabotage]]
+name = "the panel does not show what was copied into it"
+file = "src/ui/file_panel.cpp"
+find = "\t\tif (directory == m_path || directory.isEmpty()) open_directory(m_path);\n"
+replace = ""
+expect = "the_file_panel_browses_and_copies_both_ways"

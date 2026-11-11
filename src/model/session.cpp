@@ -438,6 +438,16 @@ void bssh_session::wire_transport() {
 		emit upload_finished(ok, directory, written, why);
 	});
 
+	/* The file panel's listing and copies back (sec 6.4). */
+	connect(m_transport, &bssh_ssh_session::directory_listed, this, &bssh_session::directory_listed);
+	connect(m_transport, &bssh_ssh_session::download_progress, this, &bssh_session::download_progress);
+	connect(m_transport, &bssh_ssh_session::download_finished, this,
+	         [this](bool ok, const QString &directory, const QStringList &written, const QString &why) {
+		m_downloading = false;
+		m_download_directory.clear();
+		emit download_finished(ok, directory, written, why);
+	});
+
 	/*
 	 * The tmux and screen listing coming back. Nothing found is nothing
 	 * shown, and the question stays open: a reconnect lists again, in case
@@ -763,7 +773,8 @@ void bssh_session::reconnect() {
 		 * the search is answered, with nothing found, from the event loop,
 		 * since the answer opens a menu and this is no place for its loop.
 		 */
-		if (m_uploading || m_finding_directory) disconnect(m_transport, nullptr, this, nullptr);
+		if (m_uploading || m_downloading || m_finding_directory)
+			disconnect(m_transport, nullptr, this, nullptr);
 		if (m_finding_directory) {
 			m_finding_directory = false;
 			QMetaObject::invokeMethod(this, [this] {
@@ -777,6 +788,14 @@ void bssh_session::reconnect() {
 			m_upload_directory.clear();
 			emit upload_finished(false, directory, QStringList(),
 			                     QStringLiteral("the connection closed during the copy"));
+		}
+		if (m_downloading) {
+			m_transport->cancel_download();
+			const QString directory = m_download_directory;
+			m_downloading = false;
+			m_download_directory.clear();
+			emit download_finished(false, directory, QStringList(),
+			                       QStringLiteral("the connection closed during the copy"));
 		}
 		m_transport->disconnect_from_host();
 		m_transport->deleteLater();
@@ -1251,6 +1270,26 @@ void bssh_session::upload(const QStringList &paths, const QString &directory) {
 		m_transport->upload(paths, directory);
 	}
 	else emit upload_finished(false, directory, QStringList(), QStringLiteral("not connected"));
+}
+
+void bssh_session::list_directory(const QString &path) {
+	if (m_transport) m_transport->list_directory(path);
+	else emit directory_listed(path, QList<bssh_remote_entry_t>(), QStringLiteral("not connected"));
+}
+
+void bssh_session::cancel_download() {
+	if (m_transport && m_downloading) m_transport->cancel_download();
+}
+
+void bssh_session::download(const QStringList &paths, const QString &directory) {
+	/* One at a time, as upload(). */
+	if (m_downloading) return;
+	if (m_transport) {
+		m_downloading = true;
+		m_download_directory = directory;
+		m_transport->download(paths, directory);
+	}
+	else emit download_finished(false, directory, QStringList(), QStringLiteral("not connected"));
 }
 
 void bssh_session::list_multiplexers(bool asked) {

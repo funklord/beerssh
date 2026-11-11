@@ -6,11 +6,29 @@
 #include <QStringList>
 
 #include <functional>
+#include <QDateTime>
 #include <QMetaType>
 #include <QObject>
 #include <QString>
 
 #include "ssh/working_directory.h"
+
+/*
+ * One entry of a directory on the other end, as the file panel lists it
+ * (project.md sec 6.4). Not "." or "..". A link is said as a link, and
+ * whether it leads to a directory, so the panel can open it as one
+ * without a second round trip per entry.
+ */
+struct bssh_remote_entry_t {
+	enum kind_t { FILE, DIRECTORY, LINK, OTHER };
+
+	QString name;
+	kind_t kind = FILE;
+	bool leads_to_directory = false;
+	qint64 size = 0;
+	QDateTime modified;
+	quint32 permissions = 0;   /* the mode's permission bits, 07777 */
+};
 
 /*
  * bssh_ssh_session -- the SSH transport, behind an interface (project.md
@@ -281,11 +299,37 @@ public:
 	 */
 	virtual void cancel_upload() {}
 
+	/*
+	 * The file panel (sec 6.4): a directory on the other end, listed --
+	 * empty for the home directory. Over SSH by SFTP on this connection, a
+	 * session opened for the listing and freed after it, so nothing is
+	 * held open while the panel shows; a piece at a time like upload().
+	 * directory_listed() once, with the path as the server canonicalises
+	 * it, and `why` set when it could not be read. The default answers
+	 * that this connection has no files to list.
+	 */
+	virtual void list_directory(const QString &path);
+
+	/*
+	 * Copies remote files and directories into a local `directory`, never
+	 * replacing what is there (bssh_free_name), as upload() is the other
+	 * way: download_progress() as it goes, download_finished() once with
+	 * the names it wrote. cancel_download() removes the file half-written.
+	 * The default refuses.
+	 */
+	virtual void download(const QStringList &paths, const QString &directory);
+	virtual void cancel_download() {}
+
 signals:
 	void working_directory_found(const bssh_working_directory_t &found);
 	void upload_progress(qint64 done, qint64 total);
 	void upload_finished(bool ok, const QString &directory, const QStringList &written,
 	                     const QString &why);
+	void directory_listed(const QString &path, const QList<bssh_remote_entry_t> &entries,
+	                      const QString &why);
+	void download_progress(qint64 done, qint64 total);
+	void download_finished(bool ok, const QString &directory, const QStringList &written,
+	                       const QString &why);
 
 	/* What run_on_the_side() printed; empty when it printed nothing or failed. */
 	void side_output_ready(const QByteArray &output);
@@ -363,5 +407,6 @@ private:
 };
 
 Q_DECLARE_METATYPE(bssh_working_directory_t)
+Q_DECLARE_METATYPE(bssh_remote_entry_t)
 
 #endif /* BSSH_SSH_SESSION_H */

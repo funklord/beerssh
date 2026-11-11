@@ -15,7 +15,12 @@
 #include "model/conn_manager.h"
 #include "input/input_router.h"
 #include "term/emulator.h"
+#include "ui/file_panel.h"
 
+#include <QToolButton>
+#include <QTreeWidget>
+
+#include <pwd.h>
 #include <unistd.h>
 
 namespace {
@@ -1396,6 +1401,298 @@ void live_ssh_test::a_session_copying_a_file_is_not_moved_to_another_process()
 	/* Over, the move is allowed again. */
 	QVERIFY2(session->export_handoff(state, fds, &why), qPrintable(why));
 	session->resume_handoff();
+	delete session;
+}
+
+namespace {
+
+/* A session to the test server, connected; null when it did not connect. */
+bssh_session *connected_session(const QString &name) {
+	bssh_profile_t profile;
+	profile.name = name;
+	profile.host = QStringLiteral("127.0.0.1");
+	profile.port = test_port();
+	profile.user = qEnvironmentVariable("USER");
+	profile.identity_file = test_key();
+
+	bssh_session *session = new bssh_session(profile);
+	session->resize(80, 12);
+	QObject::connect(session, &bssh_session::host_key_unknown, session, [session] { session->accept_host_key(); });
+	session->connect_to_host();
+	QElapsedTimer waited;
+	waited.start();
+	while (session->state() != bssh_ssh_session::CONNECTED && waited.elapsed() < 15000)
+		QTest::qWait(50);
+	if (session->state() == bssh_ssh_session::CONNECTED) return session;
+	delete session;
+	return nullptr;
+}
+
+const bssh_remote_entry_t *entry_named(const QList<bssh_remote_entry_t> &entries, const QString &name) {
+	for (const bssh_remote_entry_t &entry : entries)
+		if (entry.name == name) return &entry;
+	return nullptr;
+}
+
+}
+
+void live_ssh_test::the_file_panel_lists_a_remote_directory()
+{
+	if (!server_available()) return;
+	if (!fresh_connection_expected()) {
+		QSKIP("this phase has taken the link down or swapped the key before "
+		       "here; a fresh connection cannot authenticate by design");
+	}
+
+	/*
+	 * The file panel's listing (sec 6.4), over SFTP on the session's own
+	 * connection: every entry but . and .., each said for what it is, a
+	 * link to a directory said to lead to one, the path as the server
+	 * canonicalises it, the home directory for an empty path, and a
+	 * directory that is not there said so rather than listed empty.
+	 */
+	QTemporaryDir there;
+	QVERIFY(there.isValid());
+	{
+		QFile file(there.filePath(QStringLiteral("notes.txt")));
+		QVERIFY(file.open(QIODevice::WriteOnly));
+		file.write(QByteArray(1234, 'n'));
+	}
+	QVERIFY(QFile::setPermissions(there.filePath(QStringLiteral("notes.txt")),
+	                              QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+	QVERIFY(QDir(there.path()).mkdir(QStringLiteral("inner")));
+	QVERIFY(QFile::link(there.filePath(QStringLiteral("inner")), there.filePath(QStringLiteral("to-inner"))));
+	QVERIFY(QFile::link(there.filePath(QStringLiteral("notes.txt")), there.filePath(QStringLiteral("to-notes"))));
+
+	bssh_session *session = connected_session(QStringLiteral("list-test"));
+	QVERIFY2(session, "the test server did not take the connection");
+	QSignalSpy listed(session, &bssh_session::directory_listed);
+
+	/* By a path with a dot in it, to see it canonicalised. */
+	session->list_directory(there.path() + QStringLiteral("/inner/.."));
+	QTRY_VERIFY_WITH_TIMEOUT(listed.size() == 1, 15000);
+	QCOMPARE(listed.at(0).at(2).toString(), QString());
+	QCOMPARE(listed.at(0).at(0).toString(), QFileInfo(there.path()).canonicalFilePath());
+	const auto entries = listed.at(0).at(1).value<QList<bssh_remote_entry_t>>();
+	QCOMPARE(entries.size(), 4);
+	const bssh_remote_entry_t *notes = entry_named(entries, QStringLiteral("notes.txt"));
+	QVERIFY(notes);
+	QCOMPARE(notes->kind, bssh_remote_entry_t::FILE);
+	QCOMPARE(notes->size, qint64(1234));
+	QCOMPARE(notes->permissions, quint32(0600));
+	QCOMPARE(notes->modified.toSecsSinceEpoch(),
+	         QFileInfo(there.filePath(QStringLiteral("notes.txt"))).lastModified().toSecsSinceEpoch());
+	QCOMPARE(entry_named(entries, QStringLiteral("inner"))->kind, bssh_remote_entry_t::DIRECTORY);
+	QCOMPARE(entry_named(entries, QStringLiteral("to-inner"))->kind, bssh_remote_entry_t::LINK);
+	QVERIFY(entry_named(entries, QStringLiteral("to-inner"))->leads_to_directory);
+	QVERIFY(!entry_named(entries, QStringLiteral("to-notes"))->leads_to_directory);
+
+	/* Two asked at once: both answered, in order. */
+	session->list_directory(QString());
+	session->list_directory(there.filePath(QStringLiteral("not-here")));
+	QTRY_VERIFY_WITH_TIMEOUT(listed.size() == 3, 15000);
+	/* The account's home as sshd knows it: the suite moves HOME elsewhere. */
+	const struct passwd *account = getpwuid(getuid());
+	QVERIFY(account);
+	QCOMPARE(listed.at(1).at(0).toString(), QFileInfo(QString::fromLocal8Bit(account->pw_dir)).canonicalFilePath());
+	QCOMPARE(listed.at(1).at(2).toString(), QString());
+	QVERIFY2(!listed.at(2).at(2).toString().isEmpty(), "a missing directory was listed as empty");
+	QVERIFY(listed.at(2).at(1).value<QList<bssh_remote_entry_t>>().isEmpty());
+
+	/* Nothing held open after a listing: the move is allowed. */
+	QByteArray state;
+	QList<int> fds;
+	QString why;
+	QVERIFY2(session->export_handoff(state, fds, &why), qPrintable(why));
+	session->resume_handoff();
+	delete session;
+}
+
+void live_ssh_test::files_come_back_from_the_remote_never_over_what_is_here()
+{
+	if (!server_available()) return;
+	if (!fresh_connection_expected()) {
+		QSKIP("this phase has taken the link down or swapped the key before "
+		       "here; a fresh connection cannot authenticate by design");
+	}
+
+	/*
+	 * The upload's mirror (sec 6.4): a file and a tree copied from the
+	 * other end into a local directory. A name already here is kept and
+	 * the copy takes a free one beside it, as a drop does; a tree comes
+	 * whole, a link to a file as the file and a link to a directory left
+	 * out, as the upload leaves one out.
+	 */
+	QTemporaryDir there;
+	QTemporaryDir here;
+	QVERIFY(there.isValid() && here.isValid());
+	const auto write = [](const QString &path, const QByteArray &bytes) {
+		QFile file(path);
+		QVERIFY(file.open(QIODevice::WriteOnly));
+		file.write(bytes);
+	};
+	QByteArray big(300 * 1024, '\0');
+	for (int i = 0; i < big.size(); ++i) big[i] = char(i * 7);
+	write(there.filePath(QStringLiteral("notes.txt")), big);
+	QVERIFY(QDir(there.path()).mkpath(QStringLiteral("tree/inner")));
+	write(there.filePath(QStringLiteral("tree/inner/leaf")), "leaf");
+	write(there.filePath(QStringLiteral("tree/top")), "top");
+	QVERIFY(QFile::link(there.filePath(QStringLiteral("tree/top")), there.filePath(QStringLiteral("tree/to-top"))));
+	QVERIFY(QFile::link(there.filePath(QStringLiteral("tree/inner")), there.filePath(QStringLiteral("tree/to-inner"))));
+	write(here.filePath(QStringLiteral("notes.txt")), "already here");
+
+	bssh_session *session = connected_session(QStringLiteral("download-test"));
+	QVERIFY2(session, "the test server did not take the connection");
+	QSignalSpy finished(session, &bssh_session::download_finished);
+	session->download({ there.filePath(QStringLiteral("notes.txt")), there.filePath(QStringLiteral("tree")) },
+	                  here.path());
+	QVERIFY(session->download_in_progress());
+	QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty(), 20000);
+	QVERIFY2(finished.at(0).at(0).toBool(), qPrintable(finished.at(0).at(3).toString()));
+	QCOMPARE(finished.at(0).at(2).toStringList(),
+	         QStringList({ QStringLiteral("notes (1).txt"), QStringLiteral("tree") }));
+	QVERIFY(!session->download_in_progress());
+	delete session;
+
+	const auto read = [](const QString &path) {
+		QFile file(path);
+		return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray("<missing>");
+	};
+	QCOMPARE(read(here.filePath(QStringLiteral("notes.txt"))), QByteArray("already here"));
+	QVERIFY(read(here.filePath(QStringLiteral("notes (1).txt"))) == big);
+	QCOMPARE(read(here.filePath(QStringLiteral("tree/inner/leaf"))), QByteArray("leaf"));
+	QCOMPARE(read(here.filePath(QStringLiteral("tree/top"))), QByteArray("top"));
+	QCOMPARE(read(here.filePath(QStringLiteral("tree/to-top"))), QByteArray("top"));
+	QVERIFY2(!QFileInfo::exists(here.filePath(QStringLiteral("tree/to-inner"))),
+	         "a link to a directory was followed");
+}
+
+void live_ssh_test::a_copy_back_can_be_stopped_and_leaves_nothing_half_written()
+{
+	if (!server_available()) return;
+	if (!fresh_connection_expected()) {
+		QSKIP("this phase has taken the link down or swapped the key before "
+		       "here; a fresh connection cannot authenticate by design");
+	}
+
+	/* Stopped mid-copy: reported as stopped, the half-written local file
+	 * gone, and the move of the session allowed again after it. */
+	QTemporaryDir there;
+	QTemporaryDir here;
+	QVERIFY(there.isValid() && here.isValid());
+	{
+		QFile big(there.filePath(QStringLiteral("big.bin")));
+		QVERIFY(big.open(QIODevice::WriteOnly));
+		const QByteArray block(1024 * 1024, 'z');
+		for (int i = 0; i < 20; ++i) big.write(block);
+	}
+
+	bssh_session *session = connected_session(QStringLiteral("download-stop-test"));
+	QVERIFY2(session, "the test server did not take the connection");
+	QSignalSpy finished(session, &bssh_session::download_finished);
+	QByteArray state;
+	QList<int> fds;
+	QString why;
+	bool stopped = false;
+	bool refused = false;
+	QString refusal;
+	/* Stopped from the first piece's report, so it cannot finish first. */
+	QObject::connect(session, &bssh_session::download_progress, session, [&](qint64 done, qint64) {
+		if (done <= 0 || stopped) return;
+		stopped = true;
+		refused = !session->export_handoff(state, fds, &refusal);
+		session->cancel_download();
+	});
+	session->download({ there.filePath(QStringLiteral("big.bin")) }, here.path());
+	QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty(), 15000);
+	QVERIFY2(stopped, "the copy never reported a piece");
+	QVERIFY2(refused, "moved with a copy running on the connection");
+	QVERIFY2(refusal.contains(QStringLiteral("copy")), qPrintable(refusal));
+	QVERIFY2(!finished.at(0).at(0).toBool(), "a stopped copy said it finished");
+	QCOMPARE(finished.at(0).at(3).toString(), QString::fromLatin1(BSSH_COPY_STOPPED));
+	QVERIFY2(!QFileInfo::exists(here.filePath(QStringLiteral("big.bin"))), "a stopped copy left its file");
+
+	QVERIFY2(session->export_handoff(state, fds, &why), qPrintable(why));
+	session->resume_handoff();
+	delete session;
+}
+
+void live_ssh_test::the_file_panel_browses_and_copies_both_ways()
+{
+	if (!server_available()) return;
+	if (!fresh_connection_expected()) {
+		QSKIP("this phase has taken the link down or swapped the key before "
+		       "here; a fresh connection cannot authenticate by design");
+	}
+
+	/*
+	 * The panel itself (sec 6.4), on a real connection: directories
+	 * before files whatever their names, a directory opened by
+	 * activating it, Up back out, a file activated copied into the
+	 * download directory, and local files dropped on it copied into the
+	 * directory it shows -- and shown there.
+	 */
+	QTemporaryDir there;
+	QTemporaryDir here;
+	QTemporaryDir from;
+	QVERIFY(there.isValid() && here.isValid() && from.isValid());
+	const auto write = [](const QString &path, const QByteArray &bytes) {
+		QFile file(path);
+		QVERIFY(file.open(QIODevice::WriteOnly));
+		file.write(bytes);
+	};
+	write(there.filePath(QStringLiteral("a-file")), "a");
+	QVERIFY(QDir(there.path()).mkdir(QStringLiteral("z-dir")));
+	write(there.filePath(QStringLiteral("z-dir/inside")), "inside");
+	write(from.filePath(QStringLiteral("sent.txt")), "sent");
+
+	bssh_session *session = connected_session(QStringLiteral("panel-test"));
+	QVERIFY2(session, "the test server did not take the connection");
+	bssh_file_panel panel(session);
+	panel.set_download_directory(here.path());
+	QSignalSpy listed(&panel, &bssh_file_panel::listed);
+
+	panel.open_directory(there.path());
+	QTRY_VERIFY_WITH_TIMEOUT(listed.size() == 1, 15000);
+	QCOMPARE(panel.path(), QFileInfo(there.path()).canonicalFilePath());
+	QCOMPARE(panel.entries().size(), 2);
+	QCOMPARE(panel.entries().at(0).name, QStringLiteral("z-dir"));
+	QCOMPARE(panel.entries().at(1).name, QStringLiteral("a-file"));
+
+	QTreeWidget *list = panel.findChild<QTreeWidget *>(QStringLiteral("file-panel-list"));
+	QVERIFY(list);
+	emit list->itemActivated(list->topLevelItem(0), 0);
+	QTRY_VERIFY_WITH_TIMEOUT(listed.size() == 2, 15000);
+	QCOMPARE(panel.path(), QFileInfo(there.filePath(QStringLiteral("z-dir"))).canonicalFilePath());
+	QCOMPARE(panel.entries().size(), 1);
+
+	QSignalSpy finished(session, &bssh_session::download_finished);
+	list->setCurrentItem(list->topLevelItem(0));
+	emit list->itemActivated(list->topLevelItem(0), 0);
+	QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty(), 15000);
+	QVERIFY2(finished.at(0).at(0).toBool(), qPrintable(finished.at(0).at(3).toString()));
+	QFile came(here.filePath(QStringLiteral("inside")));
+	QVERIFY(came.open(QIODevice::ReadOnly));
+	QCOMPARE(came.readAll(), QByteArray("inside"));
+
+	/* What a drop on it does; Qt swallows a synthetic QDropEvent. */
+	QSignalSpy uploaded(session, &bssh_session::upload_finished);
+	QVERIFY(panel.copy_here({ from.filePath(QStringLiteral("sent.txt")) }));
+	QTRY_VERIFY_WITH_TIMEOUT(!uploaded.isEmpty(), 15000);
+	QVERIFY2(uploaded.at(0).at(0).toBool(), qPrintable(uploaded.at(0).at(3).toString()));
+	QTRY_VERIFY_WITH_TIMEOUT(listed.size() == 3, 15000);
+	QCOMPARE(panel.entries().size(), 2);
+	QFile sent(there.filePath(QStringLiteral("z-dir/sent.txt")));
+	QVERIFY(sent.open(QIODevice::ReadOnly));
+	QCOMPARE(sent.readAll(), QByteArray("sent"));
+
+	QToolButton *up = nullptr;
+	for (QToolButton *button : panel.findChildren<QToolButton *>())
+		if (button->accessibleName() == QStringLiteral("Up a directory")) up = button;
+	QVERIFY(up);
+	up->click();
+	QTRY_VERIFY_WITH_TIMEOUT(listed.size() == 4, 15000);
+	QCOMPARE(panel.path(), QFileInfo(there.path()).canonicalFilePath());
 	delete session;
 }
 

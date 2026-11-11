@@ -48,6 +48,12 @@ public:
 	void rebuild();
 
 	/*
+	 * Opens or closes a session's file panel (sec 6.4) beside its pane,
+	 * by rebuilding: the panel is part of the pane, as its bar is.
+	 */
+	void set_file_panel_open(bssh_session *session, bool open);
+
+	/*
 	 * The same, rebuilding only what changed when that is one pane's
 	 * terminal -- a tab picked in its bar -- and everything else rebuilt
 	 * as rebuild() does.

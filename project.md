@@ -154,8 +154,13 @@ desktop" is not done, and neither is an Android-only hack that desktop can't
 run.
 
 ### Non-goals (v1, revisit later)
-- SFTP file browser / port forwarding / SSH tunneling (design so they can be
-  added; don't build yet).
+- ~~SFTP file browser~~ / port forwarding / SSH tunneling (design so they
+  can be added; don't build yet). **The file browser half was reversed by
+  the holder on 2026-11-11** -- "an important feature almost all ssh
+  clients and terminals lack, a built in file browser using the same
+  connection" -- and is a v1 feature on both platforms: a panel beside
+  each pane (sec 6.4, *A file panel beside each pane*). Port forwarding
+  and tunnels stay non-goals.
 - **An sshd built into BeerSSH — not done, and replaced by a separate
   program.** Deferred on 2026-10-05 because what an in-app server could
   serve on Android is only its own sandbox; the holder then decided on
@@ -4058,6 +4063,55 @@ model on a finger.
   holds the whole file or none of it; before, the copy ran on unwatched
   and a quit cut it off half written
   (`a_closed_local_session_leaves_no_half_copied_file`).
+
+- **A file panel beside each pane -- [DECIDED 2026-11-11, BUILDING].**
+  The holder: "an important feature almost all ssh clients and terminals
+  lack, a built in file browser using the same connection simultaneously
+  to sftp/scp send and receive files"; asked, built now on both platforms,
+  as a panel docked beside the pane it belongs to. It opens at the shell's
+  directory, found as the drop finds it, lists the remote end, takes files
+  dropped on it (the drop's upload), sends files back (download), and
+  renames, removes and makes folders. On a phone it is a sheet over the
+  terminal, and files leave and arrive through the system's document
+  picker, so the app needs no access to all files.
+  **Same connection, SFTP**, for the drop's reasons: already
+  authenticated, through any jump host, no second login. **Prior art,
+  and older first:** MobaXterm's SFTP sidebar follows the terminal's
+  folder, which is the shape taken here; Bitvise pairs a terminal with an
+  SFTP window; WinSCP opens PuTTY beside it, a second program; Termius and
+  most others open a second connection or have no browser. None of these
+  runs on both a desktop and Android. Rejected: a tab of its own (the
+  terminal and its files not seen together), a dialog (modal, away from
+  the terminal), scp (no listing; a remote shell parses the names).
+  **An SFTP session per operation, not one held open** while the panel
+  shows: a kept session is moved to another process only with no SFTP
+  job on its connection (above), and a panel left open would otherwise
+  hold that off for as long as it is open. It costs a round trip or two
+  per listing.
+  **Steps:** (1) listing and download in the transport, a piece per turn
+  as the upload does, measured against a real sshd; (2) the desktop
+  panel; (3) Android; (4) rename, remove, new folder.
+  **Steps 1 and 2 built 2026-11-11.** `list_directory()` and
+  `download()` on the transport and the session; a listing reads 64
+  entries a turn, says a link to a directory is one (one `stat` per
+  link), and answers queued requests in order; a download lists each
+  directory at its own turn and puts its contents after it, so a large
+  tree is never walked with the shell waiting, and its total grows as it
+  is found. A link to a directory inside a tree is not followed, as the
+  upload does not follow one. `bssh_file_panel` sits right of the view in
+  a row of the pane's frame, about 40 characters wide -- a layout, not a
+  splitter, since `all_splitters()` takes every splitter under the
+  container for a pane divider -- shown by the terminal menu's
+  "Show Files" on a remote session. Measured against a real sshd:
+  `the_file_panel_lists_a_remote_directory`,
+  `files_come_back_from_the_remote_never_over_what_is_here`,
+  `a_copy_back_can_be_stopped_and_leaves_nothing_half_written`,
+  `the_file_panel_browses_and_copies_both_ways`;
+  `tool/sabotage/file-panel.toml`, run with check-ssh as the suite.
+  **Not yet:** the panel's width cannot be dragged; nothing can be
+  dragged out of it to a file manager (a drag needs the file local
+  first); on a phone it would squeeze the terminal, so it waits for step
+  3; and rename, remove and new folder are step 4.
   **A reconnect ends a copy on the old transport, and the session says
   so itself** (2026-10-31): the transport's own report comes after it is
   deleted -- dropped outright by a local copy's guard, and behind the

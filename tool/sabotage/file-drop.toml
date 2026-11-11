@@ -52,8 +52,8 @@ expect = "dropped_files_are_copied_where_the_shell_is"
 [[sabotage]]
 name = "a session is moved with a copy running"
 file = "src/ssh/ssh_session_libssh.cpp"
-find = "\tif (m_upload) {\n\t\twhy = QStringLiteral(\"a copy is still running"
-replace = "\tif (false) {\n\t\twhy = QStringLiteral(\"a copy is still running"
+find = "\tif (m_upload || m_download) {\n\t\twhy = QStringLiteral(\"a copy is still running"
+replace = "\tif (m_download) {\n\t\twhy = QStringLiteral(\"a copy is still running"
 expect = "a_session_copying_a_file_is_not_moved_to_another_process"
 
 # The local shell moved with its copy still running on a thread of this

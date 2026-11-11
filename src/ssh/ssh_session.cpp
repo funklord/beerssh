@@ -63,6 +63,21 @@ void bssh_ssh_session::upload(const QStringList &paths, const QString &directory
 	}, Qt::QueuedConnection);
 }
 
+void bssh_ssh_session::list_directory(const QString &path) {
+	QMetaObject::invokeMethod(this, [this, path] {
+		emit directory_listed(path, QList<bssh_remote_entry_t>(),
+		                      QStringLiteral("this connection has no files to list"));
+	}, Qt::QueuedConnection);
+}
+
+void bssh_ssh_session::download(const QStringList &paths, const QString &directory) {
+	Q_UNUSED(paths);
+	QMetaObject::invokeMethod(this, [this, directory] {
+		emit download_finished(false, directory, QStringList(),
+		                       QStringLiteral("this connection cannot copy files"));
+	}, Qt::QueuedConnection);
+}
+
 void bssh_ssh_session::run_on_the_side(const QString &command) {
 	Q_UNUSED(command);
 	QMetaObject::invokeMethod(this, [this] { emit side_output_ready(QByteArray()); },

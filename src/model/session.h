@@ -337,11 +337,39 @@ public:
 	QString upload_directory() const { return m_upload_directory; }
 	void cancel_upload();
 
+	/*
+	 * The file panel (sec 6.4): a remote directory listed, empty for home,
+	 * answered by directory_listed(); and files copied from the other end
+	 * into a local directory, never over what is there.
+	 */
+	void list_directory(const QString &path);
+	void download(const QStringList &paths, const QString &directory);
+	bool download_in_progress() const { return m_downloading; }
+	void cancel_download();
+
+	/*
+	 * Whether this session's file panel is open, and the directory it
+	 * showed: kept here, as the zoom is, because the pane's widgets are
+	 * rebuilt on every layout change and the panel with them.
+	 */
+	bool file_panel_open() const { return m_file_panel_open; }
+	void set_file_panel_open(bool open) { m_file_panel_open = open; }
+	QString file_panel_path() const { return m_file_panel_path; }
+	void set_file_panel_path(const QString &path) { m_file_panel_path = path; }
+
+	/* An SSH session; a local shell's files are this machine's own. */
+	bool is_remote() const { return !m_profile.local; }
+
 signals:
 	void working_directory_found(const bssh_working_directory_t &found);
 	void upload_progress(qint64 done, qint64 total);
 	void upload_finished(bool ok, const QString &directory, const QStringList &written,
 	                     const QString &why);
+	void directory_listed(const QString &path, const QList<bssh_remote_entry_t> &entries,
+	                      const QString &why);
+	void download_progress(qint64 done, qint64 total);
+	void download_finished(bool ok, const QString &directory, const QStringList &written,
+	                       const QString &why);
 
 	/* Sessions are running there; the window offers them. Never empty. */
 	void multiplexers_found(const QList<bssh_mux_session_t> &found);
@@ -463,6 +491,10 @@ private:
 	 * reconnect makes a new transport. */
 	std::shared_ptr<struct bssh_session_client> m_resume_client;
 	bool m_uploading = false;
+	bool m_downloading = false;
+	bool m_file_panel_open = false;
+	QString m_file_panel_path;
+	QString m_download_directory;
 	bool m_finding_directory = false;
 	QString m_upload_directory;
 

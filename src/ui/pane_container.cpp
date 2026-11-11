@@ -7,6 +7,8 @@
 #include <QFrame>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QHBoxLayout>
+#include <QPointer>
 #include <QSplitter>
 #include <QSplitterHandle>
 #include <QPointer>
@@ -19,6 +21,7 @@
 #include "model/session.h"
 #include "term/emulator.h"
 #include "platform/platform.h"
+#include "ui/file_panel.h"
 #include "ui/layout_manager.h"
 #include "model/app_settings.h"
 #include "ui/pane_snap.h"
@@ -244,8 +247,32 @@ bssh_terminal_view *bssh_pane_container::add_pane_view(bssh_session *session,
 	QWidget *bar = m_bar_factory ? m_bar_factory(session, frame) : nullptr;
 	if (bar) box->addWidget(bar, 0);
 
+	/*
+	 * The view, and beside it the session's file panel when it is open
+	 * (sec 6.4) -- in a row of its own whichever edge the bar is on, and a
+	 * layout rather than a splitter: every QSplitter under this container
+	 * is taken for a pane divider (all_splitters()), and would be snapped
+	 * and evened out as one.
+	 */
+	QHBoxLayout *row = new QHBoxLayout;
+	row->setContentsMargins(0, 0, 0, 0);
+	row->setSpacing(0);
+	box->addLayout(row, 1);
 	bssh_terminal_view *view = new bssh_terminal_view(frame);
-	box->addWidget(view, 1);
+	row->addWidget(view, 1);
+	if (session->is_remote() && session->file_panel_open()) {
+		bssh_file_panel *panel = new bssh_file_panel(session, frame);
+		row->addWidget(panel, 0);
+		const QPointer<bssh_session> held = session;
+		connect(panel, &bssh_file_panel::close_requested, this, [this, held] {
+			if (held) set_file_panel_open(held, false);
+		});
+		connect(panel, &bssh_file_panel::listed, this, [held, panel] {
+			if (held && !panel->path().isEmpty()) held->set_file_panel_path(panel->path());
+		});
+		if (session->file_panel_path().isEmpty()) panel->open_shells_directory();
+		else panel->open_directory(session->file_panel_path());
+	}
 
 	/*
 	 * Added explicitly, which shows it. A splitter otherwise shows a new
@@ -1251,4 +1278,14 @@ void bssh_pane_container::apply_drop_planner(bssh_terminal_view *view, bssh_sess
 	                                                                      int edge) {
 		return alive && m_drop_planner ? m_drop_planner(mime, alive.data(), edge) : BSSH_DROP_CANCEL;
 	});
+}
+
+void bssh_pane_container::set_file_panel_open(bssh_session *session, bool open) {
+	if (!session || session->file_panel_open() == open) return;
+	session->set_file_panel_open(open);
+	/*
+	 * Rebuilt from the event loop: this is reached from the panel's own
+	 * close button, and the rebuild deletes the panel.
+	 */
+	QMetaObject::invokeMethod(this, [this] { rebuild(); }, Qt::QueuedConnection);
 }

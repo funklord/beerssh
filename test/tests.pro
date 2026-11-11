@@ -170,6 +170,7 @@ SOURCES += \
     ../src/ui/layout_manager.cpp \
     ../src/ui/pane_bar.cpp \
     ../src/ui/pane_container.cpp \
+    ../src/ui/file_panel.cpp \
     ../src/ui/find_bar.cpp \
     ../src/ui/input_selector.cpp \
     ../src/ui/pane_corner.cpp \
@@ -293,6 +294,7 @@ HEADERS += \
     ../src/ui/pane_bar.h \
     ../src/ui/pane_container.h \
     ../src/ui/pane_snap.h \
+    ../src/ui/file_panel.h \
     ../src/ui/find_bar.h \
     ../src/ui/input_selector.h \
     ../src/ui/pane_corner.h \
