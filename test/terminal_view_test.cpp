@@ -1565,17 +1565,49 @@ void terminal_view_test::a_long_run_of_text_stays_on_the_grid() {
 	         "the last character of a full-width run must be drawn in the last column");
 
 	/*
+	 * And every character sits at the same place in its own cell: the
+	 * drift itself, measured rather than inferred from where the last one
+	 * ended. The first ink found from each cell's left edge, which is
+	 * either the glyph or the previous one's antialiased edge reaching
+	 * over -- the same either way, cell after cell, if the run is pinned.
+	 * The first two cells are left out, having no neighbour, or only one,
+	 * to the left. Unpinned, the advance differs from the cell by a third
+	 * of a pixel or so, and these spread by many pixels over a row.
+	 */
+	int lowest = cell_width;
+	int highest = 0;
+	for (int col = 2; col < cols; ++col) {
+		int first = cell_width;
+		for (int x = col * cell_width; x < (col + 1) * cell_width && first == cell_width; ++x) {
+			for (int y = 0; y < cell_height; ++y) {
+				if (rendered.pixelColor(x, y) != background) {
+					first = x - col * cell_width;
+					break;
+				}
+			}
+		}
+		lowest = qMin(lowest, first);
+		highest = qMax(highest, first);
+	}
+	QVERIFY2(highest - lowest <= 1,
+	         qPrintable(QStringLiteral("each 'i' starts between %1 and %2 px into its cell, "
+	                                   "so the run is not on the grid").arg(lowest).arg(highest)));
+
+	/*
 	 * And nothing spills past the grid into the right-hand margin.
 	 *
 	 * Near the background rather than exactly it. Antialiasing bleeds a
-	 * little differently between Qt versions -- measured at 3/255 on
-	 * Qt 6.4 against 0 on 6.8 -- and an exact comparison turns that into
-	 * a failing build on the older one while testing nothing extra. A
-	 * glyph actually drawn here would be the foreground colour, which is
-	 * ~180/255 away, so the tolerance is nowhere near what this is
-	 * looking for.
+	 * little differently between Qt versions -- 0 on 6.8; on Qt 6.4 3/255
+	 * in a fallback font, and 17/255 in JetBrains Mono, whose 'i' reaches
+	 * a pixel past its cell there with every cell where it should be
+	 * (2026-11-11, the first run with the set present on 6.4) -- and an
+	 * exact comparison turns that into a failing build on the older one
+	 * while testing nothing extra. A glyph actually drawn here would be
+	 * the foreground colour, ~180/255 away, so a quarter of that is still
+	 * far from what this is looking for; the drift itself is the check
+	 * above.
 	 */
-	const int tolerance = 12;
+	const int tolerance = 48;
 	for (int x = cols * cell_width; x < rendered.width(); ++x) {
 		for (int y = 0; y < cell_height; ++y) {
 			const QColor pixel = rendered.pixelColor(x, y);
