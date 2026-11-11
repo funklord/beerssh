@@ -65,6 +65,10 @@ public:
 	/* Where a double-clicked file goes; the Downloads folder by default. */
 	void set_download_directory(const QString &directory) { m_download_directory = directory; }
 
+	/* Shown over its parent, the terminal view, and kept its size. */
+	void set_overlay(bool overlay);
+	bool is_overlay() const { return m_overlay; }
+
 	/* Its width, kept within what leaves the terminal room. */
 	void set_panel_width(int width);
 
@@ -89,7 +93,8 @@ private:
 	void show_listing(const QString &path, const QList<bssh_remote_entry_t> &entries, const QString &why);
 	void activate(QTreeWidgetItem *item);
 	void copy_selected_to(const QString &directory);
-	void show_menu(const QPoint &at);
+	void show_menu(const QPoint &global);
+	void copy_selected_elsewhere();
 	void say(const QString &text, bool stoppable = false);
 	QString remote_path_of(const bssh_remote_entry_t &entry) const;
 	QString path_here(const QString &name) const;
@@ -106,6 +111,7 @@ private:
 
 	QWidget *m_grip;
 	int m_drag_from = -1;
+	bool m_overlay = false;
 	int m_drag_width = 0;
 	QLineEdit *m_location;
 	QToolButton *m_up;

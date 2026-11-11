@@ -1669,6 +1669,32 @@ void terminal_view_test::the_file_panel_is_widened_by_its_grip() {
 	QCOMPARE(panel->width(), frame.width() * 3 / 4);
 }
 
+void terminal_view_test::the_file_panel_on_touch_covers_the_terminal_without_resizing_it() {
+	/*
+	 * On a phone the panel opens over the terminal (sec 6.4): it covers
+	 * the view and follows it when it is resized, has no grip, and the
+	 * view keeps its size -- so the remote's window is not resized by the
+	 * panel opening, as it would be by one squeezed in beside it.
+	 */
+	bssh_terminal_view view;
+	view.resize(400, 300);
+	view.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&view));
+	const QSize before = view.size();
+	bssh_file_panel *panel = new bssh_file_panel(nullptr, &view);
+	panel->set_overlay(true);
+	panel->show();
+	QVERIFY(panel->is_overlay());
+	QCOMPARE(panel->geometry(), view.rect());
+	QCOMPARE(view.size(), before);
+	QWidget *grip = panel->findChild<QWidget *>(QStringLiteral("file-panel-grip"));
+	QVERIFY(grip);
+	QVERIFY(!grip->isVisible());
+	view.resize(500, 260);
+	QCoreApplication::processEvents();
+	QCOMPARE(panel->geometry(), view.rect());
+}
+
 void terminal_view_test::the_terminal_reads_itself_to_assistive_technology() {
 	/*
 	 * The terminal painted characters and told assistive technology

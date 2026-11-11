@@ -112,6 +112,7 @@ private slots:
 	void the_block_cursor_does_not_cover_its_character();
 	void a_long_run_of_text_stays_on_the_grid();
 	void the_file_panel_is_widened_by_its_grip();
+	void the_file_panel_on_touch_covers_the_terminal_without_resizing_it();
 	void the_terminal_reads_itself_to_assistive_technology();
 	void every_control_announces_a_name();
 	void the_contrast_floor_can_be_turned_off();

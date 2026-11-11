@@ -261,13 +261,17 @@ bssh_terminal_view *bssh_pane_container::add_pane_view(bssh_session *session,
 	bssh_terminal_view *view = new bssh_terminal_view(frame);
 	row->addWidget(view, 1);
 	if (session->is_remote() && session->file_panel_open()) {
-		bssh_file_panel *panel = new bssh_file_panel(session, frame);
-		row->addWidget(panel, 0);
+		/* Over the terminal on touch, where beside it would leave it
+		 * nothing; beside it elsewhere. */
+		const bool touch = bssh_platform::instance() && bssh_platform::instance()->is_touch_primary();
+		bssh_file_panel *panel = new bssh_file_panel(session, touch ? static_cast<QWidget *>(view) : frame);
+		if (touch) panel->set_overlay(true);
+		else row->addWidget(panel, 0);
 		const QPointer<bssh_session> held = session;
 		connect(panel, &bssh_file_panel::close_requested, this, [this, held] {
 			if (held) set_file_panel_open(held, false);
 		});
-		if (session->file_panel_width() > 0) panel->set_panel_width(session->file_panel_width());
+		if (!touch && session->file_panel_width() > 0) panel->set_panel_width(session->file_panel_width());
 		connect(panel, &bssh_file_panel::width_chosen, this, [held](int width) {
 			if (held) held->set_file_panel_width(width);
 		});

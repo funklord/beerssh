@@ -4123,9 +4123,27 @@ model on a finger.
   terminal, kept by the session as the directory is, and never more than
   three quarters of the pane (`the_file_panel_is_widened_by_its_grip`,
   `tool/sabotage/file-panel-grip.toml`).
-  **Not yet:** nothing can be dragged out of it to a file manager (a drag needs the file local
-  first); on a phone it would squeeze the terminal, so the entry is off
-  on touch until step 3.
+  **Declined: dragging a file out to a file manager.** The drop asks
+  for the file's bytes at the moment of the drop (XDND and the like),
+  while the copy runs on the SSH worker a piece at a time; answering
+  would mean blocking the window until the file arrived, the freeze the
+  piecewise copy exists to avoid. "Copy to..." names the place instead.
+  **Step 3, the phone's form, built 2026-11-11 and not yet seen on a
+  device.** On touch the panel lies over the terminal view, its child,
+  following its size, rather than beside it: the view keeps its size, so
+  opening it does not resize the remote's window
+  (`the_file_panel_on_touch_covers_the_terminal_without_resizing_it`).
+  A "More" button opens the panel's menu, which on touch nothing else
+  does, and the menu gains "Send Files Here...", the platform's picker.
+  Android has no Downloads default (its location there is the app's own),
+  so a file opened asks where to go, through the document picker.
+  **Open, and why it is untested:** the copy back writes by path, and
+  whether a folder the picker returns (a `content://` tree) takes it is
+  read from Qt 6.12's `androidcontentfileengine.cpp` -- `open()` for
+  writing makes the file in its parent tree, `mkdir` and `exists` work --
+  not measured; nor whether `NewOnly` holds on one. Seeing it needs the
+  emulator, a throwaway sshd at 10.0.2.2 and a key placed in the app.
+  The x86_64 APK builds.
   **A reconnect ends a copy on the old transport, and the session says
   so itself** (2026-10-31): the transport's own report comes after it is
   deleted -- dropped outright by a local copy's guard, and behind the

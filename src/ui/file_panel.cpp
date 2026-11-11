@@ -47,6 +47,11 @@ bssh_file_panel::bssh_file_panel(bssh_session *session, QWidget *parent)
       m_download_directory(QStandardPaths::writableLocation(QStandardPaths::DownloadLocation)) {
 	setObjectName(QStringLiteral("file-panel"));
 	setAcceptDrops(true);
+#ifdef Q_OS_ANDROID
+	/* Android's Downloads location is this app's own, out of the user's
+	 * sight: a file opened asks where to go instead (the document picker). */
+	m_download_directory.clear();
+#endif
 
 	/*
 	 * A grip on the edge it shares with the terminal, dragged to make the
@@ -95,6 +100,12 @@ bssh_file_panel::bssh_file_panel(bssh_session *session, QWidget *parent)
 	close->setIcon(style()->standardIcon(QStyle::SP_TitleBarCloseButton));
 	close->setToolTip(tr("Close the file panel"));
 	close->setAccessibleName(tr("Close the file panel"));
+	/* The menu from a button too: on touch nothing opens the list's own. */
+	QToolButton *more = new QToolButton(this);
+	more->setText(QStringLiteral("\u22ef"));
+	more->setToolTip(tr("More"));
+	more->setAccessibleName(tr("More"));
+	row->insertWidget(row->count() - 1, more);
 	row->addWidget(close);
 	column->addLayout(row);
 
@@ -131,7 +142,12 @@ bssh_file_panel::bssh_file_panel(bssh_session *session, QWidget *parent)
 	connect(again, &QToolButton::clicked, this, [this] { open_directory(m_path); });
 	connect(close, &QToolButton::clicked, this, &bssh_file_panel::close_requested);
 	connect(m_list, &QTreeWidget::itemActivated, this, [this](QTreeWidgetItem *item) { activate(item); });
-	connect(m_list, &QWidget::customContextMenuRequested, this, &bssh_file_panel::show_menu);
+	connect(m_list, &QWidget::customContextMenuRequested, this, [this](const QPoint &at) {
+		show_menu(m_list->viewport()->mapToGlobal(at));
+	});
+	connect(more, &QToolButton::clicked, this, [this, more] {
+		show_menu(more->mapToGlobal(QPoint(0, more->height())));
+	});
 	connect(m_stop, &QToolButton::clicked, this, [this] {
 		if (!m_session) return;
 		if (m_session->download_in_progress()) m_session->cancel_download();
@@ -175,6 +191,22 @@ QSize bssh_file_panel::sizeHint() const {
 	return QSize(fontMetrics().averageCharWidth() * 40, QWidget::sizeHint().height());
 }
 
+void bssh_file_panel::set_overlay(bool overlay) {
+	/*
+	 * Over the terminal rather than beside it (a phone, sec 6.4): beside
+	 * one a few columns wide it would leave the terminal nothing. Its
+	 * parent is the view, whose size it follows; the view keeps its own,
+	 * so the remote's window is not resized by the panel opening.
+	 */
+	m_overlay = overlay;
+	m_grip->setVisible(!overlay);
+	setAutoFillBackground(overlay);
+	if (!overlay || !parentWidget()) return;
+	parentWidget()->installEventFilter(this);
+	setGeometry(parentWidget()->rect());
+	raise();
+}
+
 void bssh_file_panel::set_panel_width(int width) {
 	/* No narrower than its buttons fit, and never more than most of the
 	 * pane: the terminal beside it keeps a quarter at least. */
@@ -187,6 +219,8 @@ void bssh_file_panel::set_panel_width(int width) {
 }
 
 bool bssh_file_panel::eventFilter(QObject *watched, QEvent *event) {
+	if (m_overlay && watched == parentWidget() && event->type() == QEvent::Resize)
+		setGeometry(parentWidget()->rect());
 	if (watched != m_grip) return QWidget::eventFilter(watched, event);
 	switch (event->type()) {
 	case QEvent::MouseButtonPress: {
@@ -298,7 +332,12 @@ void bssh_file_panel::activate(QTreeWidgetItem *item) {
 		open_directory(remote_path_of(entry));
 		return;
 	}
-	copy_selected_to(m_download_directory);
+	if (m_download_directory.isEmpty()) copy_selected_elsewhere();
+	else copy_selected_to(m_download_directory);
+}
+
+void bssh_file_panel::copy_selected_elsewhere() {
+	copy_selected_to(QFileDialog::getExistingDirectory(this, tr("Copy to"), m_download_directory));
 }
 
 void bssh_file_panel::copy_selected_to(const QString &directory) {
@@ -325,8 +364,7 @@ void bssh_file_panel::show_menu(const QPoint &at) {
 	QAction *rename = nullptr;
 	QAction *remove = nullptr;
 	if (!selected.isEmpty()) {
-		downloads = menu.addAction(tr("Copy to Downloads"));
-		downloads->setEnabled(!m_download_directory.isEmpty());
+		if (!m_download_directory.isEmpty()) downloads = menu.addAction(tr("Copy to Downloads"));
 		elsewhere = menu.addAction(tr("Copy to..."));
 		menu.addSeparator();
 		rename = menu.addAction(tr("Rename..."));
@@ -334,14 +372,17 @@ void bssh_file_panel::show_menu(const QPoint &at) {
 		remove = menu.addAction(tr("Remove..."));
 		menu.addSeparator();
 	}
+	QAction *send = menu.addAction(tr("Send Files Here..."));
 	QAction *folder = menu.addAction(tr("New Folder..."));
-	const QAction *chosen = menu.exec(m_list->viewport()->mapToGlobal(at));
+	const QAction *chosen = menu.exec(at);
 	if (!chosen) return;
-	if (chosen == downloads) copy_selected_to(m_download_directory);
-	else if (chosen == elsewhere) {
-		const QString directory = QFileDialog::getExistingDirectory(this, tr("Copy to"), m_download_directory);
-		copy_selected_to(directory);
+	if (chosen == send) {
+		/* The platform's picker; on Android, its document picker. */
+		copy_here(QFileDialog::getOpenFileNames(this, tr("Send to %1").arg(m_path)));
+		return;
 	}
+	if (downloads && chosen == downloads) copy_selected_to(m_download_directory);
+	else if (chosen == elsewhere) copy_selected_elsewhere();
 	else if (chosen == rename) {
 		const bssh_remote_entry_t &entry = m_entries.at(selected.first()->data(NAME, Qt::UserRole).toInt());
 		bool ok = false;

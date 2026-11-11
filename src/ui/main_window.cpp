@@ -6512,12 +6512,9 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 	/*
 	 * The files on the host, beside this pane (sec 6.4). A remote session
 	 * only: a local shell's files are this machine's, and its own file
-	 * manager shows them. Not on touch yet: beside a phone's terminal the
-	 * panel would squeeze it to a few columns, and the phone's form of it
-	 * is still to be built.
+	 * manager shows them. On touch it opens over the terminal.
 	 */
-	const bool touch = bssh_platform::instance() && bssh_platform::instance()->is_touch_primary();
-	if (m_current && m_current->is_remote() && !touch) {
+	if (m_current && m_current->is_remote()) {
 		QAction *files = menu->addAction(m_current->file_panel_open() ? QStringLiteral("Hide &Files")
 		                                                              : QStringLiteral("Show &Files"));
 		files->setObjectName(QStringLiteral("terminal_files"));

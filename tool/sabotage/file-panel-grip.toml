@@ -1,6 +1,7 @@
-# The file panel's grip (project.md sec 6.4): dragged, it resizes the
-# panel and the terminal keeps its share. A widget test, so `make test`
-# is the suite, unlike file-panel.toml's live ones.
+# The file panel's own geometry (project.md sec 6.4): its grip resizes
+# it and the terminal keeps its share; on touch it lies over the
+# terminal and follows it. Widget tests, so `make test` is the suite,
+# unlike file-panel.toml's live ones.
 
 # Dragged the wrong way: left narrows the panel instead of widening it.
 [[sabotage]]
@@ -25,3 +26,12 @@ file = "src/ui/file_panel.cpp"
 find = "\t\temit width_chosen(width());\n"
 replace = ""
 expect = "the_file_panel_is_widened_by_its_grip"
+
+# On touch, the panel left at the size it opened with when the terminal
+# under it is resized: part of the terminal shows, or the panel overhangs.
+[[sabotage]]
+name = "the panel over the terminal does not follow it"
+file = "src/ui/file_panel.cpp"
+find = "\tif (m_overlay && watched == parentWidget() && event->type() == QEvent::Resize)\n\t\tsetGeometry(parentWidget()->rect());\n"
+replace = ""
+expect = "the_file_panel_on_touch_covers_the_terminal_without_resizing_it"
