@@ -124,6 +124,19 @@ jobs:
         run: |
           brew install qt make pkgconf cmake libsixel libsecret openssl@3 zlib
           echo "PKG_CONFIG_PATH=$(brew --prefix openssl@3)/lib/pkgconfig:$(brew --prefix zlib)/lib/pkgconfig" >> "$GITHUB_ENV"
+      # The curated set, as the linux job has it, so the set's tests run
+      # against macOS's font engine too. A cache of its own: a Linux
+      # job's cache does not restore on macOS unless both say they are
+      # cross-OS, and the fetch is portable (shasum where sha256sum lacks).
+      - name: Cache the curated font set
+        id: font-cache
+        uses: actions/cache@v4
+        with:
+          path: fonts
+          key: fonts-macos-${{ hashFiles('tool/fetch-fonts.sh') }}
+      - name: Fetch fonts
+        if: steps.font-cache.outputs.cache-hit != 'true'
+        run: gmake fonts
       - name: Build
         run: gmake QMAKE=qmake
       # The suite too, since 2026-11-09, when the last of its macOS
