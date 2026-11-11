@@ -4226,9 +4226,11 @@ model on a finger.
   (harmonization.md: not extracted in passing). **The other planned
   player, named by the holder 2026-11-11:** a new graphical but tiny
   media player to replace their mplayer use, with some mixing
-  capabilities -- not yet a tree. So the shared part has three likely
-  consumers (this tile, fuzzypickles' player, that one), and the case
-  for one library is stronger; it is still the holder's to start.
+  capabilities. So the shared part has three likely consumers (this
+  tile, fuzzypickles' player, that one). **The holder started it the
+  same day as `snurra`** (`~/src/snurra`, skeleton `b0bceff`): the
+  player and the library, which this media tile is to link -- vendored
+  as softkeys is -- with the SFTP reads as its byte source.
   **Step 3, the phone's form, built 2026-11-11 and not yet seen on a
   device.** On touch the panel lies over the terminal view, its child,
   following its size, rather than beside it: the view keeps its size, so
