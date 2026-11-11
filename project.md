@@ -4211,9 +4211,12 @@ model on a finger.
   playhead-ordered fetch there. So build it here with the source behind
   an interface and nothing of BeerSSH's in the tile or player, and put
   the extraction to the holder as the cross-project decision it is
-  (harmonization.md: not extracted in passing). Which "other planned
-  player" is meant is the holder's to name; fuzzypickles' is the one in
-  a tree today, and hydra hands media to an external player instead.
+  (harmonization.md: not extracted in passing). **The other planned
+  player, named by the holder 2026-11-11:** a new graphical but tiny
+  media player to replace their mplayer use, with some mixing
+  capabilities -- not yet a tree. So the shared part has three likely
+  consumers (this tile, fuzzypickles' player, that one), and the case
+  for one library is stronger; it is still the holder's to start.
   **Step 3, the phone's form, built 2026-11-11 and not yet seen on a
   device.** On touch the panel lies over the terminal view, its child,
   following its size, rather than beside it: the view keeps its size, so
