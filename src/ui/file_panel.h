@@ -65,16 +65,23 @@ public:
 	/* Where a double-clicked file goes; the Downloads folder by default. */
 	void set_download_directory(const QString &directory) { m_download_directory = directory; }
 
+	/* Its width, kept within what leaves the terminal room. */
+	void set_panel_width(int width);
+
 	QSize sizeHint() const override;
 
 signals:
 	/* The close button: the container takes the panel down. */
 	void close_requested();
 
+	/* The grip was dragged and let go at this width. */
+	void width_chosen(int width);
+
 	/* A listing arrived and is shown (or its failure is). */
 	void listed();
 
 protected:
+	bool eventFilter(QObject *watched, QEvent *event) override;
 	void dragEnterEvent(QDragEnterEvent *event) override;
 	void dropEvent(QDropEvent *event) override;
 
@@ -97,6 +104,9 @@ private:
 	QStringList m_removals;
 	QString m_failure;
 
+	QWidget *m_grip;
+	int m_drag_from = -1;
+	int m_drag_width = 0;
 	QLineEdit *m_location;
 	QToolButton *m_up;
 	QTreeWidget *m_list;

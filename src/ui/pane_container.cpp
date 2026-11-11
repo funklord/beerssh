@@ -267,6 +267,10 @@ bssh_terminal_view *bssh_pane_container::add_pane_view(bssh_session *session,
 		connect(panel, &bssh_file_panel::close_requested, this, [this, held] {
 			if (held) set_file_panel_open(held, false);
 		});
+		if (session->file_panel_width() > 0) panel->set_panel_width(session->file_panel_width());
+		connect(panel, &bssh_file_panel::width_chosen, this, [held](int width) {
+			if (held) held->set_file_panel_width(width);
+		});
 		connect(panel, &bssh_file_panel::listed, this, [held, panel] {
 			if (held && !panel->path().isEmpty()) held->set_file_panel_path(panel->path());
 		});

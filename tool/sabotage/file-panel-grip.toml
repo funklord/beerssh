@@ -1,0 +1,27 @@
+# The file panel's grip (project.md sec 6.4): dragged, it resizes the
+# panel and the terminal keeps its share. A widget test, so `make test`
+# is the suite, unlike file-panel.toml's live ones.
+
+# Dragged the wrong way: left narrows the panel instead of widening it.
+[[sabotage]]
+name = "the grip resizes the panel the wrong way"
+file = "src/ui/file_panel.cpp"
+find = "\t\tset_panel_width(m_drag_width + m_drag_from\n\t\t                - static_cast"
+replace = "\t\tset_panel_width(m_drag_width - m_drag_from\n\t\t                + static_cast"
+expect = "the_file_panel_is_widened_by_its_grip"
+
+# No upper bound: the panel can take the whole pane.
+[[sabotage]]
+name = "the panel can squeeze the terminal out"
+file = "src/ui/file_panel.cpp"
+find = "\tconst int most = laid_out ? parentWidget()->width() * 3 / 4 : width;"
+replace = "\tconst int most = width;"
+expect = "the_file_panel_is_widened_by_its_grip"
+
+# The width never reported, so a rebuild forgets it.
+[[sabotage]]
+name = "the width chosen is not reported"
+file = "src/ui/file_panel.cpp"
+find = "\t\temit width_chosen(width());\n"
+replace = ""
+expect = "the_file_panel_is_widened_by_its_grip"

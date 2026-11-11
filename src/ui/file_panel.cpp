@@ -12,6 +12,7 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QMouseEvent>
 #include <QStandardPaths>
 #include <QStyle>
 #include <QToolButton>
@@ -47,9 +48,25 @@ bssh_file_panel::bssh_file_panel(bssh_session *session, QWidget *parent)
 	setObjectName(QStringLiteral("file-panel"));
 	setAcceptDrops(true);
 
-	QVBoxLayout *column = new QVBoxLayout(this);
+	/*
+	 * A grip on the edge it shares with the terminal, dragged to make the
+	 * panel wider or narrower; the width is the session's, as its
+	 * directory is, so a rebuild keeps it.
+	 */
+	QHBoxLayout *edge = new QHBoxLayout(this);
+	edge->setContentsMargins(0, 0, 0, 0);
+	edge->setSpacing(0);
+	m_grip = new QWidget(this);
+	m_grip->setObjectName(QStringLiteral("file-panel-grip"));
+	m_grip->setFixedWidth(5);
+	m_grip->setCursor(Qt::SizeHorCursor);
+	m_grip->setAccessibleName(tr("Drag to resize the file panel"));
+	m_grip->installEventFilter(this);
+	edge->addWidget(m_grip);
+	QVBoxLayout *column = new QVBoxLayout;
 	column->setContentsMargins(4, 4, 4, 4);
 	column->setSpacing(4);
+	edge->addLayout(column, 1);
 
 	/* Up, the path (editable: a typed path is listed on Enter), the
 	 * shell's directory, again, and close. */
@@ -156,6 +173,44 @@ bssh_file_panel::bssh_file_panel(bssh_session *session, QWidget *parent)
 
 QSize bssh_file_panel::sizeHint() const {
 	return QSize(fontMetrics().averageCharWidth() * 40, QWidget::sizeHint().height());
+}
+
+void bssh_file_panel::set_panel_width(int width) {
+	/* No narrower than its buttons fit, and never more than most of the
+	 * pane: the terminal beside it keeps a quarter at least. */
+	const int least = fontMetrics().averageCharWidth() * 20;
+	/* The pane's width means nothing before it is laid out: a restored
+	 * width is taken as it was, the terminal's share kept once dragged. */
+	const bool laid_out = parentWidget() && parentWidget()->isVisible();
+	const int most = laid_out ? parentWidget()->width() * 3 / 4 : width;
+	setFixedWidth(qMax(least, qMin(width, qMax(least, most))));
+}
+
+bool bssh_file_panel::eventFilter(QObject *watched, QEvent *event) {
+	if (watched != m_grip) return QWidget::eventFilter(watched, event);
+	switch (event->type()) {
+	case QEvent::MouseButtonPress: {
+		const QMouseEvent *press = static_cast<QMouseEvent *>(event);
+		if (press->button() != Qt::LeftButton) break;
+		m_drag_from = press->globalPosition().toPoint().x();
+		m_drag_width = width();
+		return true;
+	}
+	case QEvent::MouseMove:
+		if (m_drag_from < 0) break;
+		/* The grip is on the left: dragging left widens the panel. */
+		set_panel_width(m_drag_width + m_drag_from
+		                - static_cast<QMouseEvent *>(event)->globalPosition().toPoint().x());
+		return true;
+	case QEvent::MouseButtonRelease:
+		if (m_drag_from < 0) break;
+		m_drag_from = -1;
+		emit width_chosen(width());
+		return true;
+	default:
+		break;
+	}
+	return QWidget::eventFilter(watched, event);
 }
 
 void bssh_file_panel::open_directory(const QString &path) {

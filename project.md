@@ -4119,8 +4119,11 @@ model on a finger.
   followed, so nothing outside the tree is touched. Several chosen go
   one after another, and a failure stops the rest.
   `the_file_panel_renames_makes_and_removes`; four more sabotages.
-  **Not yet:** the panel's width cannot be dragged; nothing can be
-  dragged out of it to a file manager (a drag needs the file local
+  **Its width is dragged** by a grip on the edge it shares with the
+  terminal, kept by the session as the directory is, and never more than
+  three quarters of the pane (`the_file_panel_is_widened_by_its_grip`,
+  `tool/sabotage/file-panel-grip.toml`).
+  **Not yet:** nothing can be dragged out of it to a file manager (a drag needs the file local
   first); on a phone it would squeeze the terminal, so the entry is off
   on touch until step 3.
   **A reconnect ends a copy on the old transport, and the session says

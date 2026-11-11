@@ -357,6 +357,8 @@ public:
 	void set_file_panel_open(bool open) { m_file_panel_open = open; }
 	QString file_panel_path() const { return m_file_panel_path; }
 	void set_file_panel_path(const QString &path) { m_file_panel_path = path; }
+	int file_panel_width() const { return m_file_panel_width; }
+	void set_file_panel_width(int width) { m_file_panel_width = width; }
 
 	/* An SSH session; a local shell's files are this machine's own. */
 	bool is_remote() const { return !m_profile.local; }
@@ -496,6 +498,7 @@ private:
 	bool m_downloading = false;
 	bool m_file_panel_open = false;
 	QString m_file_panel_path;
+	int m_file_panel_width = 0;   /* 0: its own size */
 	QString m_download_directory;
 	bool m_finding_directory = false;
 	QString m_upload_directory;

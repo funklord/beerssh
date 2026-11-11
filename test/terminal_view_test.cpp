@@ -42,6 +42,7 @@
 #include "ui/interface_scale.h"
 #include "term/font_catalog.h"
 #include "ui/terminal_view.h"
+#include "ui/file_panel.h"
 #include "ui/pane_corner.h"
 #include "ui/input_selector.h"
 #include "model/session_registry.h"
@@ -1625,6 +1626,47 @@ void terminal_view_test::a_long_run_of_text_stays_on_the_grid() {
 			                                          ? QStringLiteral("here") : QStringLiteral("absent"))));
 		}
 	}
+}
+
+void terminal_view_test::the_file_panel_is_widened_by_its_grip() {
+	/*
+	 * The file panel's grip (sec 6.4): dragged left the panel widens by
+	 * as much, the width is reported once on release so the session can
+	 * keep it, and the panel never takes more than three quarters of
+	 * the pane it sits in.
+	 */
+	QWidget frame;
+	frame.resize(800, 400);
+	QHBoxLayout *row = new QHBoxLayout(&frame);
+	QWidget *terminal = new QWidget(&frame);
+	row->addWidget(terminal, 1);
+	bssh_file_panel *panel = new bssh_file_panel(nullptr, &frame);
+	panel->set_panel_width(300);
+	row->addWidget(panel, 0);
+	frame.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&frame));
+	QCOMPARE(panel->width(), 300);
+
+	QWidget *grip = panel->findChild<QWidget *>(QStringLiteral("file-panel-grip"));
+	QVERIFY(grip);
+	QSignalSpy chosen(panel, &bssh_file_panel::width_chosen);
+	QTest::mousePress(grip, Qt::LeftButton, Qt::NoModifier, QPoint(2, 50));
+	QMouseEvent move(QEvent::MouseMove, QPointF(2 - 100, 50), grip->mapToGlobal(QPointF(2 - 100, 50)),
+	                 Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(grip, &move);
+	QCOMPARE(panel->width(), 400);
+	QCOMPARE(chosen.size(), 0);
+	QTest::mouseRelease(grip, Qt::LeftButton, Qt::NoModifier, QPoint(2 - 100, 50));
+	QCOMPARE(chosen.size(), 1);
+	QCOMPARE(chosen.at(0).at(0).toInt(), 400);
+
+	/* Far past the terminal: held at three quarters of the pane. */
+	QTest::mousePress(grip, Qt::LeftButton, Qt::NoModifier, QPoint(2, 50));
+	QMouseEvent far(QEvent::MouseMove, QPointF(2 - 2000, 50), grip->mapToGlobal(QPointF(2 - 2000, 50)),
+	                Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(grip, &far);
+	QTest::mouseRelease(grip, Qt::LeftButton, Qt::NoModifier, QPoint(2, 50));
+	QCOMPARE(panel->width(), frame.width() * 3 / 4);
 }
 
 void terminal_view_test::the_terminal_reads_itself_to_assistive_technology() {
