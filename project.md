@@ -4172,9 +4172,48 @@ model on a finger.
   modification time not carried over; and the host key was written to
   `known_hosts` within seconds of the first connect -- whether a dialog
   asked first is the holder's to say, and if none did, an unknown host
-  was trusted unasked. The test's line was removed afterwards. Unmeasured: whether
+  was trusted unasked -- **it did ask: the holder accepted the dialog**,
+  so trust is fine. The lost modification time went to the `tde` inbox
+  (20261111T1202Z) to be carried upstream with the XDS request, as the
+  holder asked. The test's line was removed afterwards. Unmeasured: whether
   Nautilus 43 and later (GTK4) still take XDS; Finder's file promises
   are the macOS equivalent and would need native code.
+- **Planned 2026-11-11 (the holder): transfers as tiles, and a media
+  player in the same shape -- [PLAN, not built].**
+  *Transfer tiles.* The copies move from the two fixed rows to a stack
+  of tiles at the bottom of the file panel, one per transfer, several at
+  once: name, direction, bytes and a bar, **Pause** and **X** (stop, and
+  remove the half-written file, as Stop does now). A finished tile stays
+  until closed, a failed one says why. What it needs underneath:
+  (1) the transport keeps a queue of jobs per direction instead of
+  refusing a second copy ("a copy is still running"), each with an id
+  the tile carries; (2) pause holds a job between pieces -- nothing
+  half-done on the wire, since each piece is a whole read or write --
+  and resume continues at its offset; (3) a kept session's move to
+  another process stays refused while any job is queued, paused or
+  running, as now for one. Rejected: a global transfers window
+  (FileZilla's queue pane) -- away from the files it moves.
+  *A media tile on Android.* A file activated in the panel that Qt's
+  multimedia can play opens a tile in the same stack, play/pause and a
+  seek bar, playing **from the host over this connection** rather than
+  after a copy: a QIODevice whose reads are SFTP reads at an offset
+  (`sftp_seek64` then `sftp_read`), so a seek is a jump, not a download.
+  fuzzypickles solved the hard half already: its player reads a
+  QIODevice that can run dry, pauses while it does, and offers seeking
+  only where it cannot stall (its project.md, "The player people
+  actually use", 2026-09-06). Cost to weigh before building: Qt
+  Multimedia and its FFmpeg backend add several MB to the APK, and the
+  backend's read pattern over a link with real latency is unmeasured.
+  *Shared with fuzznet and the other player?* Recommended **yes, as one
+  library later, not by copying now**: the tile (bar, pause, X, the
+  stack) and the player's stall-aware source are the same in every
+  consumer, while the byte source differs -- SFTP here, fuzznet's
+  playhead-ordered fetch there. So build it here with the source behind
+  an interface and nothing of BeerSSH's in the tile or player, and put
+  the extraction to the holder as the cross-project decision it is
+  (harmonization.md: not extracted in passing). Which "other planned
+  player" is meant is the holder's to name; fuzzypickles' is the one in
+  a tree today, and hydra hands media to an external player instead.
   **Step 3, the phone's form, built 2026-11-11 and not yet seen on a
   device.** On touch the panel lies over the terminal view, its child,
   following its size, rather than beside it: the view keeps its size, so
