@@ -13,6 +13,7 @@
 #include <QMessageBox>
 #include <QMimeData>
 #include <QMouseEvent>
+#include <QProgressBar>
 #include <QStandardPaths>
 #include <QStyle>
 #include <QToolButton>
@@ -123,16 +124,17 @@ bssh_file_panel::bssh_file_panel(bssh_session *session, QWidget *parent)
 	m_list->header()->setSectionResizeMode(MODIFIED, QHeaderView::ResizeToContents);
 	column->addWidget(m_list, 1);
 
-	QHBoxLayout *foot = new QHBoxLayout;
+	/*
+	 * The listing's own line, then one row per direction of copy with a
+	 * bar and its own Stop: browsing while a copy runs no longer writes
+	 * over its progress, and a copy up and one back can be watched and
+	 * stopped apart.
+	 */
 	m_status = new QLabel(this);
 	m_status->setWordWrap(true);
-	foot->addWidget(m_status, 1);
-	m_stop = new QToolButton(this);
-	m_stop->setText(tr("Stop"));
-	m_stop->setAccessibleName(tr("Stop the copy"));
-	m_stop->hide();
-	foot->addWidget(m_stop);
-	column->addLayout(foot);
+	column->addWidget(m_status);
+	m_copy_back = make_copy_row(column, tr("Stop copying here"));
+	m_copy_up = make_copy_row(column, tr("Stop copying there"));
 
 	connect(m_up, &QToolButton::clicked, this, [this] {
 		if (!m_path.isEmpty()) open_directory(parent_of(m_path));
@@ -148,10 +150,11 @@ bssh_file_panel::bssh_file_panel(bssh_session *session, QWidget *parent)
 	connect(more, &QToolButton::clicked, this, [this, more] {
 		show_menu(more->mapToGlobal(QPoint(0, more->height())));
 	});
-	connect(m_stop, &QToolButton::clicked, this, [this] {
-		if (!m_session) return;
-		if (m_session->download_in_progress()) m_session->cancel_download();
-		if (m_session->upload_in_progress()) m_session->cancel_upload();
+	connect(m_copy_back.stop, &QToolButton::clicked, this, [this] {
+		if (m_session && m_session->download_in_progress()) m_session->cancel_download();
+	});
+	connect(m_copy_up.stop, &QToolButton::clicked, this, [this] {
+		if (m_session && m_session->upload_in_progress()) m_session->cancel_upload();
 	});
 
 	if (!m_session) return;
@@ -164,27 +167,69 @@ bssh_file_panel::bssh_file_panel(bssh_session *session, QWidget *parent)
 	});
 	connect(m_session, &bssh_session::remote_changed, this, &bssh_file_panel::changed);
 	connect(m_session, &bssh_session::download_progress, this, [this](qint64 done, qint64 total) {
-		say(tr("Copying here: %1 of %2").arg(QLocale().formattedDataSize(done),
-		                                     QLocale().formattedDataSize(total)), true);
+		show_copy(m_copy_back, tr("Copying here"), done, total);
 	});
 	connect(m_session, &bssh_session::download_finished, this,
 	        [this](bool ok, const QString &directory, const QStringList &written, const QString &why) {
-		if (ok) say(tr("Copied %1 to %2").arg(written.join(QStringLiteral(", ")), directory));
-		else if (why == QLatin1String(BSSH_COPY_STOPPED)) say(tr("Copy stopped"));
-		else say(tr("Copy failed: %1").arg(why));
+		end_copy(m_copy_back, ok, directory, written, why);
 	});
 	connect(m_session, &bssh_session::upload_progress, this, [this](qint64 done, qint64 total) {
-		say(tr("Copying there: %1 of %2").arg(QLocale().formattedDataSize(done),
-		                                      QLocale().formattedDataSize(total)), true);
+		show_copy(m_copy_up, tr("Copying there"), done, total);
 	});
 	connect(m_session, &bssh_session::upload_finished, this,
 	        [this](bool ok, const QString &directory, const QStringList &written, const QString &why) {
-		if (ok) say(tr("Copied %1 to %2").arg(written.join(QStringLiteral(", ")), directory));
-		else if (why == QLatin1String(BSSH_COPY_STOPPED)) say(tr("Copy stopped"));
-		else say(tr("Copy failed: %1").arg(why));
+		end_copy(m_copy_up, ok, directory, written, why);
 		/* What arrived in the directory shown is shown. */
 		if (directory == m_path || directory.isEmpty()) open_directory(m_path);
 	});
+}
+
+bssh_file_panel::copy_row bssh_file_panel::make_copy_row(QVBoxLayout *column, const QString &stop_name) {
+	copy_row row;
+	row.row = new QWidget(this);
+	QVBoxLayout *stack = new QVBoxLayout(row.row);
+	stack->setContentsMargins(0, 0, 0, 0);
+	stack->setSpacing(2);
+	row.label = new QLabel(row.row);
+	row.label->setWordWrap(true);
+	stack->addWidget(row.label);
+	QHBoxLayout *line = new QHBoxLayout;
+	row.bar = new QProgressBar(row.row);
+	row.bar->setTextVisible(true);
+	line->addWidget(row.bar, 1);
+	row.stop = new QToolButton(row.row);
+	row.stop->setText(tr("Stop"));
+	row.stop->setAccessibleName(stop_name);
+	line->addWidget(row.stop);
+	stack->addLayout(line);
+	row.row->hide();
+	column->addWidget(row.row);
+	return row;
+}
+
+void bssh_file_panel::show_copy(const copy_row &row, const QString &verb, qint64 done, qint64 total) {
+	/*
+	 * In kilobytes, so a file past 2 GiB fits the bar's int range. A
+	 * directory copied back is listed as it goes, so its total grows and
+	 * the bar can step back; the label says the bytes either way.
+	 */
+	row.label->setText(tr("%1: %2 of %3").arg(verb, QLocale().formattedDataSize(done),
+	                                          QLocale().formattedDataSize(total)));
+	row.bar->setRange(0, int(qMax<qint64>(1, total / 1024)));
+	row.bar->setValue(int(qMin(done, total) / 1024));
+	row.bar->show();
+	row.stop->show();
+	row.row->show();
+}
+
+void bssh_file_panel::end_copy(const copy_row &row, bool ok, const QString &directory,
+                               const QStringList &written, const QString &why) {
+	if (ok) row.label->setText(tr("Copied %1 to %2").arg(written.join(QStringLiteral(", ")), directory));
+	else if (why == QLatin1String(BSSH_COPY_STOPPED)) row.label->setText(tr("Copy stopped"));
+	else row.label->setText(tr("Copy failed: %1").arg(why));
+	row.bar->hide();
+	row.stop->hide();
+	row.row->show();
 }
 
 QSize bssh_file_panel::sizeHint() const {
@@ -343,7 +388,7 @@ void bssh_file_panel::copy_selected_elsewhere() {
 void bssh_file_panel::copy_selected_to(const QString &directory) {
 	if (!m_session || directory.isEmpty()) return;
 	if (m_session->download_in_progress()) {
-		say(tr("A copy is still running; stop it or let it finish"), true);
+		say(tr("A copy is still running; stop it or let it finish"));
 		return;
 	}
 	QStringList paths;
@@ -461,9 +506,8 @@ void bssh_file_panel::changed(bool ok, const QString &path, const QString &why) 
 	if (!ok) m_failure = tr("Could not change %1: %2").arg(path, why);
 }
 
-void bssh_file_panel::say(const QString &text, bool stoppable) {
+void bssh_file_panel::say(const QString &text) {
 	m_status->setText(text);
-	m_stop->setVisible(stoppable);
 }
 
 void bssh_file_panel::dragEnterEvent(QDragEnterEvent *event) {
@@ -486,7 +530,7 @@ void bssh_file_panel::dropEvent(QDropEvent *event) {
 bool bssh_file_panel::copy_here(const QStringList &paths) {
 	if (!m_session || m_path.isEmpty() || paths.isEmpty()) return false;
 	if (m_session->upload_in_progress()) {
-		say(tr("A copy is still running; stop it or let it finish"), true);
+		say(tr("A copy is still running; stop it or let it finish"));
 		return false;
 	}
 	m_session->upload(paths, m_path);

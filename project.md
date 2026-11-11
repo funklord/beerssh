@@ -4123,11 +4123,58 @@ model on a finger.
   terminal, kept by the session as the directory is, and never more than
   three quarters of the pane (`the_file_panel_is_widened_by_its_grip`,
   `tool/sabotage/file-panel-grip.toml`).
-  **Declined: dragging a file out to a file manager.** The drop asks
-  for the file's bytes at the moment of the drop (XDND and the like),
-  while the copy runs on the SSH worker a piece at a time; answering
-  would mean blocking the window until the file arrived, the freeze the
-  piecewise copy exists to avoid. "Copy to..." names the place instead.
+  **Browsing goes on while a copy runs, measured 2026-11-11.** The
+  holder: "most SSH tools have poor interactive concurrency behaviour".
+  A listing, a copy back, a copy up and a removal are separate jobs on
+  the worker, each a piece a turn, so they take turns with each other
+  and with the shell's output; one copy per direction at a time.
+  `browsing_goes_on_while_a_copy_runs`: five listings asked one after
+  another from a 100 MB copy back's first report, all five answered
+  while it still ran, the slowest in 50 ms on loopback; a sabotage that
+  holds listings until the copy ends is caught. A directory copied back
+  is read 64 entries a turn as a listing is, no longer in one go. Each
+  direction has a row of its own with a bar and a Stop, below the
+  listing's line, so browsing no longer writes over a copy's progress;
+  a directory's total grows as it is read, so its bar can step back.
+  **Dragging a file out to a file manager -- [DECIDED 2026-11-11, the
+  holder: XDS and sftp://, to build].** The drop asks for the file at
+  the moment of the drop, while the copy takes time; holding the drop
+  until it arrives freezes the file manager and times out on a large
+  file (rejected). So the drag offers two things: XDS ("direct save",
+  X11), where the file manager names the folder at the drop and the
+  copy runs over this connection in the background -- File Roller's
+  way out of an archive, taken by Nautilus, Dolphin, Thunar and
+  PCManFM; Qt has no API for it, so raw xcb on the drag's window -- and
+  an `sftp://user@host/path` link for any other target and for Wayland,
+  which the file manager fetches itself through GVfs or KIO: a second
+  connection with its own login, knowing BeerSSH's jump host or key only
+  where `~/.ssh/config` says the same. Also rejected: copy first and
+  drag when ready (a large file cannot be dragged until it has
+  arrived).
+  **The link as seldom as possible** (the holder, the same day: "What
+  about TDE? We want to avoid sftp:// linking for as many cases as
+  possible"). TDE's Konqueror takes no XDS -- konqueror-trinity and
+  libkonq4-trinity 14.2.0~pre928 contain no `XdndDirectSave`, libkonq
+  knows `text/uri-list` only -- so a request went to the `tde` tree's
+  inbox (20261111T1149Z) with the receiving side of the protocol; it is
+  that tree's to carry. Here the order at a drop becomes: XDS where the
+  target speaks it; KDE's Ark drag-out over D-Bus, which Dolphin takes
+  on Wayland too; else a `file://` link to a copy staged from the moment
+  the drag began, when it has finished -- a small file is there before
+  it is dropped; and `sftp://` only for a large file still copying,
+  dropped where no deferred protocol is spoken. **Konqueror's sftp://
+  checked 2026-11-11** (the holder: "probably broken by now"): TDE's
+  `tdeio_sftp` links the system libssh, Debian's 0.11.5 -- the version
+  vendored here -- through its current API, so the protocol has not
+  rotted. `kfmclient copy` from a throwaway sshd on 127.0.0.1, the key
+  from the session's agent: a text file and 3 MB of random bytes arrived
+  identical. Two faults: both copies were dated 1970-01-01, the
+  modification time not carried over; and the host key was written to
+  `known_hosts` within seconds of the first connect -- whether a dialog
+  asked first is the holder's to say, and if none did, an unknown host
+  was trusted unasked. The test's line was removed afterwards. Unmeasured: whether
+  Nautilus 43 and later (GTK4) still take XDS; Finder's file promises
+  are the macOS equivalent and would need native code.
   **Step 3, the phone's form, built 2026-11-11 and not yet seen on a
   device.** On touch the panel lies over the terminal view, its child,
   following its size, rather than beside it: the view keeps its size, so

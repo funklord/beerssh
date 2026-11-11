@@ -398,6 +398,9 @@ private:
 	struct download_job {
 		sftp_session sftp = nullptr;
 		sftp_file file = nullptr;
+		/* The directory being read, and what it held so far. */
+		sftp_dir dir = nullptr;
+		QList<download_item> inside;
 		QFile target;
 		QList<download_item> items;
 		int at = 0;
@@ -1732,21 +1735,41 @@ void bssh_libssh_worker::step_download() {
 		}
 		const download_item item = job.items.at(job.at);
 		if (item.directory) {
-			if (!QDir().mkdir(item.local)) {
-				finish_download(false, QStringLiteral("could not make %1").arg(item.local));
-				return;
+			/*
+			 * Made here, then read 64 entries a turn as a listing is, its
+			 * contents put after it once it is all read. A link to a
+			 * directory is not followed, as the upload does not follow
+			 * one: a loop would copy for ever.
+			 */
+			if (!job.dir) {
+				if (!QDir().mkdir(item.local)) {
+					finish_download(false, QStringLiteral("could not make %1").arg(item.local));
+					return;
+				}
+				job.dir = sftp_opendir(job.sftp, item.remote.toUtf8().constData());
+				if (!job.dir) {
+					finish_download(false, QStringLiteral("could not read %1: %2")
+					                               .arg(item.remote, sftp_error_of(job.sftp)));
+					return;
+				}
+				job.inside.clear();
 			}
-			/* Its contents next, in the order the server lists them. A link
-			 * to a directory is not followed, as the upload does not follow
-			 * one: a loop would copy for ever. */
-			sftp_dir dir = sftp_opendir(job.sftp, item.remote.toUtf8().constData());
-			if (!dir) {
-				finish_download(false, QStringLiteral("could not read %1: %2")
-				                               .arg(item.remote, sftp_error_of(job.sftp)));
-				return;
-			}
-			QList<download_item> inside;
-			while (sftp_attributes attributes = sftp_readdir(job.sftp, dir)) {
+			for (int n = 0; n < 64; ++n) {
+				sftp_attributes attributes = sftp_readdir(job.sftp, job.dir);
+				if (!attributes) {
+					const bool complete = sftp_dir_eof(job.dir);
+					sftp_closedir(job.dir);
+					job.dir = nullptr;
+					if (!complete) {
+						finish_download(false, QStringLiteral("could not read %1: %2")
+						                               .arg(item.remote, sftp_error_of(job.sftp)));
+						return;
+					}
+					for (int i = 0; i < job.inside.size(); ++i) job.items.insert(job.at + 1 + i, job.inside.at(i));
+					job.inside.clear();
+					++job.at;
+					break;
+				}
 				const QString name = QString::fromUtf8(attributes->name);
 				const quint8 type = attributes->type;
 				const qint64 size = qint64(attributes->size);
@@ -1759,24 +1782,15 @@ void bssh_libssh_worker::step_download() {
 					const qint64 target_size = qint64(target->size);
 					sftp_attributes_free(target);
 					if (to_directory) continue;
-					inside.append({ joined(item.remote, name), joined(item.local, name), false });
+					job.inside.append({ joined(item.remote, name), joined(item.local, name), false });
 					job.total += target_size;
 					continue;
 				}
 				if (type != SSH_FILEXFER_TYPE_REGULAR && type != SSH_FILEXFER_TYPE_DIRECTORY) continue;
 				const bool is_directory = type == SSH_FILEXFER_TYPE_DIRECTORY;
-				inside.append({ joined(item.remote, name), joined(item.local, name), is_directory });
+				job.inside.append({ joined(item.remote, name), joined(item.local, name), is_directory });
 				if (!is_directory) job.total += size;
 			}
-			const bool complete = sftp_dir_eof(dir);
-			sftp_closedir(dir);
-			if (!complete) {
-				finish_download(false, QStringLiteral("could not read %1: %2")
-				                               .arg(item.remote, sftp_error_of(job.sftp)));
-				return;
-			}
-			for (int i = 0; i < inside.size(); ++i) job.items.insert(job.at + 1 + i, inside.at(i));
-			++job.at;
 			QTimer::singleShot(0, this, &bssh_libssh_worker::step_download);
 			return;
 		}
@@ -1833,6 +1847,10 @@ void bssh_libssh_worker::do_cancel_download() {
  * connection is still there. */
 void bssh_libssh_worker::drop_partial_download() {
 	download_job &job = *m_download;
+	if (job.dir) {
+		sftp_closedir(job.dir);
+		job.dir = nullptr;
+	}
 	if (job.file) {
 		sftp_close(job.file);
 		job.file = nullptr;

@@ -9,6 +9,8 @@
 
 class QLabel;
 class QLineEdit;
+class QProgressBar;
+class QVBoxLayout;
 class QToolButton;
 class QTreeWidget;
 class QTreeWidgetItem;
@@ -95,7 +97,7 @@ private:
 	void copy_selected_to(const QString &directory);
 	void show_menu(const QPoint &global);
 	void copy_selected_elsewhere();
-	void say(const QString &text, bool stoppable = false);
+	void say(const QString &text);
 	QString remote_path_of(const bssh_remote_entry_t &entry) const;
 	QString path_here(const QString &name) const;
 	void changed(bool ok, const QString &path, const QString &why);
@@ -117,7 +119,20 @@ private:
 	QToolButton *m_up;
 	QTreeWidget *m_list;
 	QLabel *m_status;
-	QToolButton *m_stop;
+
+	/* A copy's row: what and how far, its bar, its Stop. */
+	struct copy_row {
+		QWidget *row = nullptr;
+		QLabel *label = nullptr;
+		QProgressBar *bar = nullptr;
+		QToolButton *stop = nullptr;
+	};
+	copy_row make_copy_row(QVBoxLayout *column, const QString &stop_name);
+	void show_copy(const copy_row &row, const QString &verb, qint64 done, qint64 total);
+	void end_copy(const copy_row &row, bool ok, const QString &directory, const QStringList &written,
+	              const QString &why);
+	copy_row m_copy_back;
+	copy_row m_copy_up;
 };
 
 #endif /* BSSH_FILE_PANEL_H */

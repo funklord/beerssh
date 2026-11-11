@@ -1765,6 +1765,69 @@ void live_ssh_test::the_file_panel_renames_makes_and_removes()
 	delete session;
 }
 
+void live_ssh_test::browsing_goes_on_while_a_copy_runs()
+{
+	if (!server_available()) return;
+	if (!fresh_connection_expected()) {
+		QSKIP("this phase has taken the link down or swapped the key before "
+		       "here; a fresh connection cannot authenticate by design");
+	}
+
+	/*
+	 * The panel browses while a copy runs (sec 6.4): the copy and a
+	 * listing are separate jobs on the worker, each a piece per turn, so
+	 * a listing asked for mid-copy is answered between the copy's pieces
+	 * rather than after it. Five listings, one after another from the
+	 * copy's first report, every one answered while the copy is still
+	 * going -- a listing that waited for the copy would arrive after it.
+	 */
+	QTemporaryDir there;
+	QTemporaryDir here;
+	QVERIFY(there.isValid() && here.isValid());
+	{
+		QFile big(there.filePath(QStringLiteral("big.bin")));
+		QVERIFY(big.open(QIODevice::WriteOnly));
+		const QByteArray block(1024 * 1024, 'b');
+		for (int i = 0; i < 100; ++i) big.write(block);
+	}
+	QVERIFY(QDir(there.path()).mkdir(QStringLiteral("inner")));
+
+	bssh_session *session = connected_session(QStringLiteral("browse-while-copying"));
+	QVERIFY2(session, "the test server did not take the connection");
+	bool copying = false;
+	bool copied = false;
+	int answered_mid_copy = 0;
+	int answered = 0;
+	qint64 slowest = 0;
+	QElapsedTimer asked;
+	QObject::connect(session, &bssh_session::directory_listed, session,
+	                  [&](const QString &, const QList<bssh_remote_entry_t> &, const QString &) {
+		++answered;
+		slowest = qMax(slowest, asked.elapsed());
+		if (!copied) ++answered_mid_copy;
+		if (answered < 5) {
+			asked.restart();
+			session->list_directory(answered % 2 ? there.filePath(QStringLiteral("inner")) : there.path());
+		}
+	});
+	QObject::connect(session, &bssh_session::download_progress, session, [&](qint64 done, qint64) {
+		if (done <= 0 || copying) return;
+		copying = true;
+		asked.start();
+		session->list_directory(there.path());
+	});
+	QObject::connect(session, &bssh_session::download_finished, session,
+	                  [&](bool, const QString &, const QStringList &, const QString &) { copied = true; });
+	session->download({ there.filePath(QStringLiteral("big.bin")) }, here.path());
+	QTRY_VERIFY_WITH_TIMEOUT(copied && answered == 5, 60000);
+	QVERIFY2(answered_mid_copy == 5,
+	         qPrintable(QStringLiteral("%1 of 5 listings were answered while the copy ran; the slowest took %2 ms")
+	                            .arg(answered_mid_copy).arg(slowest)));
+	QCOMPARE(QFileInfo(here.filePath(QStringLiteral("big.bin"))).size(), qint64(100 * 1024 * 1024));
+	qInfo("browsing during a 100 MB copy: the slowest of 5 listings took %lld ms", slowest);
+	delete session;
+}
+
 void live_ssh_test::a_restarted_shell_runs_its_command_on_the_same_connection()
 {
 	if (!server_available()) return;

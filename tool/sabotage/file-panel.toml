@@ -105,3 +105,12 @@ file = "src/ui/file_panel.cpp"
 find = "\tif (ok && !m_removals.isEmpty()) {"
 replace = "\tif (false) {"
 expect = "the_file_panel_renames_makes_and_removes"
+
+# A listing held until a copy back ends: browsing stops while a file
+# copies, which is what most SSH tools do.
+[[sabotage]]
+name = "a listing waits for the copy"
+file = "src/ssh/ssh_session_libssh.cpp"
+find = "\tif (!m_list) {\n\t\tif (m_list_queue.isEmpty()) return;\n"
+replace = "\tif (!m_list) {\n\t\tif (m_list_queue.isEmpty()) return;\n\t\tif (m_download) {\n\t\t\tQTimer::singleShot(10, this, &bssh_libssh_worker::step_list);\n\t\t\treturn;\n\t\t}\n"
+expect = "browsing_goes_on_while_a_copy_runs"
