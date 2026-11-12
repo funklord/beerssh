@@ -41,6 +41,18 @@ public:
 	void enable_direct_save(std::function<QByteArray()> save) { m_direct_save = std::move(save); }
 	bool direct_save() const { return bool(m_direct_save); }
 
+	/*
+	 * KDE's way, Ark's drag-out: the drag names a D-Bus service and object
+	 * on this process, and Dolphin -- on Wayland too, where XDS cannot
+	 * reach -- calls org.kde.ark.DndExtract.extractSelectedFilesTo on it
+	 * with the folder dropped on. The panel registers the object.
+	 */
+	void enable_ark(const QString &service, const QString &path) {
+		m_ark_service = service;
+		m_ark_path = path;
+	}
+	bool ark() const { return !m_ark_path.isEmpty(); }
+
 	QStringList formats() const override;
 	bool hasFormat(const QString &mime) const override;
 
@@ -51,6 +63,28 @@ private:
 	QList<QUrl> m_remote;
 	QList<QUrl> m_local;
 	std::function<QByteArray()> m_direct_save;
+	QString m_ark_service;
+	QString m_ark_path;
+};
+
+/*
+ * The object Dolphin calls at an Ark-style drop: one method, the folder
+ * dropped on, answered by the panel's save -- a copy here, its progress
+ * in the copy-back row.
+ */
+class bssh_ark_extract : public QObject {
+	Q_OBJECT
+	Q_CLASSINFO("D-Bus Interface", "org.kde.ark.DndExtract")
+
+public:
+	explicit bssh_ark_extract(std::function<void(const QString &)> save, QObject *parent = nullptr)
+	    : QObject(parent), m_save(std::move(save)) {}
+
+public slots:
+	void extractSelectedFilesTo(const QString &path) { if (m_save) m_save(path); }
+
+private:
+	std::function<void(const QString &)> m_save;
 };
 
 /*

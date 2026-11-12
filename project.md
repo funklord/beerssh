@@ -4016,6 +4016,15 @@ model on a finger.
 | Scroll | Wheel, `Shift+PgUp/PgDn` | Drag, under §8.7's scroll mode — **built**, not `QScroller` |
 | Drop a file | A menu: copy it to the shell's directory, or paste its path shell-quoted — **built 2026-10-31** | No system drag source in practice |
 
+- **Open, seen once 2026-11-12: `a_long_press_selects_and_handles_adjust_it`
+  failed** ("a long press selected nothing") in a `make test` run straight
+  after a check-ssh sabotage run, the machine's load about 9 from other
+  work. Not reproduced since: 10 runs of the test alone and 3 of its whole
+  class, under the same load. The change in flight (the file panel's drag
+  out) touches neither the view's long press nor its test. A long press is
+  timed, so load is a candidate -- not a finding; the cause is not
+  established, and a second sighting should be read against this one.
+
 - **Dropped files are copied to where the shell is -- [BUILT 2026-10-31].**
   The holder: "we should support file copying via drag and drop, to the cwd,
   how can this be achieved in a terminal-agnostic way?", and on the choices:
@@ -4227,6 +4236,28 @@ model on a finger.
   stop) and one with nothing staging (it begins at once), each with a
   sabotage; the first version took one road only, and its sabotage of
   the other was missed. Not yet seen with a real file manager.
+  **Ark's protocol built 2026-11-12** -- KDE's, and Dolphin's on Wayland,
+  where XDS cannot reach. The drag carries
+  `application/x-kde-ark-dndextract-service` and `-path`, naming this
+  process's session-bus name and an object the panel registers for the
+  drag (`/beerssh/drag/<n>`, interface `org.kde.ark.DndExtract`); at the
+  drop Dolphin calls `extractSelectedFilesTo(folder)`, and the copy runs
+  here as XDS's does. Any number of entries. The object is the panel's,
+  not the drag's -- Dolphin calls after the drop, when the drag's data is
+  gone -- and is taken off the bus 30 s after the drag ends.
+  `a_file_dragged_out_is_saved_where_dolphin_says` makes Dolphin's call
+  over a private bus (`dbus-run-session`, in check-ssh's X step). The
+  protocol is read from how Ark and Dolphin use it, as recalled, and not
+  yet seen with a real Dolphin -- the names are the ones to check first if
+  it does not take.
+  **The FUSE fallback speaks the kernel's protocol itself -- [DECIDED
+  2026-11-12, the holder].** libfuse3's runtime is on this machine but
+  not its headers; linking it would add a build and package dependency
+  and need `libfuse3-dev` in every build image. Instead BeerSSH reads and
+  answers `/dev/fuse` itself against `linux/fuse.h` (kernel ABI 7.41 here)
+  and mounts through `fusermount3`, as libfuse does: read-only, a handful
+  of operations -- INIT, LOOKUP, GETATTR, OPEN, READ, READDIR, RELEASE,
+  FORGET, DESTROY. Not started.
   **Konqueror's sftp://
   checked 2026-11-11** (the holder: "probably broken by now"): TDE's
   `tdeio_sftp` links the system libssh, Debian's 0.11.5 -- the version

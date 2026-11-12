@@ -23,6 +23,9 @@
 
 #include <pwd.h>
 #include <QGuiApplication>
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusPendingCall>
 #if QT_CONFIG(xcb)
 #include <xcb/xcb.h>
 #endif
@@ -2085,6 +2088,66 @@ void live_ssh_test::a_file_dragged_out_is_saved_where_the_file_manager_says()
 #else
 	QSKIP("built without X11");
 #endif
+}
+
+void live_ssh_test::a_file_dragged_out_is_saved_where_dolphin_says()
+{
+	if (!QDBusConnection::sessionBus().isConnected())
+		QSKIP("no session bus: check-ssh starts one with dbus-run-session where it is installed");
+	if (!server_available()) return;
+	if (!fresh_connection_expected()) {
+		QSKIP("this phase has taken the link down or swapped the key before "
+		       "here; a fresh connection cannot authenticate by design");
+	}
+
+	/*
+	 * KDE's way (sec 6.4), Ark's drag-out: the drag names a service and
+	 * an object on this process's session bus; Dolphin calls
+	 * org.kde.ark.DndExtract.extractSelectedFilesTo on it with the folder
+	 * it was dropped on, and the copy runs here into that folder. Played
+	 * here as Dolphin plays it, over the bus.
+	 */
+	QTemporaryDir there;
+	QTemporaryDir here;
+	QVERIFY(there.isValid() && here.isValid());
+	QByteArray bytes(512 * 1024, '\0');
+	for (int i = 0; i < bytes.size(); ++i) bytes[i] = char(i * 17 + 3);
+	{
+		QFile file(there.filePath(QStringLiteral("dolphin.bin")));
+		QVERIFY(file.open(QIODevice::WriteOnly));
+		file.write(bytes);
+	}
+
+	bssh_session *session = connected_session(QStringLiteral("ark-test"));
+	QVERIFY2(session, "the test server did not take the connection");
+	bssh_file_panel panel(session);
+	QSignalSpy listed(&panel, &bssh_file_panel::listed);
+	panel.open_directory(there.path());
+	QTRY_VERIFY_WITH_TIMEOUT(listed.size() == 1, 15000);
+	QTreeWidget *list = panel.findChild<QTreeWidget *>(QStringLiteral("file-panel-list"));
+	QVERIFY(list && list->topLevelItemCount() == 1);
+	list->topLevelItem(0)->setSelected(true);
+	panel.set_staging_limit(0);   /* nothing staged: the call is the copy */
+
+	QSignalSpy finished(session, &bssh_session::download_finished);
+	QPointer<bssh_remote_drag> data = panel.drag_data_for_selection();
+	QVERIFY(data && data->ark());
+	const QString service = QString::fromUtf8(data->data(QStringLiteral("application/x-kde-ark-dndextract-service")));
+	const QString object = QString::fromUtf8(data->data(QStringLiteral("application/x-kde-ark-dndextract-path")));
+	QVERIFY(!service.isEmpty() && object.startsWith(QLatin1Char('/')));
+
+	/* Dolphin's call, after the drop. */
+	QDBusMessage call = QDBusMessage::createMethodCall(service, object, QStringLiteral("org.kde.ark.DndExtract"),
+	                                                   QStringLiteral("extractSelectedFilesTo"));
+	call << here.path();
+	QDBusConnection::sessionBus().asyncCall(call);
+	QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty() && finished.last().at(1).toString() == here.path(), 20000);
+	QVERIFY2(finished.last().at(0).toBool(), qPrintable(finished.last().at(3).toString()));
+	QFile arrived(here.filePath(QStringLiteral("dolphin.bin")));
+	QVERIFY(arrived.open(QIODevice::ReadOnly));
+	QVERIFY2(arrived.readAll() == bytes, "the copy Dolphin asked for differs from the host's");
+	delete data;
+	delete session;
 }
 
 void live_ssh_test::a_restarted_shell_runs_its_command_on_the_same_connection()

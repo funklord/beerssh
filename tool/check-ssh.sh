@@ -163,15 +163,21 @@ fi
 echo "check-ssh: phase 1 -- authentication, and trusting this host key"
 run_phase trust
 
-# The one test that needs a real X server: the file panel's XDS drag
-# (project.md sec 6.4), on a virtual one, with the phase's trust in place.
-# Said, not skipped in silence, where xvfb-run is not installed.
+# The two tests that need a desktop's plumbing: the file panel's XDS drag
+# on a real X server, and its Ark drag over a session bus (project.md
+# sec 6.4) -- on a virtual server and a private bus, with the phase's
+# trust in place. Said, not skipped in silence, where either tool is
+# missing; each test also says why it skipped.
 if command -v xvfb-run >/dev/null 2>&1; then
-	echo "check-ssh: phase 1 under a virtual X server -- the XDS drag"
-	(export BSSH_TEST_PLATFORM=xcb BSSH_TEST_WRAP="xvfb-run -a" BSSH_TEST_CLASSES=live_ssh_test
-	 run_phase trust a_file_dragged_out_is_saved_where_the_file_manager_says)
+	wrap="xvfb-run -a"
+	command -v dbus-run-session >/dev/null 2>&1 && wrap="$wrap dbus-run-session --" ||
+		echo "check-ssh: no dbus-run-session here, so the Ark drag is not checked"
+	echo "check-ssh: phase 1 under a virtual X server -- the XDS and Ark drags"
+	(export BSSH_TEST_PLATFORM=xcb BSSH_TEST_WRAP="$wrap" BSSH_TEST_CLASSES=live_ssh_test
+	 run_phase trust a_file_dragged_out_is_saved_where_the_file_manager_says \
+	                 a_file_dragged_out_is_saved_where_dolphin_says)
 else
-	echo "check-ssh: no xvfb-run here, so the XDS drag is not checked"
+	echo "check-ssh: no xvfb-run here, so the XDS and Ark drags are not checked"
 fi
 
 # The decisive check on what beerssh wrote: ssh(1) itself, in a mode

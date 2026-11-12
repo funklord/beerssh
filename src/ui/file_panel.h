@@ -140,6 +140,10 @@ private:
 	QStringList m_after_discard_paths;
 	QString m_after_discard_dir;
 	QByteArray direct_save(const QStringList &paths);
+	bool save_into(const QStringList &paths, const QString &folder);
+	QString m_ark_path;   /* the drag's D-Bus object, while it is registered */
+	QPointer<QObject> m_ark_object;
+	void drop_ark();
 	void set_direct_save_name(const QString &name);
 	QPoint m_drag_press;
 	void start_drag();

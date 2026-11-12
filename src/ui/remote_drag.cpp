@@ -19,6 +19,9 @@ QStringList bssh_remote_drag::formats() const {
 	/* XDS first, as the protocol asks: a target that speaks it prefers it. */
 	QStringList list;
 	if (m_direct_save) list << QStringLiteral("XdndDirectSave0");
+	if (!m_ark_path.isEmpty())
+		list << QStringLiteral("application/x-kde-ark-dndextract-service")
+		     << QStringLiteral("application/x-kde-ark-dndextract-path");
 	list << QStringLiteral("text/uri-list") << QStringLiteral("text/plain");
 	return list;
 }
@@ -31,6 +34,8 @@ QVariant bssh_remote_drag::retrieveData(const QString &mime, QMetaType type) con
 	/* Asked at the drop, not at the drag's start: by then the staged copy
 	 * may be whole. */
 	if (mime == QLatin1String("XdndDirectSave0")) return m_direct_save ? m_direct_save() : QByteArray("E");
+	if (mime == QLatin1String("application/x-kde-ark-dndextract-service")) return m_ark_service.toUtf8();
+	if (mime == QLatin1String("application/x-kde-ark-dndextract-path")) return m_ark_path.toUtf8();
 	const QList<QUrl> urls = urls_now();
 	if (mime == QLatin1String("text/uri-list")) {
 		if (type.id() == QMetaType::QVariantList) {

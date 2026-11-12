@@ -31,6 +31,11 @@
 
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QTimer>
+
+#if QT_CONFIG(dbus)
+#include <QDBusConnection>
+#endif
 #include <QSysInfo>
 
 #if !defined(Q_OS_ANDROID) && QT_CONFIG(xcb)
@@ -629,6 +634,27 @@ bssh_remote_drag *bssh_file_panel::drag_data_for_selection() {
 		set_direct_save_name(paths.first().section(QLatin1Char('/'), -1));
 		data->enable_direct_save([this, paths] { return direct_save(paths); });
 	}
+#if QT_CONFIG(dbus) && !defined(Q_OS_ANDROID)
+	/* Ark's way too, any number of entries, wherever there is a session
+	 * bus: Dolphin calls it with the folder, on Wayland as on X11. */
+	drop_ark();
+	QDBusConnection bus = QDBusConnection::sessionBus();
+	if (bus.isConnected()) {
+		const QString object = QStringLiteral("/beerssh/drag/%1").arg(m_drags + 1);
+		bssh_ark_extract *extract = new bssh_ark_extract([this, paths](const QString &folder) {
+			save_into(paths, folder);
+		}, this);
+		if (bus.registerObject(object, extract, QDBusConnection::ExportAllSlots)) {
+			/* The panel's, not the drag's: Dolphin calls after the drop,
+			 * when the drag and its data are gone. */
+			m_ark_path = object;
+			m_ark_object = extract;
+			data->enable_ark(bus.baseService(), object);
+		} else {
+			delete extract;
+		}
+	}
+#endif
 	/*
 	 * Staged from now, into a directory of this drag's own, on the SSH
 	 * worker a piece at a time -- the window does not wait for it, and the
@@ -658,6 +684,10 @@ void bssh_file_panel::start_drag() {
 	drag->setMimeData(data);
 	drag_ended(drag->exec(Qt::CopyAction));
 	set_direct_save_name(QString());
+	/* Kept a moment past the drop: Dolphin calls after it has returned. */
+	QTimer::singleShot(30000, this, [this, path = m_ark_path] {
+		if (m_ark_path == path) drop_ark();
+	});
 }
 
 void bssh_file_panel::drag_ended(Qt::DropAction action) {
@@ -746,23 +776,40 @@ QByteArray bssh_file_panel::direct_save(const QStringList &paths) {
 	const QString host = url.host();
 	if (!host.isEmpty() && host != QStringLiteral("localhost") && host != QSysInfo::machineHostName())
 		return QByteArrayLiteral("E");
-	const QString folder = QFileInfo(url.toLocalFile()).absolutePath();
-	if (!QFileInfo(folder).isDir()) return QByteArrayLiteral("E");
+	return save_into(paths, QFileInfo(url.toLocalFile()).absolutePath()) ? QByteArrayLiteral("S")
+	                                                                     : QByteArrayLiteral("E");
+#else
+	Q_UNUSED(paths);
+	return QByteArrayLiteral("E");
+#endif
+}
 
+/*
+ * A copy of the dragged entries into the folder a target named -- by XDS
+ * or by Ark's call -- with its progress in the copy-back row. A staging
+ * under way is stopped first and this begins when the worker says so, one
+ * copy back at a time. False where it cannot begin.
+ */
+bool bssh_file_panel::save_into(const QStringList &paths, const QString &folder) {
+	if (!m_session || !QFileInfo(folder).isDir()) return false;
 	if (!m_staging_dir.isEmpty() && m_session->download_in_progress()) {
-		/* Its staging is not wanted now: stopped, and this copy waits for
-		 * the stop, one copy back at a time. */
 		m_discard_dir = m_staging_dir;
 		m_after_discard_paths = paths;
 		m_after_discard_dir = folder;
 		m_session->cancel_download();
-		return QByteArrayLiteral("S");
+		return true;
 	}
-	if (m_session->download_in_progress()) return QByteArrayLiteral("E");
+	if (m_session->download_in_progress()) return false;
 	m_session->download(paths, folder);
-	return QByteArrayLiteral("S");
-#else
-	Q_UNUSED(paths);
-	return QByteArrayLiteral("E");
+	return true;
+}
+
+/* The drag's Ark object, taken off the bus as the drag ends. */
+void bssh_file_panel::drop_ark() {
+#if QT_CONFIG(dbus) && !defined(Q_OS_ANDROID)
+	if (m_ark_path.isEmpty()) return;
+	QDBusConnection::sessionBus().unregisterObject(m_ark_path);
+	m_ark_path.clear();
+	delete m_ark_object;
 #endif
 }

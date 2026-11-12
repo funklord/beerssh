@@ -145,8 +145,8 @@ expect = "a_file_dragged_out_is_staged_before_it_is_dropped"
 [[sabotage]]
 name = "an XDS save is promised and not begun"
 file = "src/ui/file_panel.cpp"
-find = "\tif (m_session->download_in_progress()) return QByteArrayLiteral(\"E\");\n\tm_session->download(paths, folder);\n"
-replace = "\tif (m_session->download_in_progress()) return QByteArrayLiteral(\"E\");\n"
+find = "\tif (m_session->download_in_progress()) return false;\n\tm_session->download(paths, folder);\n"
+replace = "\tif (m_session->download_in_progress()) return false;\n"
 expect = "a_file_dragged_out_is_saved_where_the_file_manager_says"
 
 # The same, where the save waits for a staging to stop: the stop comes
@@ -157,3 +157,12 @@ file = "src/ui/file_panel.cpp"
 find = "\t\t\t\tm_after_discard_dir.clear();\n\t\t\t\tm_session->download(paths, dir);\n"
 replace = "\t\t\t\tm_after_discard_dir.clear();\n"
 expect = "a_file_dragged_out_is_saved_where_the_file_manager_says"
+
+# Dolphin's call answered and nothing copied. Its test needs a session
+# bus; check-ssh starts one with dbus-run-session.
+[[sabotage]]
+name = "an Ark call copies nothing"
+file = "src/ui/file_panel.cpp"
+find = "\t\tbssh_ark_extract *extract = new bssh_ark_extract([this, paths](const QString &folder) {\n\t\t\tsave_into(paths, folder);\n"
+replace = "\t\tbssh_ark_extract *extract = new bssh_ark_extract([this, paths](const QString &folder) {\n\t\t\tQ_UNUSED(folder);\n"
+expect = "a_file_dragged_out_is_saved_where_dolphin_says"
