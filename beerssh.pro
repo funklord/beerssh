@@ -403,3 +403,12 @@ android {
 QMAKE_CFLAGS   += -MMD -MP
 QMAKE_CXXFLAGS += -MMD -MP
 QMAKE_CLEAN    += *.d
+
+# The media build (`make media`, project.md sec 6.4 *Playing a file*):
+# snurra compiled in from its submodule, and BeerSSH's glue to its
+# embedding facade switched on. Off unless asked: the default build
+# needs nothing of snurra's, which is far from done and grows into place.
+equals(BSSH_MEDIA, 1) {
+    DEFINES += BSSH_MEDIA
+    include(snurra/snurra.pri)
+}

@@ -4454,6 +4454,18 @@ model on a finger.
   player, and the day the pin passes it BeerSSH plays in snurra's tile
   with nothing here changed. The glue was compiled against the proposed
   header verbatim (syntax only, snurra's real `source.h`).
+  **The build:** snurra is a submodule at `snurra/`, pinned (`611b7f9` at
+  first), and `make media` builds BeerSSH with it into `build-media/` --
+  never the default tree, and never part of `all`. It fetches the
+  submodule there and only there, stops if it cannot, and asks
+  pkg-config for snurra's libraries first, naming the Debian package for
+  any missing (`media-check`). Moving the pin is how BeerSSH takes up
+  snurra's progress; the facade is what keeps that a one-line change.
+  **Not yet built here:** this machine has libswscale's runtime and not
+  its `-dev` package, which snurra's video code needs since `611b7f9`,
+  so `make media` stops at the preflight naming `libswscale-dev`
+  (installing it is the holder's). Android stays off until the APK cost
+  is measured.
   **Step 3, the phone's form, built 2026-11-11 and not yet seen on a
   device.** On touch the panel lies over the terminal view, its child,
   following its size, rather than beside it: the view keeps its size, so

@@ -740,6 +740,56 @@ $(TARGET): $(VTERM_LIB) $(LIBSSH_LIB) $(BUILD_DIR)/Makefile $(SOURCES) $(HEADERS
 run: $(TARGET)
 	./$(TARGET)
 
+# The media build (project.md sec 6.4, *Playing a file*): BeerSSH with
+# snurra, the player it is to play in, compiled in from the snurra
+# submodule -- in a tree of its own, so the default build is never built
+# the other way. Not part of `all`: snurra is far from done, and BeerSSH
+# takes it up through one header, snurra/embed.h, which the glue uses only
+# once the pinned snurra has it; until then this build plays in the
+# desktop's player as the default one does.
+#
+# The submodule is fetched here and only here, and the build stops if it
+# cannot be -- before qmake, which would otherwise fail reading
+# snurra.pri. And snurra's libraries are asked for by name first, so a
+# missing one is said as a package rather than as a header a compile
+# could not find.
+MEDIA_BUILD_DIR ?= build-media
+SNURRA_DIR = snurra
+SNURRA_PKGS = libavformat libavcodec libswresample libswscale libavutil alsa xcb
+
+media: QMAKE_CONFIG += BSSH_MEDIA=1
+media: media-check $(VTERM_LIB) $(LIBSSH_LIB)
+	$(call bssh_qmake,$(MEDIA_BUILD_DIR),beerssh.pro)
+	$(MAKE) -C $(MEDIA_BUILD_DIR) $(QMAKE_SUBMAKE)
+	@echo "media: built $(MEDIA_BUILD_DIR)/$(TARGET) with snurra at $$(git -C $(SNURRA_DIR) rev-parse --short HEAD)"
+
+media-check:
+	@if [ ! -f $(SNURRA_DIR)/snurra.pri ]; then \
+		if git rev-parse --git-dir >/dev/null 2>&1; then \
+			echo "media: fetching the $(SNURRA_DIR) submodule" >&2; \
+			git submodule update --init $(SNURRA_DIR) >&2; \
+		else \
+			echo "media: $(SNURRA_DIR)/ is empty and this is not a git checkout" >&2; \
+		fi; \
+	fi; \
+	[ -f $(SNURRA_DIR)/snurra.pri ] || { echo "media: the $(SNURRA_DIR) submodule is missing and could not be fetched" >&2; exit 1; }; \
+	missing=""; \
+	for p in $(SNURRA_PKGS); do pkg-config --exists $$p || missing="$$missing $$p"; done; \
+	if [ -n "$$missing" ]; then \
+		echo "media: snurra needs these libraries' development files:$$missing" >&2; \
+		debs=""; \
+		for p in $$missing; do \
+			case $$p in alsa) debs="$$debs libasound2-dev";; xcb) debs="$$debs libxcb1-dev";; *) debs="$$debs $$p-dev";; esac; \
+		done; \
+		echo "media:   on Debian: apt install$$debs" >&2; \
+		exit 1; \
+	fi; \
+	if [ -f $(SNURRA_DIR)/include/snurra/embed.h ]; then \
+		echo "media: snurra offers snurra/embed.h -- Play uses snurra's player"; \
+	else \
+		echo "media: snurra has no snurra/embed.h yet -- Play uses the desktop's player"; \
+	fi
+
 # beersshd, the SFTP-only server (project.md sec 19): its own program from
 # its own .pro, sharing the libssh build and none of the terminal. In the
 # default build so check-ci compiles it against the runner's older Qt and
@@ -1798,6 +1848,7 @@ clean:
 	$(call bssh_qmake_clean,$(TEST_BUILD_DIR))
 	$(call bssh_qmake_clean,$(SSHD_BUILD_DIR))
 	$(call bssh_qmake_clean,$(ANDROID_BUILD_DIR))
+	$(call bssh_qmake_clean,$(MEDIA_BUILD_DIR))
 
 # qmake's own clean, in a tree that has one -- skipped, and said so, when
 # the tree names a project file that is gone (see bssh_qmake_orphaned):
@@ -1891,7 +1942,7 @@ distclean: veryclean
 help:
 	@sed -n '/^# TARGETS/,/^#$$/p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \{0,1\}//'
 
-.PHONY: deb-clean all doc run test libssh-source bench style sabotage check-ci check-ssh check-handoff check-keepalive check-windows check-xterm fonts fonts-list check-fonts android-fonts terminfo android-terminfo check-build-tree uninstall \
+.PHONY: deb-clean all doc run media media-check test libssh-source bench style sabotage check-ci check-ssh check-handoff check-keepalive check-windows check-xterm fonts fonts-list check-fonts android-fonts terminfo android-terminfo check-build-tree uninstall \
         deb \
         android android-check android-aab android-run install clean veryclean \
         distclean help check style-tool style-source style-docs hooks version-check

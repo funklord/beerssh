@@ -7,3 +7,6 @@
 [submodule "libssh"]
 	path = libssh
 	url = https://gitlab.com/libssh/libssh-mirror.git
+[submodule "snurra"]
+	path = snurra
+	url = https://github.com/funklord/snurra
