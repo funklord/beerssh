@@ -4301,6 +4301,17 @@ model on a finger.
   a 20 MB drag, read as a file manager's copy would on a thread of its
   own, gives its first bytes while the copy still runs and the whole
   equals the host's; an abandoned drag's mounted file is gone.
+  **Seen with a real file manager 2026-11-12:** two entries (5 MB and
+  60 MB) dragged onto pcmanfm-qt, which gets no XDS for more than one
+  and so reads the `text/uri-list` -- the mounted paths, no `sftp://`
+  backend started. It asks "Copy here / Cancel" (the drag offers copy
+  only) and both arrived byte for byte. **But arrived read-only:** the
+  mount showed 0444 and the file manager copies the mode. It shows
+  0644 and 0755 now -- the mount is `ro` at the kernel, which refuses
+  writes whatever the mode says, and the test checks both halves (with
+  a sabotage). Not seen: a read waiting on bytes still to come, since
+  the 60 MB had arrived over loopback before the menu was answered; the
+  live test is what shows that.
 
 - **The file panel on a local shell too -- [BUILT 2026-11-12, the
   holder: "for completeness"].** The same panel and gestures on every

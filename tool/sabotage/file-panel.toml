@@ -245,3 +245,12 @@ file = "src/model/session.cpp"
 find = "\t\tend_transfer(TRANSFER_DOWN, ok, directory, written, why);\n\t\temit download_finished(ok, directory, written, why);"
 replace = "\t\temit download_finished(ok, directory, written, why);\n\t\tend_transfer(TRANSFER_DOWN, ok, directory, written, why);"
 expect = "a_file_dragged_out_is_saved_where_the_file_manager_says"
+
+# The mount's files shown read-only: a file manager copies the mode, and
+# the dropped copies arrive read-only.
+[[sabotage]]
+name = "the mount shows its files read-only"
+file = "src/platform/fuse_shelf.cpp"
+find = "\tattr.mode = n.directory ? (S_IFDIR | 0755) : (S_IFREG | 0644);"
+replace = "\tattr.mode = n.directory ? (S_IFDIR | 0555) : (S_IFREG | 0444);"
+expect = "a_file_dropped_on_a_plain_file_manager_is_read_as_it_arrives"

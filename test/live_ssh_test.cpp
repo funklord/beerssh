@@ -2322,6 +2322,17 @@ void live_ssh_test::a_file_dropped_on_a_plain_file_manager_is_read_as_it_arrives
 	QVERIFY2(first_before_whole, "the mounted file gave nothing until the copy was whole");
 	QCOMPARE(read_back.size(), bytes.size());
 	QVERIFY2(read_back == bytes, "the mounted file differs from the host's");
+	/*
+	 * Writable as a downloaded file is, since a file manager copies the
+	 * mode -- and still not writable here, the mount being read-only.
+	 */
+	QVERIFY2(QFileInfo(dropped.toLocalFile()).permissions() & QFileDevice::WriteOwner,
+	         "the mounted file reads as read-only, and its copies would be");
+	{
+		QFile write_back(dropped.toLocalFile());
+		QVERIFY2(!write_back.open(QIODevice::WriteOnly | QIODevice::Append),
+		         "the mounted file took a write");
+	}
 	QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty(), 15000);
 	delete data;
 

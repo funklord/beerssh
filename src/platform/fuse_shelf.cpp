@@ -147,7 +147,13 @@ void reply(quint64 unique, int error, const void *payload = nullptr, size_t size
 void fill_attr(quint64 id, const node &n, fuse_attr &attr) {
 	std::memset(&attr, 0, sizeof(attr));
 	attr.ino = id;
-	attr.mode = n.directory ? (S_IFDIR | 0555) : (S_IFREG | 0444);
+	/*
+	 * The modes a downloaded file gets, not read-only ones: the mount is
+	 * ro at the kernel, which refuses every write whatever these say, and
+	 * a file manager copies the mode -- pcmanfm-qt's copies of 0444 files
+	 * arrived read-only in the user's folder (2026-11-12).
+	 */
+	attr.mode = n.directory ? (S_IFDIR | 0755) : (S_IFREG | 0644);
 	attr.nlink = n.directory ? 2 : 1;
 	attr.size = n.directory ? 0 : uint64_t(n.size);
 	attr.blocks = (attr.size + 511) / 512;
