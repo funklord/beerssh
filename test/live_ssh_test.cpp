@@ -17,6 +17,10 @@
 #include "term/emulator.h"
 #include "ui/file_panel.h"
 #include "ui/remote_drag.h"
+#include "platform/fuse_shelf.h"
+
+#include <atomic>
+#include <thread>
 
 #include <QToolButton>
 #include <QTreeWidget>
@@ -1876,11 +1880,18 @@ void live_ssh_test::a_file_dragged_out_is_staged_before_it_is_dropped()
 	QVERIFY(data);
 	const QString remote_path = QFileInfo(there.filePath(QStringLiteral("dragged.bin"))).canonicalFilePath();
 	if (!data->staged()) {
-		const QUrl link = data->urls_now().value(0);
-		QCOMPARE(link.scheme(), QStringLiteral("sftp"));
-		QCOMPARE(link.host(), QStringLiteral("127.0.0.1"));
-		QCOMPARE(link.port(22), int(test_port()));
-		QCOMPARE(link.path(), remote_path);
+		/* Not whole yet: the mounted copy where FUSE is to be had, else
+		 * the link naming the host as the profile does. */
+		const QUrl first = data->urls_now().value(0);
+		if (bssh_fuse_shelf::available()) {
+			QVERIFY2(first.isLocalFile() && first.toLocalFile().startsWith(bssh_fuse_shelf::mount_point()),
+			         qPrintable(first.toString()));
+		} else {
+			QCOMPARE(first.scheme(), QStringLiteral("sftp"));
+			QCOMPARE(first.host(), QStringLiteral("127.0.0.1"));
+			QCOMPARE(first.port(22), int(test_port()));
+			QCOMPARE(first.path(), remote_path);
+		}
 	}
 	QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty(), 15000);
 	QVERIFY(data->staged());
@@ -1916,11 +1927,20 @@ void live_ssh_test::a_file_dragged_out_is_staged_before_it_is_dropped()
 	QVERIFY2(!QFileInfo::exists(staged_dir), qPrintable(staged_dir + QStringLiteral(" was left behind")));
 	delete abandoned;
 
-	/* Past the limit, nothing is staged and the link is all there is. */
+	/* Past the limit and with no mount to show it on, nothing is staged
+	 * and the link is all there is; with the mount, a large file is what
+	 * staging is for, and it is staged. */
 	panel.set_staging_limit(1024);
 	QPointer<bssh_remote_drag> large = panel.drag_data_for_selection();
-	QVERIFY(large && !session->download_in_progress());
-	QCOMPARE(large->urls_now().value(0).scheme(), QStringLiteral("sftp"));
+	QVERIFY(large);
+	if (bssh_fuse_shelf::available()) {
+		QVERIFY(session->download_in_progress());
+		panel.drag_ended(Qt::IgnoreAction);
+		QTRY_VERIFY_WITH_TIMEOUT(!session->download_in_progress(), 15000);
+	} else {
+		QVERIFY(!session->download_in_progress());
+		QCOMPARE(large->urls_now().value(0).scheme(), QStringLiteral("sftp"));
+	}
 	panel.set_staging_limit(64 * 1024 * 1024);
 	delete large;
 
@@ -2066,7 +2086,7 @@ void live_ssh_test::a_file_dragged_out_is_saved_where_the_file_manager_says()
 			QVERIFY2(!QFileInfo::exists(done.at(1).toString()), "the staging an XDS save replaced was left behind");
 
 	/* With nothing staging, the save begins at once. */
-	panel.set_staging_limit(0);
+	panel.set_staging_enabled(false);
 	select(QStringLiteral("small.txt"));
 	QPointer<bssh_remote_drag> direct = panel.drag_data_for_selection();
 	QVERIFY(direct && direct->direct_save() && !session->download_in_progress());
@@ -2127,7 +2147,7 @@ void live_ssh_test::a_file_dragged_out_is_saved_where_dolphin_says()
 	QTreeWidget *list = panel.findChild<QTreeWidget *>(QStringLiteral("file-panel-list"));
 	QVERIFY(list && list->topLevelItemCount() == 1);
 	list->topLevelItem(0)->setSelected(true);
-	panel.set_staging_limit(0);   /* nothing staged: the call is the copy */
+	panel.set_staging_enabled(false);   /* nothing staged: the call is the copy */
 
 	QSignalSpy finished(session, &bssh_session::download_finished);
 	QPointer<bssh_remote_drag> data = panel.drag_data_for_selection();
@@ -2147,6 +2167,102 @@ void live_ssh_test::a_file_dragged_out_is_saved_where_dolphin_says()
 	QVERIFY(arrived.open(QIODevice::ReadOnly));
 	QVERIFY2(arrived.readAll() == bytes, "the copy Dolphin asked for differs from the host's");
 	delete data;
+	delete session;
+}
+
+void live_ssh_test::a_file_dropped_on_a_plain_file_manager_is_read_as_it_arrives()
+{
+	if (!bssh_fuse_shelf::available()) QSKIP("no FUSE here: /dev/fuse or fusermount3 is missing");
+	if (!server_available()) return;
+	if (!fresh_connection_expected()) {
+		QSKIP("this phase has taken the link down or swapped the key before "
+		       "here; a fresh connection cannot authenticate by design");
+	}
+
+	/*
+	 * The fallback (sec 6.4) for a file manager that speaks neither XDS
+	 * nor Ark: the drop gets a file:// path on this process's FUSE mount
+	 * while the copy is still arriving, and reading it -- as the file
+	 * manager's own copy would -- waits only for the bytes it reads, so
+	 * the first come back while the copy still runs, and the whole equals
+	 * the host's. An abandoned drag's mounted file can no longer be read.
+	 */
+	QTemporaryDir there;
+	QVERIFY(there.isValid());
+	QByteArray bytes(20 * 1024 * 1024, '\0');
+	for (int i = 0; i < bytes.size(); ++i) bytes[i] = char(i * 29 + 11);
+	{
+		QFile file(there.filePath(QStringLiteral("mounted.bin")));
+		QVERIFY(file.open(QIODevice::WriteOnly));
+		file.write(bytes);
+		QFile other(there.filePath(QStringLiteral("abandoned.bin")));
+		QVERIFY(other.open(QIODevice::WriteOnly));
+		other.write(bytes);
+	}
+
+	bssh_session *session = connected_session(QStringLiteral("fuse-test"));
+	QVERIFY2(session, "the test server did not take the connection");
+	bssh_file_panel panel(session);
+	QSignalSpy listed(&panel, &bssh_file_panel::listed);
+	panel.open_directory(there.path());
+	QTRY_VERIFY_WITH_TIMEOUT(listed.size() == 1, 15000);
+	QTreeWidget *list = panel.findChild<QTreeWidget *>(QStringLiteral("file-panel-list"));
+	QVERIFY(list && list->topLevelItemCount() == 2);
+	const auto select = [list](const QString &name) {
+		list->clearSelection();
+		for (int i = 0; i < list->topLevelItemCount(); ++i)
+			if (list->topLevelItem(i)->text(0) == name) list->topLevelItem(i)->setSelected(true);
+	};
+	select(QStringLiteral("mounted.bin"));
+
+	QSignalSpy finished(session, &bssh_session::download_finished);
+	QPointer<bssh_remote_drag> data = panel.drag_data_for_selection();
+	QVERIFY(data && session->download_in_progress());
+	const QUrl dropped = data->urls_now().value(0);
+	QVERIFY2(dropped.isLocalFile() && dropped.toLocalFile().startsWith(bssh_fuse_shelf::mount_point()),
+	         qPrintable(QStringLiteral("the drop would get %1, not the mounted file").arg(dropped.toString())));
+
+	/* A file manager's copy, on a thread of its own as it would be. */
+	std::atomic<bool> first_bytes{ false };
+	std::atomic<bool> done{ false };
+	QByteArray read_back;
+	QString read_error;
+	std::thread reader([&] {
+		QFile file(dropped.toLocalFile());
+		if (!file.open(QIODevice::ReadOnly)) {
+			read_error = file.errorString();
+		} else {
+			while (true) {
+				const QByteArray chunk = file.read(128 * 1024);
+				if (chunk.isEmpty()) break;
+				read_back += chunk;
+				first_bytes = true;
+			}
+		}
+		done = true;
+	});
+	QTRY_VERIFY_WITH_TIMEOUT(first_bytes || done, 15000);
+	const bool first_before_whole = finished.isEmpty();
+	QTRY_VERIFY_WITH_TIMEOUT(done.load(), 60000);
+	reader.join();
+	QVERIFY2(read_error.isEmpty(), qPrintable(read_error));
+	QVERIFY2(first_before_whole, "the mounted file gave nothing until the copy was whole");
+	QCOMPARE(read_back.size(), bytes.size());
+	QVERIFY2(read_back == bytes, "the mounted file differs from the host's");
+	QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty(), 15000);
+	delete data;
+
+	/* An abandoned drag: its mounted file is gone. */
+	select(QStringLiteral("abandoned.bin"));
+	QPointer<bssh_remote_drag> abandoned = panel.drag_data_for_selection();
+	QVERIFY(abandoned);
+	const QString gone = abandoned->urls_now().value(0).toLocalFile();
+	QVERIFY(gone.startsWith(bssh_fuse_shelf::mount_point()));
+	finished.clear();
+	panel.drag_ended(Qt::IgnoreAction);
+	QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty(), 15000);
+	QTRY_VERIFY_WITH_TIMEOUT(!QFileInfo::exists(gone), 5000);
+	delete abandoned;
 	delete session;
 }
 

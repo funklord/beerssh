@@ -106,6 +106,7 @@ private slots:
 	void a_file_dragged_out_is_staged_before_it_is_dropped();
 	void a_file_dragged_out_is_saved_where_the_file_manager_says();
 	void a_file_dragged_out_is_saved_where_dolphin_says();
+	void a_file_dropped_on_a_plain_file_manager_is_read_as_it_arrives();
 	void a_restarted_shell_runs_its_command_on_the_same_connection();
 
 	void the_remote_is_told_the_size_it_was_given();

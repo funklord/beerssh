@@ -81,6 +81,10 @@ public:
 	 * and folders, get the link alone. 64 MiB. */
 	void set_staging_limit(qint64 bytes) { m_staging_limit = bytes; }
 
+	/* No staging at all, whatever the size or the mount: for a test of
+	 * a drop's other roads, and for anyone who would rather it did not. */
+	void set_staging_enabled(bool enabled) { m_staging_enabled = enabled; }
+
 	/* The entries shown, in order: for tests and accessibility alike. */
 	QList<bssh_remote_entry_t> entries() const { return m_entries; }
 
@@ -134,8 +138,11 @@ private:
 	QPointer<class bssh_remote_drag> m_staging_data;
 	int m_drags = 0;
 	qint64 m_staging_limit = 64 * 1024 * 1024;
+	bool m_staging_enabled = true;
 	QString m_last_staged_dir;   /* the last drag's, staged or staging */
 	QString m_discard_dir;       /* an abandoned drag's, removed once stopped */
+	QStringList m_staging_mounted;   /* its copies on the FUSE mount, if any */
+	void end_mounted(bool whole);
 	/* A copy waiting for the staging it replaces to stop: XDS's. */
 	QStringList m_after_discard_paths;
 	QString m_after_discard_dir;

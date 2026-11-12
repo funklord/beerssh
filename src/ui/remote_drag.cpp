@@ -15,6 +15,11 @@ void bssh_remote_drag::set_staged(const QStringList &local_paths) {
 	for (const QString &path : local_paths) m_local << QUrl::fromLocalFile(path);
 }
 
+void bssh_remote_drag::set_mounted(const QStringList &paths) {
+	m_mounted.clear();
+	for (const QString &path : paths) m_mounted << QUrl::fromLocalFile(path);
+}
+
 QStringList bssh_remote_drag::formats() const {
 	/* XDS first, as the protocol asks: a target that speaks it prefers it. */
 	QStringList list;

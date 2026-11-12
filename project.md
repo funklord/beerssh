@@ -4257,7 +4257,31 @@ model on a finger.
   answers `/dev/fuse` itself against `linux/fuse.h` (kernel ABI 7.41 here)
   and mounts through `fusermount3`, as libfuse does: read-only, a handful
   of operations -- INIT, LOOKUP, GETATTR, OPEN, READ, READDIR, RELEASE,
-  FORGET, DESTROY. Not started.
+  FORGET, DESTROY. **Built 2026-11-12** (`src/platform/fuse_shelf.cpp`):
+  mounted on first use at `$XDG_RUNTIME_DIR/beerssh-drop-<pid>`,
+  `ro,nosuid,nodev,noexec,auto_unmount`, served on a thread of its own;
+  a read past what the staging has written is answered later, when the
+  copy reaches it -- FUSE replies by request id, so nothing blocks --
+  and fails once the copy stops short. With the mount to show it, a
+  file of any size is staged (the 64 MiB limit is for when there is
+  none). auto_unmount keeps a fusermount3 watching the mount's socket,
+  so a crash or kill leaves no dead mount; that fusermount3 does not
+  exit after mounting, and waiting for it hung the first run of the
+  test until check-ssh's budget killed it -- it is reaped at shutdown
+  now. `a_file_dropped_on_a_plain_file_manager_is_read_as_it_arrives`:
+  a 20 MB drag, read as a file manager's copy would on a thread of its
+  own, gives its first bytes while the copy still runs and the whole
+  equals the host's; an abandoned drag's mounted file is gone.
+
+- **The file panel on a local shell too -- [BUILT 2026-11-12, the
+  holder: "for completeness"].** The same panel and gestures on every
+  tab: the local transport lists the directory itself, copies back with
+  `bssh_copy_into` on a thread as its upload does, renames never over
+  what is there, and removes a tree on a thread -- a link inside removed
+  as a link (`QDir::removeRecursively` follows none). A local drag
+  carries the files' own paths, nothing staged. The move of a local
+  session to another process waits for a copy back or a removal as for
+  an upload. `the_file_panel_works_on_a_local_shell_too`.
   **Konqueror's sftp://
   checked 2026-11-11** (the holder: "probably broken by now"): TDE's
   `tdeio_sftp` links the system libssh, Debian's 0.11.5 -- the version
@@ -8789,6 +8813,17 @@ window with no name is a blank row in the task switcher.
   refused save. `two_processes_saving_at_once_lose_nothing`,
   `two_processes_saving_at_once_lose_no_secret`,
   `tool/sabotage/store-across-processes.toml`.
+  **Open, seen once 2026-11-12: `two_processes_saving_at_once_lose_nothing`
+  failed** in a sabotage run's baseline suite, straight after a long
+  check-ssh and sabotage sequence, the machine's load about 12. The
+  failure's own message was not kept -- the sabotage runner records only
+  the failing test's name -- and the full suite run minutes later passed
+  it. Not reproduced since: 10 runs alone at load 12, and 12 more as six
+  copies at once, twice. Nothing in the change in flight touches the
+  store. Since the test is the one that proves hosts are not lost when
+  processes save together, a second sighting is worth chasing at once,
+  with its message: the five-second wait for a peer's lock is the first
+  suspect under load, not a finding.
 - **A pane drag was raised from inside the view's own signal emission, and
   the thing it reaches destroys that view.** `mouseMoveEvent` emits
   `pane_drag_requested`; `start_session_drag` answers it with

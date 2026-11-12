@@ -27,6 +27,7 @@
 #include <algorithm>
 
 #include "model/session.h"
+#include "platform/fuse_shelf.h"
 #include "ui/remote_drag.h"
 
 #include <QFileInfo>
@@ -193,6 +194,7 @@ bssh_file_panel::bssh_file_panel(bssh_session *session, QWidget *parent)
 	        [this](bool ok, const QString &directory, const QStringList &written, const QString &why) {
 		if (!m_discard_dir.isEmpty() && directory == m_discard_dir) {
 			/* An abandoned drag's staging, stopped: now it goes. */
+			end_mounted(false);
 			QDir(m_discard_dir).removeRecursively();
 			m_discard_dir.clear();
 			m_staging_dir.clear();
@@ -214,6 +216,7 @@ bssh_file_panel::bssh_file_panel(bssh_session *session, QWidget *parent)
 			for (const QString &name : written) staged << QDir(directory).filePath(name);
 			if (ok && m_staging_data) m_staging_data->set_staged(staged);
 			m_staging_dir.clear();
+			end_mounted(ok);
 			end_copy(m_copy_back, ok, tr("here, ready to drop"), written, why);
 			return;
 		}
@@ -627,6 +630,7 @@ bssh_remote_drag *bssh_file_panel::drag_data_for_selection() {
 		const bssh_remote_entry_t &entry = m_entries.at(at);
 		if (opens(entry)) folder = true;
 		bytes += entry.size;
+		sizes << entry.size;
 		const QString path = remote_path_of(entry);
 		paths << path;
 		/* The last resort's link: the host as the profile names it. A jump
@@ -677,12 +681,35 @@ bssh_remote_drag *bssh_file_panel::drag_data_for_selection() {
 	 * until walked), and not past the limit: those get the link alone.
 	 */
 	m_last_staged_dir.clear();
-	if (!m_session->download_in_progress() && !folder && bytes <= m_staging_limit) {
+	/*
+	 * With the FUSE mount to show it on, a copy of any size is staged: a
+	 * drop that comes first gets the mounted file, whose reads wait for
+	 * it, so a large file is exactly what it is for. Without it, the
+	 * limit, since a large copy would only serve a drop after it is done.
+	 */
+	const bool mountable = bssh_fuse_shelf::available();
+	if (m_staging_enabled && !m_session->download_in_progress() && !folder
+	    && (mountable || bytes <= m_staging_limit)) {
 		const QString dir = bssh_drag_staging_root() + QLatin1Char('/') + QString::number(++m_drags);
 		if (QDir().mkpath(dir)) {
 			m_staging_dir = dir;
 			m_last_staged_dir = dir;
 			m_staging_data = data;
+			m_staging_mounted.clear();
+			if (mountable) {
+				/* The staging directory is new, so each copy keeps its name. */
+				for (int i = 0; i < paths.size(); ++i) {
+					const QString name = paths.at(i).section(QLatin1Char('/'), -1);
+					const qint64 size = i < sizes.size() ? sizes.at(i) : 0;
+					const QString mounted = bssh_fuse_shelf::add(name, QDir(dir).filePath(name), size);
+					if (mounted.isEmpty()) {
+						m_staging_mounted.clear();
+						break;
+					}
+					m_staging_mounted << mounted;
+				}
+				data->set_mounted(m_staging_mounted);
+			}
 			m_session->download(paths, dir);
 		}
 	}
@@ -826,4 +853,14 @@ void bssh_file_panel::drop_ark() {
 	m_ark_path.clear();
 	delete m_ark_object;
 #endif
+}
+
+/* The staging behind the mounted copies ended: whole, or not -- reads
+ * still waiting then fail, and a copy never to arrive leaves the mount. */
+void bssh_file_panel::end_mounted(bool whole) {
+	for (const QString &path : m_staging_mounted) {
+		bssh_fuse_shelf::finish(path, whole);
+		if (!whole) bssh_fuse_shelf::remove(path);
+	}
+	m_staging_mounted.clear();
 }

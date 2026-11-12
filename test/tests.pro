@@ -172,6 +172,7 @@ SOURCES += \
     ../src/ui/pane_container.cpp \
     ../src/ui/file_panel.cpp \
     ../src/ui/remote_drag.cpp \
+    ../src/platform/fuse_shelf.cpp \
     ../src/ui/find_bar.cpp \
     ../src/ui/input_selector.cpp \
     ../src/ui/pane_corner.cpp \
@@ -297,6 +298,7 @@ HEADERS += \
     ../src/ui/pane_snap.h \
     ../src/ui/file_panel.h \
     ../src/ui/remote_drag.h \
+    ../src/platform/fuse_shelf.h \
     ../src/ui/find_bar.h \
     ../src/ui/input_selector.h \
     ../src/ui/pane_corner.h \

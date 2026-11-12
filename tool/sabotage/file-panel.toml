@@ -120,8 +120,8 @@ expect = "browsing_goes_on_while_a_copy_runs"
 [[sabotage]]
 name = "a drag out is never staged"
 file = "src/ui/file_panel.cpp"
-find = "\tif (!m_session->download_in_progress() && !folder && bytes <= m_staging_limit) {"
-replace = "\tif (false) {"
+find = "\tif (m_staging_enabled && !m_session->download_in_progress() && !folder\n"
+replace = "\tif (false && m_staging_enabled\n"
 expect = "a_file_dragged_out_is_staged_before_it_is_dropped"
 
 # A drag let go over nothing goes on copying, and leaves what it wrote.
@@ -132,12 +132,13 @@ find = "\tif (action != Qt::IgnoreAction || m_last_staged_dir.isEmpty()) return;
 replace = "\treturn;"
 expect = "a_file_dragged_out_is_staged_before_it_is_dropped"
 
-# No size limit: a large file is copied for every drag of it.
+# The mount ignored: a large file is not staged though the mount could
+# show it as it arrives, and a drop that comes first gets the link.
 [[sabotage]]
-name = "a drag stages a file of any size"
+name = "a large file is not staged though the mount could show it"
 file = "src/ui/file_panel.cpp"
-find = "!folder && bytes <= m_staging_limit) {"
-replace = "!folder) {"
+find = "\t    && (mountable || bytes <= m_staging_limit)) {"
+replace = "\t    && (bytes <= m_staging_limit)) {"
 expect = "a_file_dragged_out_is_staged_before_it_is_dropped"
 
 # XDS answered "S" and nothing copied: the file manager waits for a file
@@ -166,3 +167,12 @@ file = "src/ui/file_panel.cpp"
 find = "\t\tbssh_ark_extract *extract = new bssh_ark_extract([this, paths](const QString &folder) {\n\t\t\tsave_into(paths, folder);\n"
 replace = "\t\tbssh_ark_extract *extract = new bssh_ark_extract([this, paths](const QString &folder) {\n\t\t\tQ_UNUSED(folder);\n"
 expect = "a_file_dragged_out_is_saved_where_dolphin_says"
+
+# The mounted file read before it has arrived gets what is there, not a
+# wait: a file manager copies a partial file and calls it done.
+[[sabotage]]
+name = "a mounted read does not wait for the copy"
+file = "src/platform/fuse_shelf.cpp"
+find = "\tif (have < want && !(n.finished && n.whole)) {"
+replace = "\tif (false && have < want && !(n.finished && n.whole)) {"
+expect = "a_file_dropped_on_a_plain_file_manager_is_read_as_it_arrives"

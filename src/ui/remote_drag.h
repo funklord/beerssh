@@ -28,8 +28,20 @@ public:
 	void set_staged(const QStringList &local_paths);
 	bool staged() const { return !m_local.isEmpty(); }
 
-	/* What a drop asked for now would get. */
-	QList<QUrl> urls_now() const { return m_local.isEmpty() ? m_remote : m_local; }
+	/*
+	 * The same copies shown on this process's FUSE mount while they are
+	 * still arriving (sec 6.4's fallback): a drop answered before they are
+	 * whole gets these, and the file manager's reads of them wait for the
+	 * bytes rather than finding a partial file.
+	 */
+	void set_mounted(const QStringList &paths);
+
+	/* What a drop asked for now would get: the whole copies, else the
+	 * mounted ones, else the link. */
+	QList<QUrl> urls_now() const {
+		if (!m_local.isEmpty()) return m_local;
+		return m_mounted.isEmpty() ? m_remote : m_mounted;
+	}
 
 	/*
 	 * XDS, the X Direct Save protocol (X11): the target writes the folder
@@ -62,6 +74,7 @@ protected:
 private:
 	QList<QUrl> m_remote;
 	QList<QUrl> m_local;
+	QList<QUrl> m_mounted;
 	std::function<QByteArray()> m_direct_save;
 	QString m_ark_service;
 	QString m_ark_path;
