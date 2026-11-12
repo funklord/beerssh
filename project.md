@@ -4174,7 +4174,42 @@ model on a finger.
   on Wayland too; else a `file://` link to a copy staged from the moment
   the drag began, when it has finished -- a small file is there before
   it is dropped; and `sftp://` only for a large file still copying,
-  dropped where no deferred protocol is spoken. **Konqueror's sftp://
+  dropped where no deferred protocol is spoken.
+  **Built 2026-11-12: the staged copy and the link** (XDS and the Ark
+  protocol to follow). `bssh_remote_drag` answers the drop's URL list
+  when it is asked, not when the drag starts: the staged copy's
+  `file://` URLs once whole, else the `sftp://` link (the host as the
+  profile names it; a jump host is not in a URL). Staging starts as the
+  drag does, into `<cache>/drag/<pid>/<n>`, on the SSH worker a piece at
+  a time, so the window never waits -- the holder asked whether copying
+  before the drop would freeze the process; it does not, since nothing
+  waits on it, the drop included. Its real cost is a large file copied
+  for a drag let go over nothing, so: a drag that ends without a drop
+  stops its staging and removes what it wrote (once the worker says it
+  stopped); only files staged, up to 64 MiB in all, folders and anything
+  larger getting the link alone; nothing staged while another copy back
+  runs. Staging is removed when the process ends, and a dead process's
+  on the next drag. Not yet seen with a real file manager.
+  **But a drop usually comes first** (the holder, 2026-11-12: "it is
+  likely to need to be dropped before download is completed"), so the
+  staged copy wins for small files only, and a larger one would get the
+  link. **The order is therefore: XDS next, the Ark protocol, then --
+  [DECIDED, the holder] -- a FUSE mount as the fallback for any other
+  target**: the drop gets a `file://` path inside a small FUSE mount
+  BeerSSH serves, and the file manager's own copy reads from it as the
+  pieces arrive over this connection -- its reads wait, nothing of ours
+  does; never partial, no second login, the file manager showing its own
+  progress. GVfs and KIO-FUSE work this way. Its cost: libfuse, Linux
+  only (macFUSE on a Mac). `sftp://` stays only where FUSE is not to be
+  had (no `/dev/fuse`, a sandbox), and the staged copy for small files.
+  **Its progress shows in BeerSSH** (the holder, the same day): the
+  copy is ours on every path but the link -- XDS and Ark copy to the
+  named folder in the panel's copy-back row, bar and Stop; FUSE shows
+  the bytes served of the file's size there, a Stop failing the file
+  manager's copy, which it reports; the staged copy is a copy back
+  already. Only the `sftp://` link has none, the file manager fetching
+  for itself -- one more reason it is last.
+  **Konqueror's sftp://
   checked 2026-11-11** (the holder: "probably broken by now"): TDE's
   `tdeio_sftp` links the system libssh, Debian's 0.11.5 -- the version
   vendored here -- through its current API, so the protocol has not

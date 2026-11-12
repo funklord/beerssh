@@ -16,6 +16,7 @@
 #include "input/input_router.h"
 #include "term/emulator.h"
 #include "ui/file_panel.h"
+#include "ui/remote_drag.h"
 
 #include <QToolButton>
 #include <QTreeWidget>
@@ -1825,6 +1826,119 @@ void live_ssh_test::browsing_goes_on_while_a_copy_runs()
 	                            .arg(answered_mid_copy).arg(slowest)));
 	QCOMPARE(QFileInfo(here.filePath(QStringLiteral("big.bin"))).size(), qint64(100 * 1024 * 1024));
 	qInfo("browsing during a 100 MB copy: the slowest of 5 listings took %lld ms", slowest);
+	delete session;
+}
+
+void live_ssh_test::a_file_dragged_out_is_staged_before_it_is_dropped()
+{
+	if (!server_available()) return;
+	if (!fresh_connection_expected()) {
+		QSKIP("this phase has taken the link down or swapped the key before "
+		       "here; a fresh connection cannot authenticate by design");
+	}
+
+	/*
+	 * A drag out of the panel (sec 6.4): the drop is answered when it is
+	 * asked, with the best there is by then. Before the staged copy is
+	 * whole, an sftp:// link naming the host as the profile does; once it
+	 * is, a file:// URL to a copy identical to the host's. While another
+	 * copy back runs, nothing is staged and the link is all there is.
+	 */
+	QTemporaryDir there;
+	QVERIFY(there.isValid());
+	QByteArray bytes(256 * 1024, '\0');
+	for (int i = 0; i < bytes.size(); ++i) bytes[i] = char(i * 13 + 5);
+	{
+		QFile file(there.filePath(QStringLiteral("dragged.bin")));
+		QVERIFY(file.open(QIODevice::WriteOnly));
+		file.write(bytes);
+	}
+
+	bssh_session *session = connected_session(QStringLiteral("drag-test"));
+	QVERIFY2(session, "the test server did not take the connection");
+	bssh_file_panel panel(session);
+	QSignalSpy listed(&panel, &bssh_file_panel::listed);
+	panel.open_directory(there.path());
+	QTRY_VERIFY_WITH_TIMEOUT(listed.size() == 1, 15000);
+	QTreeWidget *list = panel.findChild<QTreeWidget *>(QStringLiteral("file-panel-list"));
+	QVERIFY(list && list->topLevelItemCount() == 1);
+	list->topLevelItem(0)->setSelected(true);
+
+	QSignalSpy finished(session, &bssh_session::download_finished);
+	QPointer<bssh_remote_drag> data = panel.drag_data_for_selection();
+	QVERIFY(data);
+	const QString remote_path = QFileInfo(there.filePath(QStringLiteral("dragged.bin"))).canonicalFilePath();
+	if (!data->staged()) {
+		const QUrl link = data->urls_now().value(0);
+		QCOMPARE(link.scheme(), QStringLiteral("sftp"));
+		QCOMPARE(link.host(), QStringLiteral("127.0.0.1"));
+		QCOMPARE(link.port(22), int(test_port()));
+		QCOMPARE(link.path(), remote_path);
+	}
+	QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty(), 15000);
+	QVERIFY(data->staged());
+	const QList<QUrl> dropped = data->urls_now();
+	QCOMPARE(dropped.size(), 1);
+	QVERIFY(dropped.first().isLocalFile());
+	QVERIFY2(QString::fromUtf8(data->data(QStringLiteral("text/uri-list"))).startsWith(QStringLiteral("file://")),
+	         "the drop's URL list is not the staged copy");
+	QFile staged(dropped.first().toLocalFile());
+	QVERIFY(staged.open(QIODevice::ReadOnly));
+	QVERIFY2(staged.readAll() == bytes, "the staged copy differs from the host's");
+
+	/* A drag let go over nothing: its staging stops and what it wrote
+	 * goes -- a 40 MB file abandoned is not copied for nothing. */
+	{
+		QFile big(there.filePath(QStringLiteral("abandoned.bin")));
+		QVERIFY(big.open(QIODevice::WriteOnly));
+		const QByteArray block(1024 * 1024, 'a');
+		for (int i = 0; i < 40; ++i) big.write(block);
+	}
+	panel.open_directory(there.path());
+	QTRY_VERIFY_WITH_TIMEOUT(listed.size() == 2, 15000);
+	list->clearSelection();
+	for (int i = 0; i < list->topLevelItemCount(); ++i)
+		if (list->topLevelItem(i)->text(0) == QStringLiteral("abandoned.bin")) list->topLevelItem(i)->setSelected(true);
+	QPointer<bssh_remote_drag> abandoned = panel.drag_data_for_selection();
+	QVERIFY(abandoned && session->download_in_progress());
+	QSignalSpy stopped(session, &bssh_session::download_finished);
+	panel.drag_ended(Qt::IgnoreAction);
+	QTRY_VERIFY_WITH_TIMEOUT(!stopped.isEmpty(), 15000);
+	QCOMPARE(stopped.last().at(3).toString(), QString::fromLatin1(BSSH_COPY_STOPPED));
+	const QString staged_dir = stopped.last().at(1).toString();
+	QVERIFY2(!QFileInfo::exists(staged_dir), qPrintable(staged_dir + QStringLiteral(" was left behind")));
+	delete abandoned;
+
+	/* Past the limit, nothing is staged and the link is all there is. */
+	panel.set_staging_limit(1024);
+	QPointer<bssh_remote_drag> large = panel.drag_data_for_selection();
+	QVERIFY(large && !session->download_in_progress());
+	QCOMPARE(large->urls_now().value(0).scheme(), QStringLiteral("sftp"));
+	panel.set_staging_limit(64 * 1024 * 1024);
+	delete large;
+
+	/* With a copy back running, the drag has the link alone. */
+	QTemporaryDir here;
+	QVERIFY(here.isValid());
+	{
+		QFile big(there.filePath(QStringLiteral("big.bin")));
+		QVERIFY(big.open(QIODevice::WriteOnly));
+		const QByteArray block(1024 * 1024, 'g');
+		for (int i = 0; i < 40; ++i) big.write(block);
+	}
+	session->download({ there.filePath(QStringLiteral("big.bin")) }, here.path());
+	QVERIFY(session->download_in_progress());
+	list->clearSelection();
+	for (int i = 0; i < list->topLevelItemCount(); ++i)
+		if (list->topLevelItem(i)->text(0) == QStringLiteral("dragged.bin")) list->topLevelItem(i)->setSelected(true);
+	QPointer<bssh_remote_drag> busy = panel.drag_data_for_selection();
+	QVERIFY(busy);
+	QVERIFY(!busy->staged());
+	QCOMPARE(busy->urls_now().value(0).scheme(), QStringLiteral("sftp"));
+	session->cancel_download();
+	QTRY_VERIFY_WITH_TIMEOUT(!session->download_in_progress(), 15000);
+	delete data;
+	delete busy;
 	delete session;
 }
 

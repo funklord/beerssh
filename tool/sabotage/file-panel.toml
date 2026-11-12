@@ -114,3 +114,28 @@ file = "src/ssh/ssh_session_libssh.cpp"
 find = "\tif (!m_list) {\n\t\tif (m_list_queue.isEmpty()) return;\n"
 replace = "\tif (!m_list) {\n\t\tif (m_list_queue.isEmpty()) return;\n\t\tif (m_download) {\n\t\t\tQTimer::singleShot(10, this, &bssh_libssh_worker::step_list);\n\t\t\treturn;\n\t\t}\n"
 expect = "browsing_goes_on_while_a_copy_runs"
+
+# A drag out never staged: every drop gets the sftp:// link, a second
+# connection, where the holder wants the link as seldom as possible.
+[[sabotage]]
+name = "a drag out is never staged"
+file = "src/ui/file_panel.cpp"
+find = "\tif (!m_session->download_in_progress() && !folder && bytes <= m_staging_limit) {"
+replace = "\tif (false) {"
+expect = "a_file_dragged_out_is_staged_before_it_is_dropped"
+
+# A drag let go over nothing goes on copying, and leaves what it wrote.
+[[sabotage]]
+name = "an abandoned drag keeps copying"
+file = "src/ui/file_panel.cpp"
+find = "\tif (action != Qt::IgnoreAction || m_last_staged_dir.isEmpty()) return;"
+replace = "\treturn;"
+expect = "a_file_dragged_out_is_staged_before_it_is_dropped"
+
+# No size limit: a large file is copied for every drag of it.
+[[sabotage]]
+name = "a drag stages a file of any size"
+file = "src/ui/file_panel.cpp"
+find = "!folder && bytes <= m_staging_limit) {"
+replace = "!folder) {"
+expect = "a_file_dragged_out_is_staged_before_it_is_dropped"

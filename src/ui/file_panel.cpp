@@ -1,5 +1,8 @@
 #include "ui/file_panel.h"
 
+#include <QApplication>
+#include <QDir>
+#include <QDrag>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QFileDialog>
@@ -24,6 +27,7 @@
 #include <algorithm>
 
 #include "model/session.h"
+#include "ui/remote_drag.h"
 
 namespace {
 
@@ -117,6 +121,9 @@ bssh_file_panel::bssh_file_panel(bssh_session *session, QWidget *parent)
 	m_list->setRootIsDecorated(false);
 	m_list->setUniformRowHeights(true);
 	m_list->setSelectionMode(QAbstractItemView::ExtendedSelection);
+	/* Entries dragged out to a file manager (sec 6.4): the drag is the
+	 * panel's own, started from the list's viewport. */
+	m_list->viewport()->installEventFilter(this);
 	m_list->setContextMenuPolicy(Qt::CustomContextMenu);
 	m_list->header()->setStretchLastSection(false);
 	m_list->header()->setSectionResizeMode(NAME, QHeaderView::Stretch);
@@ -171,6 +178,23 @@ bssh_file_panel::bssh_file_panel(bssh_session *session, QWidget *parent)
 	});
 	connect(m_session, &bssh_session::download_finished, this,
 	        [this](bool ok, const QString &directory, const QStringList &written, const QString &why) {
+		if (!m_discard_dir.isEmpty() && directory == m_discard_dir) {
+			/* An abandoned drag's staging, stopped: now it goes. */
+			QDir(m_discard_dir).removeRecursively();
+			m_discard_dir.clear();
+			m_staging_dir.clear();
+			end_copy(m_copy_back, ok, directory, written, why);
+			return;
+		}
+		if (!m_staging_dir.isEmpty() && directory == m_staging_dir) {
+			/* A drag's copies, whole: a drop from now on gets them. */
+			QStringList staged;
+			for (const QString &name : written) staged << QDir(directory).filePath(name);
+			if (ok && m_staging_data) m_staging_data->set_staged(staged);
+			m_staging_dir.clear();
+			end_copy(m_copy_back, ok, tr("here, ready to drop"), written, why);
+			return;
+		}
 		end_copy(m_copy_back, ok, directory, written, why);
 	});
 	connect(m_session, &bssh_session::upload_progress, this, [this](qint64 done, qint64 total) {
@@ -266,6 +290,23 @@ void bssh_file_panel::set_panel_width(int width) {
 bool bssh_file_panel::eventFilter(QObject *watched, QEvent *event) {
 	if (m_overlay && watched == parentWidget() && event->type() == QEvent::Resize)
 		setGeometry(parentWidget()->rect());
+	if (watched == m_list->viewport()) {
+		if (event->type() == QEvent::MouseButtonPress) {
+			const QMouseEvent *press = static_cast<QMouseEvent *>(event);
+			m_drag_press = press->button() == Qt::LeftButton ? press->position().toPoint() : QPoint();
+		} else if (event->type() == QEvent::MouseMove && !m_drag_press.isNull()) {
+			const QMouseEvent *move = static_cast<QMouseEvent *>(event);
+			if ((move->buttons() & Qt::LeftButton)
+			    && (move->position().toPoint() - m_drag_press).manhattanLength() >= QApplication::startDragDistance()) {
+				m_drag_press = QPoint();
+				start_drag();
+				return true;
+			}
+		} else if (event->type() == QEvent::MouseButtonRelease) {
+			m_drag_press = QPoint();
+		}
+		return QWidget::eventFilter(watched, event);
+	}
 	if (watched != m_grip) return QWidget::eventFilter(watched, event);
 	switch (event->type()) {
 	case QEvent::MouseButtonPress: {
@@ -535,4 +576,78 @@ bool bssh_file_panel::copy_here(const QStringList &paths) {
 	}
 	m_session->upload(paths, m_path);
 	return true;
+}
+
+bssh_remote_drag *bssh_file_panel::drag_data_for_selection() {
+	if (!m_session || m_path.isEmpty()) return nullptr;
+	QStringList paths;
+	QList<QUrl> remote;
+	qint64 bytes = 0;
+	bool folder = false;
+	const bssh_profile_t &profile = m_session->profile();
+	for (QTreeWidgetItem *item : m_list->selectedItems()) {
+		const int at = item->data(NAME, Qt::UserRole).toInt();
+		if (at < 0 || at >= m_entries.size()) continue;
+		const bssh_remote_entry_t &entry = m_entries.at(at);
+		if (opens(entry)) folder = true;
+		bytes += entry.size;
+		const QString path = remote_path_of(entry);
+		paths << path;
+		/* The last resort's link: the host as the profile names it. A jump
+		 * host is not in a URL; the file manager's ~/.ssh/config decides. */
+		QUrl url;
+		url.setScheme(QStringLiteral("sftp"));
+		url.setUserName(profile.user);
+		url.setHost(profile.host);
+		if (profile.port != 22) url.setPort(profile.port);
+		url.setPath(path);
+		remote << url;
+	}
+	if (paths.isEmpty()) return nullptr;
+
+	bssh_remote_drag *data = new bssh_remote_drag(remote);
+	/*
+	 * Staged from now, into a directory of this drag's own, on the SSH
+	 * worker a piece at a time -- the window does not wait for it, and the
+	 * drop is answered with whatever there is by then. Not while another
+	 * copy back runs (one at a time), not a folder (its size is unknown
+	 * until walked), and not past the limit: those get the link alone.
+	 */
+	m_last_staged_dir.clear();
+	if (!m_session->download_in_progress() && !folder && bytes <= m_staging_limit) {
+		const QString dir = bssh_drag_staging_root() + QLatin1Char('/') + QString::number(++m_drags);
+		if (QDir().mkpath(dir)) {
+			m_staging_dir = dir;
+			m_last_staged_dir = dir;
+			m_staging_data = data;
+			m_session->download(paths, dir);
+		}
+	}
+	return data;
+}
+
+void bssh_file_panel::start_drag() {
+	bssh_remote_drag *data = drag_data_for_selection();
+	if (!data) return;
+	/* Copy only: a move would ask the host's files to be removed. The
+	 * event loop runs during exec, so the staging goes on under it. */
+	QDrag *drag = new QDrag(this);
+	drag->setMimeData(data);
+	drag_ended(drag->exec(Qt::CopyAction));
+}
+
+void bssh_file_panel::drag_ended(Qt::DropAction action) {
+	if (action != Qt::IgnoreAction || m_last_staged_dir.isEmpty()) return;
+	/* Let go over nothing: the staging stops, and what it wrote goes. */
+	const QString dir = m_last_staged_dir;
+	m_last_staged_dir.clear();
+	if (!dir.startsWith(bssh_drag_staging_root() + QLatin1Char('/'))) return;
+	if (m_staging_dir == dir && m_session && m_session->download_in_progress()) {
+		/* Removed once the copy says it has stopped: the worker may be
+		 * writing a piece into it this moment. */
+		m_discard_dir = dir;
+		m_session->cancel_download();
+		return;
+	}
+	QDir(dir).removeRecursively();
 }

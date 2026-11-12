@@ -61,6 +61,26 @@ public:
 	bool make_folder(const QString &name);
 	bool remove_entries(const QStringList &names);
 
+	/*
+	 * What a drag of the selected entries out to a file manager carries
+	 * (sec 6.4): sftp:// links at first, and the copies staged here from
+	 * this moment once they are whole. Starts the staging; the panel's
+	 * own drag takes it, and tests read it.
+	 */
+	class bssh_remote_drag *drag_data_for_selection();
+
+	/*
+	 * The drag ended: dropped, or let go over nothing (Qt::IgnoreAction),
+	 * which stops its staging and removes what it staged -- a large file
+	 * dragged and abandoned is not copied for nothing. start_drag() calls
+	 * it; tests call it as a drag would.
+	 */
+	void drag_ended(Qt::DropAction action);
+
+	/* Files staged for a drag only up to this many bytes in all; larger,
+	 * and folders, get the link alone. 64 MiB. */
+	void set_staging_limit(qint64 bytes) { m_staging_limit = bytes; }
+
 	/* The entries shown, in order: for tests and accessibility alike. */
 	QList<bssh_remote_entry_t> entries() const { return m_entries; }
 
@@ -110,6 +130,14 @@ private:
 	int m_changes_asked = 0;
 	QStringList m_removals;
 	QString m_failure;
+	QString m_staging_dir;
+	QPointer<class bssh_remote_drag> m_staging_data;
+	int m_drags = 0;
+	qint64 m_staging_limit = 64 * 1024 * 1024;
+	QString m_last_staged_dir;   /* the last drag's, staged or staging */
+	QString m_discard_dir;       /* an abandoned drag's, removed once stopped */
+	QPoint m_drag_press;
+	void start_drag();
 
 	QWidget *m_grip;
 	int m_drag_from = -1;
