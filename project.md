@@ -4433,11 +4433,40 @@ model on a finger.
   a `play-<n>` directory of its own, and put away when the next Play
   begins; a Play while another copy back runs says so and waits for
   none. Not on Android unless an in-app player exists (Android opens no
-  app's private file in another app). Seeking ahead waits for the copy
-  to reach it -- the range fetch following `want` is the next step.
+  app's private file in another app). A seek ahead fetches its range
+  first (below, *The range fetch*).
   `a_file_played_is_opened_as_it_arrives` (live: both roads, the file
   read whole equals the host's) and
   `a_file_still_arriving_is_read_as_far_as_it_has_come`; six sabotages.
+  **The range fetch -- built 2026-11-12** (the holder's /go focus: "a
+  seek that fetches the range the player wants"). A played file is
+  filled out of order: `bssh_piece_map` (`src/model/piece_map.*`) holds
+  which 64 KiB pieces are on disk and where the reader wants to go; the
+  SSH worker's download job, given one (`download_pieces`), fetches the
+  first missing piece at or after the wanted one, then on, then back
+  for the gaps -- `sftp_seek64` only where the order jumps, the staging
+  file sized in full at the start, each piece written and flushed before
+  it is marked. Both readers ask: `bssh_media_bytes` (snurra's reads)
+  on a read in a gap, and the FUSE shelf on a mounted read that must
+  wait -- so a desktop player's seek, a read of the mount, is fetched
+  next too. A transport that cannot (the default `download_pieces`)
+  copies in order and marks the map so; readers then go by the file's
+  size, as before. Out of order only for the one file the map names
+  under the name it expects; anything else goes in order.
+  `a_seek_in_a_played_file_fetches_its_range_first` (live, a 40 MB
+  file: 4 KiB at 36 MB read through the mount and through the player's
+  bytes, each equal to the host's, each while earlier pieces were still
+  missing, and the whole equal once done) and
+  `a_file_filled_out_of_order_fetches_what_its_reader_wants`, which
+  found `run_from` answering a negative run for a gap at the offset.
+  **Its first version passed with the mount's ask removed** (sabotage
+  MISSED): it checked that the mounted read came back before the whole
+  copy ended, which an in-order copy also does at 36 of 40 MB. It now
+  checks what it claims -- earlier pieces still missing when the read
+  came back -- through bytes the stand-in player takes and declines, so
+  only the mounted read can have asked.
+  Not covered by a test: the flush before a piece is marked (a 64 KiB
+  write passes QFile's buffer anyway).
   (3) **snurra behind `make BSSH_MEDIA=1`**, off by default, through a
   facade BeerSSH designed for snurra at the holder's word and sent it
   (snurra inbox 20261112T1444Z): **`snurra/embed.h`** -- `snurra_media`

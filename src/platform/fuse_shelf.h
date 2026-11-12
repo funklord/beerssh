@@ -3,6 +3,10 @@
 
 #include <QString>
 
+#include <memory>
+
+class bssh_piece_map;
+
 /*
  * The drag-out's fallback (project.md sec 6.4, the holder's decision of
  * 2026-11-12): files being copied here from a host, shown as ordinary
@@ -32,9 +36,11 @@ bool available();
  * Shows `staging` -- a file being written by a copy that will reach
  * `size` bytes -- as `name` in a directory of its own on the mount, and
  * returns that path; empty where it cannot. Reads past what has been
- * written wait for it.
+ * written wait for it. With `pieces`, a copy filled out of order: a read
+ * waits for its own pieces only, and asks the copy for them first.
  */
-QString add(const QString &name, const QString &staging, qint64 size);
+QString add(const QString &name, const QString &staging, qint64 size,
+            std::shared_ptr<bssh_piece_map> pieces = nullptr);
 
 /* The copy behind `path` ended: whole, or not (its waiting reads fail). */
 void finish(const QString &path, bool whole);

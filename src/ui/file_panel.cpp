@@ -31,6 +31,7 @@
 #include "model/session.h"
 #include "media/media_bytes.h"
 #include "media/media_player.h"
+#include "model/piece_map.h"
 #include "platform/fuse_shelf.h"
 #include "platform/platform.h"
 #include "ui/remote_drag.h"
@@ -699,11 +700,19 @@ bool bssh_file_panel::play_selected() {
 	if (!QDir().mkpath(dir)) return false;
 	m_play_dir = dir;
 	m_play_file = QDir(dir).filePath(entry.name);
-	m_play_bytes = std::make_shared<bssh_media_bytes>(m_play_file, entry.size);
+	/*
+	 * Filled in the order its reader asks: a seek in the player, or a read
+	 * of the mount, fetches that range next rather than waiting for all
+	 * before it. A transport that cannot says so on the map, and the copy
+	 * goes in order as it did.
+	 */
+	auto pieces = std::make_shared<bssh_piece_map>(m_play_file, entry.size);
+	m_play_bytes = std::make_shared<bssh_media_bytes>(pieces);
 	media.bytes = m_play_bytes;
 	/* On the mount it is a file from the first moment, whose reads wait. */
-	if (bssh_fuse_shelf::available()) m_play_mounted = bssh_fuse_shelf::add(entry.name, m_play_file, entry.size);
-	m_session->download({ path }, dir);
+	if (bssh_fuse_shelf::available())
+		m_play_mounted = bssh_fuse_shelf::add(entry.name, m_play_file, entry.size, pieces);
+	m_session->download_pieces(path, dir, pieces);
 
 	if (bssh_in_app_player() && bssh_in_app_player()(media, m_media_area)) {
 		m_media_area->show();

@@ -174,6 +174,7 @@ SOURCES += \
     ../src/ui/remote_drag.cpp \
     ../src/platform/fuse_shelf.cpp \
     ../src/media/media_bytes.cpp \
+    ../src/model/piece_map.cpp \
     ../src/media/media_player.cpp \
     ../src/ui/find_bar.cpp \
     ../src/ui/input_selector.cpp \
@@ -302,6 +303,7 @@ HEADERS += \
     ../src/ui/remote_drag.h \
     ../src/platform/fuse_shelf.h \
     ../src/media/media_bytes.h \
+    ../src/model/piece_map.h \
     ../src/media/media_player.h \
     ../src/ui/find_bar.h \
     ../src/ui/input_selector.h \

@@ -7,6 +7,7 @@
 #include "hang_watchdog.h"
 #include "platform/platform.h"
 #include "media/media_bytes.h"
+#include "model/piece_map.h"
 #include <QElapsedTimer>
 #include <thread>
 #include "model/app_settings.h"
@@ -1209,4 +1210,74 @@ void platform_test::a_file_still_arriving_is_read_as_far_as_it_has_come() {
 	bytes.wait(5000);
 	QVERIFY(waited.elapsed() < 1000);
 	file.close();
+}
+
+void platform_test::a_file_filled_out_of_order_fetches_what_its_reader_wants() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	const QString path = dir.filePath(QStringLiteral("filling.bin"));
+	/* Ten pieces of 100 bytes, the last short: 950 bytes. */
+	auto map = std::make_shared<bssh_piece_map>(path, 950, 100);
+	QCOMPARE(map->next_missing(), qint64(0));
+	QVERIFY(!map->has(0, 1));
+
+	/* A seek to 620: piece 6 next, then on, then back from the start. */
+	map->want(620);
+	QCOMPARE(map->next_missing(), qint64(6));
+	map->mark(6);
+	QCOMPARE(map->next_missing(), qint64(7));
+	map->mark(7);
+	map->mark(8);
+	map->mark(9);
+	QCOMPARE(map->next_missing(), qint64(0));
+	QVERIFY(map->has(600, 350));
+	QVERIFY(map->has(940, 10));
+	QVERIFY(!map->has(500, 200));
+	QCOMPARE(map->run_from(650), qint64(300));
+	QCOMPARE(map->run_from(150), qint64(0));
+	QVERIFY(!map->complete());
+
+	/* The bytes a reader sees: a gap stalls and asks for itself. */
+	{
+		QFile file(path);
+		QVERIFY(file.open(QIODevice::WriteOnly));
+		QVERIFY(file.resize(950));
+		QVERIFY(file.seek(600));
+		file.write(QByteArray(350, 'x'));
+	}
+	bssh_media_bytes bytes(map);
+	uint8_t out[512] = {};
+	QCOMPARE(bytes.read(650, out, 512), qint64(300));
+	QCOMPARE(out[0], uint8_t('x'));
+	QCOMPARE(bytes.read(250, out, 10), qint64(0));
+	QCOMPARE(map->wanted(), qint64(250));
+	QCOMPARE(map->next_missing(), qint64(2));
+	QCOMPARE(bytes.read(950, out, 10), qint64(-1));
+
+	/* A waiting reader is woken by the piece, not left to its timeout. */
+	QElapsedTimer waited;
+	waited.start();
+	std::thread copy([&map] {
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		map->mark(2);
+	});
+	bytes.wait(5000);
+	copy.join();
+	QVERIFY2(waited.elapsed() < 4000, "a reader slept through the piece it waited for");
+	for (qint64 i = 0; i < 10; ++i) map->mark(i);
+	QVERIFY(map->complete());
+	QCOMPARE(map->next_missing(), qint64(-1));
+
+	/* In order, what has arrived is the file's size. */
+	const QString ordered = dir.filePath(QStringLiteral("ordered.bin"));
+	bssh_piece_map plain(ordered, 1000, 100);
+	plain.set_in_order();
+	{
+		QFile file(ordered);
+		QVERIFY(file.open(QIODevice::WriteOnly));
+		file.write(QByteArray(400, 'y'));
+	}
+	QVERIFY(plain.has(0, 400));
+	QVERIFY(!plain.has(300, 200));
+	QCOMPARE(plain.run_from(100), qint64(300));
 }

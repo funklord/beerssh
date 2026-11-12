@@ -173,8 +173,8 @@ expect = "a_file_dragged_out_is_saved_where_dolphin_says"
 [[sabotage]]
 name = "a mounted read does not wait for the copy"
 file = "src/platform/fuse_shelf.cpp"
-find = "\tif (have < want && !(n.finished && n.whole)) {"
-replace = "\tif (false && have < want && !(n.finished && n.whole)) {"
+find = "\tif (!here && !(n.finished && n.whole)) {"
+replace = "\tif (false && !here && !(n.finished && n.whole)) {"
 expect = "a_file_dropped_on_a_plain_file_manager_is_read_as_it_arrives"
 
 # Pause marked and the copy not held: bytes go on moving under a tile
@@ -275,8 +275,8 @@ expect = "a_file_played_is_opened_as_it_arrives"
 [[sabotage]]
 name = "the in-app player is never asked"
 file = "src/ui/file_panel.cpp"
-find = "\tm_session->download({ path }, dir);\n\n\tif (bssh_in_app_player() && bssh_in_app_player()(media, m_media_area)) {"
-replace = "\tm_session->download({ path }, dir);\n\n\tif (false) {"
+find = "\tm_session->download_pieces(path, dir, pieces);\n\n\tif (bssh_in_app_player() && bssh_in_app_player()(media, m_media_area)) {"
+replace = "\tm_session->download_pieces(path, dir, pieces);\n\n\tif (false) {"
 expect = "a_file_played_is_opened_as_it_arrives"
 
 # The file played before kept on disk and on the mount, one per Play.
@@ -286,3 +286,28 @@ file = "src/ui/file_panel.cpp"
 find = "\tput_away_play();\n\tconst QString dir = bssh_drag_staging_root() + QStringLiteral(\"/play-\")"
 replace = "\tconst QString dir = bssh_drag_staging_root() + QStringLiteral(\"/play-\")"
 expect = "a_file_played_is_opened_as_it_arrives"
+
+# The worker told to fill the played file in order: a seek ahead waits
+# for everything before it, as before the range fetch.
+[[sabotage]]
+name = "a played file's copy ignores its piece map"
+file = "src/ssh/ssh_session_libssh.cpp"
+find = "\t\tif (one_file) job.pieces = pieces;\n\t\telse pieces->set_in_order();"
+replace = "\t\tpieces->set_in_order();"
+expect = "a_seek_in_a_played_file_fetches_its_range_first"
+
+# A read of the mount waits for its pieces without asking for them.
+[[sabotage]]
+name = "a mounted read does not ask for its range"
+file = "src/platform/fuse_shelf.cpp"
+find = "\t\tif (!here) n.pieces->want(qint64(read.offset));\n"
+replace = ""
+expect = "a_seek_in_a_played_file_fetches_its_range_first"
+
+# The player's read in a gap stalls without asking for it.
+[[sabotage]]
+name = "a player's read in a gap does not ask for it"
+file = "src/media/media_bytes.cpp"
+find = "\t\tif (run == 0) {\n\t\t\tm_pieces->want(offset);\n"
+replace = "\t\tif (run == 0) {\n"
+expect = "a_seek_in_a_played_file_fetches_its_range_first"

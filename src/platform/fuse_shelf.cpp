@@ -1,5 +1,7 @@
 #include "platform/fuse_shelf.h"
 
+#include "model/piece_map.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
@@ -42,6 +44,7 @@ struct node {
 	bool finished = false;
 	bool whole = false;
 	QList<quint64> children;
+	std::shared_ptr<bssh_piece_map> pieces;   /* a copy filled out of order */
 };
 
 struct waiting_read {
@@ -179,10 +182,18 @@ bool try_read(const waiting_read &read) {
 		reply(read.unique, 0, "", 0);
 		return true;
 	}
-	struct stat st{};
-	const qint64 have = ::stat(QFile::encodeName(n.staging).constData(), &st) == 0 ? qint64(st.st_size) : 0;
 	const qint64 want = qMin<qint64>(qint64(read.offset) + read.size, n.size);
-	if (have < want && !(n.finished && n.whole)) {
+	bool here;
+	if (n.pieces) {
+		here = n.pieces->has(qint64(read.offset), want - qint64(read.offset));
+		/* Asked first: a player's seek, read here, is fetched next. */
+		if (!here) n.pieces->want(qint64(read.offset));
+	} else {
+		struct stat st{};
+		const qint64 have = ::stat(QFile::encodeName(n.staging).constData(), &st) == 0 ? qint64(st.st_size) : 0;
+		here = have >= want;
+	}
+	if (!here && !(n.finished && n.whole)) {
 		if (n.finished) {
 			reply(read.unique, EIO);   /* stopped or failed: never to arrive */
 			return true;
@@ -425,7 +436,7 @@ bool available() {
 	       && !QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation).isEmpty();
 }
 
-QString add(const QString &name, const QString &staging, qint64 size) {
+QString add(const QString &name, const QString &staging, qint64 size, std::shared_ptr<bssh_piece_map> pieces) {
 	if (name.isEmpty() || name.contains(QLatin1Char('/'))) return QString();
 	QMutexLocker held(&lock);
 	if (!ensure_mounted()) return QString();
@@ -440,6 +451,7 @@ QString add(const QString &name, const QString &staging, qint64 size) {
 	entry.name = name;
 	entry.staging = staging;
 	entry.size = size;
+	entry.pieces = std::move(pieces);
 	dir.children << file;
 	nodes.insert(folder, dir);
 	nodes.insert(file, entry);
@@ -509,7 +521,7 @@ void shut_down() {
 
 namespace bssh_fuse_shelf {
 bool available() { return false; }
-QString add(const QString &, const QString &, qint64) { return QString(); }
+QString add(const QString &, const QString &, qint64, std::shared_ptr<bssh_piece_map>) { return QString(); }
 void finish(const QString &, bool) {}
 void remove(const QString &) {}
 QString mount_point() { return QString(); }

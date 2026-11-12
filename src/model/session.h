@@ -29,6 +29,8 @@ class bssh_input_router;
  * The rule that keeps it true: if a piece of state would be wrong after
  * the window closed and reopened, it belongs here.
  */
+class bssh_piece_map;
+
 class bssh_session : public QObject {
 	Q_OBJECT
 
@@ -344,6 +346,9 @@ public:
 	 */
 	void list_directory(const QString &path);
 	void download(const QStringList &paths, const QString &directory);
+	/* One file, filled in the order `pieces` asks: a played file's copy,
+	 * which fetches what its reader wants first (sec 6.4). */
+	void download_pieces(const QString &path, const QString &directory, std::shared_ptr<bssh_piece_map> pieces);
 	bool download_in_progress() const { return m_downloading; }
 	void cancel_download();
 	void change_remote(bssh_ssh_session::change_t change, const QString &path, const QString &to = QString());
@@ -366,6 +371,7 @@ public:
 		QStringList paths;
 		QString destination;
 		transfer_state_t state = TRANSFER_QUEUED;
+		std::shared_ptr<bssh_piece_map> pieces;   /* a download filled out of order */
 	};
 	int queue_transfer(transfer_direction_t direction, const QStringList &paths, const QString &destination);
 	void pause_transfer(int id, bool paused);

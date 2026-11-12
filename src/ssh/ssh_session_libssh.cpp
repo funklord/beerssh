@@ -4,6 +4,7 @@
 #include "ssh/pty_session.h"
 
 #include "platform/platform.h"
+#include "model/piece_map.h"
 
 #include <QDataStream>
 #include <QDir>
@@ -230,7 +231,8 @@ public slots:
 	void do_cancel_upload();
 	void drop_partial_upload();
 	void do_list_directory(const QString &path);
-	void do_download(const QStringList &paths, const QString &directory);
+	void do_download(const QStringList &paths, const QString &directory,
+	                 std::shared_ptr<bssh_piece_map> pieces = nullptr);
 	void do_cancel_download();
 	void do_pause_upload(bool paused);
 	void do_pause_download(bool paused);
@@ -399,6 +401,7 @@ private:
 		QString remote;
 		QString local;
 		bool directory = false;
+		qint64 size = 0;
 	};
 	struct download_job {
 		sftp_session sftp = nullptr;
@@ -416,11 +419,20 @@ private:
 		QElapsedTimer since_progress;
 		bool paused = false;
 		bool scheduled = false;
+		/*
+		 * One file filled in the order its reader asks (sec 6.4, *Playing
+		 * a file*): the piece wanted first, then on, then back for the
+		 * gaps. `position` is where the remote file's offset stands, so a
+		 * seek is asked only when the order jumps.
+		 */
+		std::shared_ptr<bssh_piece_map> pieces;
+		qint64 position = 0;
 	};
 	std::unique_ptr<download_job> m_download;
 	void schedule_download();
 	void step_download();
 	void finish_download(bool ok, const QString &why);
+	void step_pieces();
 
 	/*
 	 * change_remote()'s removal of a tree: directories expanded at their
@@ -1698,7 +1710,8 @@ void bssh_libssh_worker::finish_list(const QString &why) {
 	if (!m_list_queue.isEmpty()) QTimer::singleShot(0, this, &bssh_libssh_worker::step_list);
 }
 
-void bssh_libssh_worker::do_download(const QStringList &paths, const QString &directory) {
+void bssh_libssh_worker::do_download(const QStringList &paths, const QString &directory,
+                                     std::shared_ptr<bssh_piece_map> pieces) {
 	if (!m_session) {
 		emit download_finished(false, directory, QStringList(), QStringLiteral("not connected"));
 		return;
@@ -1738,8 +1751,20 @@ void bssh_libssh_worker::do_download(const QStringList &paths, const QString &di
 		});
 		if (name.isEmpty()) continue;
 		job.written << name;
-		job.items.append({ base, into.filePath(name), is_directory });
+		job.items.append({ base, into.filePath(name), is_directory, size });
 		if (!is_directory) job.total += size;
+	}
+	/*
+	 * Out of order only for the one file a map was made for, under the
+	 * name it expects; anything else -- a folder, a name taken after all
+	 * -- goes in order, and the map is told so.
+	 */
+	if (pieces) {
+		const bool one_file = job.items.size() == 1 && !job.items.first().directory
+		                      && job.items.first().local == pieces->staging()
+		                      && job.items.first().size == pieces->size();
+		if (one_file) job.pieces = pieces;
+		else pieces->set_in_order();
 	}
 	job.since_progress.start();
 	emit download_progress(0, job.total);
@@ -1845,6 +1870,18 @@ void bssh_libssh_worker::step_download() {
 			finish_download(false, QStringLiteral("could not write %1").arg(item.local));
 			return;
 		}
+		/* Filled out of order: its full length from the start, the holes
+		 * not yet fetched reading as zeros nobody is told are there. */
+		if (job.pieces && !job.target.resize(item.size)) {
+			finish_download(false, QStringLiteral("could not write %1").arg(item.local));
+			return;
+		}
+		job.position = 0;
+	}
+
+	if (job.pieces) {
+		step_pieces();
+		return;
 	}
 
 	char buffer[32 * 1024];
@@ -1866,6 +1903,66 @@ void bssh_libssh_worker::step_download() {
 		job.target.close();
 		++job.at;
 	}
+	if (job.since_progress.elapsed() >= 100) {
+		job.since_progress.restart();
+		emit download_progress(job.done, job.total);
+	}
+	schedule_download();
+}
+
+/*
+ * One piece of a file filled out of order: the one its reader wants, or
+ * the next missing after it. Read whole -- several sftp_reads where the
+ * server answers short -- written at its place and flushed before it is
+ * marked, so a reader told it is there finds it on disk.
+ */
+void bssh_libssh_worker::step_pieces() {
+	download_job &job = *m_download;
+	bssh_piece_map &map = *job.pieces;
+	const qint64 index = map.next_missing();
+	if (index < 0) {
+		sftp_close(job.file);
+		job.file = nullptr;
+		job.target.close();
+		++job.at;
+		emit download_progress(job.done, job.total);
+		schedule_download();
+		return;
+	}
+	const qint64 offset = index * map.piece();
+	const qint64 length = qMin(map.piece(), map.size() - offset);
+	if (offset != job.position) {
+		if (sftp_seek64(job.file, quint64(offset)) < 0) {
+			finish_download(false, QStringLiteral("could not seek in %1: %2")
+			                               .arg(job.items.at(job.at).remote, sftp_error_of(job.sftp)));
+			return;
+		}
+		job.position = offset;
+	}
+	QByteArray buffer(int(length), Qt::Uninitialized);
+	qint64 got = 0;
+	while (got < length) {
+		const ssize_t n = sftp_read(job.file, buffer.data() + got, size_t(qMin<qint64>(32 * 1024, length - got)));
+		if (n < 0) {
+			finish_download(false, QStringLiteral("reading %1 failed: %2")
+			                               .arg(job.items.at(job.at).remote, sftp_error_of(job.sftp)));
+			return;
+		}
+		if (n == 0) break;
+		got += n;
+	}
+	job.position += got;
+	if (got != length) {
+		finish_download(false, QStringLiteral("%1 changed size while it was copied")
+		                               .arg(job.items.at(job.at).remote));
+		return;
+	}
+	if (!job.target.seek(offset) || job.target.write(buffer) != length || !job.target.flush()) {
+		finish_download(false, QStringLiteral("could not write %1").arg(job.target.fileName()));
+		return;
+	}
+	map.mark(index);
+	job.done += length;
 	if (job.since_progress.elapsed() >= 100) {
 		job.since_progress.restart();
 		emit download_progress(job.done, job.total);
@@ -2748,6 +2845,13 @@ void bssh_ssh_session_libssh::list_directory(const QString &path) {
 void bssh_ssh_session_libssh::download(const QStringList &paths, const QString &directory) {
 	QMetaObject::invokeMethod(m_worker, [this, paths, directory] {
 		m_worker->do_download(paths, directory);
+	}, Qt::QueuedConnection);
+}
+
+void bssh_ssh_session_libssh::download_pieces(const QString &path, const QString &directory,
+                                              std::shared_ptr<bssh_piece_map> pieces) {
+	QMetaObject::invokeMethod(m_worker, [this, path, directory, pieces] {
+		m_worker->do_download({ path }, directory, pieces);
 	}, Qt::QueuedConnection);
 }
 

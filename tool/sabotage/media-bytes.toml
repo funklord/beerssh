@@ -18,3 +18,19 @@ file = "src/media/media_bytes.cpp"
 find = "void bssh_media_bytes::arrived() {\n\tQMutexLocker held(&m_lock);\n\tm_more.wakeAll();"
 replace = "void bssh_media_bytes::arrived() {\n\tQMutexLocker held(&m_lock);"
 expect = "a_file_still_arriving_is_read_as_far_as_it_has_come"
+
+# The wanted piece not looked at: the copy always goes from the start.
+[[sabotage]]
+name = "the copy fetches from the start whatever is wanted"
+file = "src/model/piece_map.cpp"
+find = "\tfor (qint64 i = m_wanted / m_piece; i < last; ++i)\n\t\tif (!m_have[size_t(i)]) return i;\n"
+replace = ""
+expect = "a_file_filled_out_of_order_fetches_what_its_reader_wants"
+
+# A missing piece at the offset read as a negative run.
+[[sabotage]]
+name = "a gap at the offset is a negative run"
+file = "src/model/piece_map.cpp"
+find = "\treturn qMax<qint64>(0, qMin(index * m_piece, m_size) - offset);"
+replace = "\treturn qMin(index * m_piece, m_size) - offset;"
+expect = "a_file_filled_out_of_order_fetches_what_its_reader_wants"

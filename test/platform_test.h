@@ -113,6 +113,13 @@ private slots:
 	 * the end until the copy has ended, and a reader waiting is woken.
 	 */
 	void a_file_still_arriving_is_read_as_far_as_it_has_come();
+
+	/*
+	 * A file filled out of order (sec 6.4): the copy fetches where its
+	 * reader wants, then on, then back for the gaps; a reader in a gap
+	 * waits and asks for it, and one past it reads.
+	 */
+	void a_file_filled_out_of_order_fetches_what_its_reader_wants();
 };
 
 #endif /* BSSH_PLATFORM_TEST_H */

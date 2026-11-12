@@ -1,4 +1,5 @@
 #include "model/session.h"
+#include "model/piece_map.h"
 
 #include "session/session_client.h"
 #include "session/wire.h"
@@ -1338,6 +1339,22 @@ void bssh_session::download(const QStringList &paths, const QString &directory) 
 	else emit download_finished(false, directory, QStringList(), QStringLiteral("not connected"));
 }
 
+void bssh_session::download_pieces(const QString &path, const QString &directory,
+                                   std::shared_ptr<bssh_piece_map> pieces) {
+	if (m_downloading) return;
+	if (m_transport) {
+		transfer_t transfer;
+		transfer.id = ++m_next_transfer;
+		transfer.direction = TRANSFER_DOWN;
+		transfer.paths = { path };
+		transfer.destination = directory;
+		transfer.pieces = std::move(pieces);
+		m_transfers << transfer;
+		begin_transfer(m_transfers.last());
+	}
+	else emit download_finished(false, directory, QStringList(), QStringLiteral("not connected"));
+}
+
 bssh_session::transfer_t *bssh_session::find_transfer(int id) {
 	for (transfer_t &transfer : m_transfers)
 		if (transfer.id == id) return &transfer;
@@ -1349,6 +1366,7 @@ void bssh_session::begin_transfer(transfer_t &transfer) {
 	const int id = transfer.id;
 	const QStringList paths = transfer.paths;
 	const QString destination = transfer.destination;
+	const std::shared_ptr<bssh_piece_map> pieces = transfer.pieces;
 	if (transfer.direction == TRANSFER_UP) {
 		m_running_up = id;
 		m_uploading = true;
@@ -1360,7 +1378,8 @@ void bssh_session::begin_transfer(transfer_t &transfer) {
 		m_downloading = true;
 		m_download_directory = destination;
 		emit transfer_changed(id);
-		m_transport->download(paths, destination);
+		if (pieces) m_transport->download_pieces(paths.value(0), destination, pieces);
+		else m_transport->download(paths, destination);
 	}
 }
 

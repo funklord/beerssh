@@ -124,6 +124,8 @@ public:
 	void cancel_upload() override;
 	void list_directory(const QString &path) override;
 	void download(const QStringList &paths, const QString &directory) override;
+	void download_pieces(const QString &path, const QString &directory,
+	                     std::shared_ptr<bssh_piece_map> pieces) override;
 	void cancel_download() override;
 	void pause_upload(bool paused) override;
 	void pause_download(bool paused) override;

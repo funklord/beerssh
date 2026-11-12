@@ -1,5 +1,6 @@
 #include <QDir>
 #include "media/media_bytes.h"
+#include "model/piece_map.h"
 #include "media/media_player.h"
 #include <QLabel>
 #include <QFile>
@@ -3091,5 +3092,123 @@ void live_ssh_test::a_file_played_is_opened_as_it_arrives()
 	QCOMPARE(read_back.size(), bytes.size());
 	QVERIFY2(read_back == bytes, "the in-app player read other bytes than the host's");
 	QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty(), 15000);
+	delete session;
+}
+
+void live_ssh_test::a_seek_in_a_played_file_fetches_its_range_first()
+{
+	if (!server_available()) return;
+	if (!fresh_connection_expected()) {
+		QSKIP("this phase has taken the link down or swapped the key before "
+		       "here; a fresh connection cannot authenticate by design");
+	}
+
+	/*
+	 * A seek ahead (sec 6.4, *Playing a file*): the played file's copy
+	 * fetches the range its reader wants next, so bytes far into it come
+	 * back while much before them has still not been copied -- through
+	 * the mount, as a desktop player reads, and through the bytes BeerSSH's
+	 * own player is handed. Each far read equals the host's file there.
+	 */
+	QTemporaryDir there;
+	QVERIFY(there.isValid());
+	QByteArray bytes(40 * 1024 * 1024, '\0');
+	for (int i = 0; i < bytes.size(); ++i) bytes[i] = char(i * 41 + 3);
+	{
+		QFile clip(there.filePath(QStringLiteral("long.ogg")));
+		QVERIFY(clip.open(QIODevice::WriteOnly));
+		clip.write(bytes);
+	}
+	const qint64 far = 36 * 1024 * 1024 + 12345;
+	const int span = 4096;
+
+	bssh_session *session = connected_session(QStringLiteral("seek-test"));
+	QVERIFY2(session, "the test server did not take the connection");
+	bssh_file_panel panel(session);
+	QSignalSpy listed(&panel, &bssh_file_panel::listed);
+	panel.open_directory(there.path());
+	QTRY_VERIFY_WITH_TIMEOUT(listed.size() == 1, 15000);
+	QTreeWidget *list = panel.findChild<QTreeWidget *>(QStringLiteral("file-panel-list"));
+	QVERIFY(list && list->topLevelItemCount() == 1);
+	list->topLevelItem(0)->setSelected(true);
+
+	const bssh_in_app_player_t built = bssh_in_app_player();
+	struct restore_t {
+		bssh_in_app_player_t was;
+		~restore_t() { bssh_in_app_player() = was; }
+	} restore{ built };
+	QSignalSpy finished(session, &bssh_session::download_finished);
+
+	/* Through the mount, as a desktop player seeks. */
+	if (bssh_fuse_shelf::available()) {
+		/*
+		 * The in-app player declines, so the desktop's is asked; it keeps
+		 * the bytes it was offered only to look at what has arrived, and
+		 * never reads them -- the mounted read alone must ask for its range.
+		 */
+		std::shared_ptr<bssh_media_bytes> watched;
+		bssh_in_app_player() = [&watched](const bssh_media_t &media, QWidget *) {
+			watched = media.bytes;
+			return false;
+		};
+		QList<QUrl> opened;
+		panel.set_opener([&opened](const QUrl &url) {
+			opened << url;
+			return true;
+		});
+		QVERIFY(panel.play_selected());
+		QCOMPARE(opened.size(), 1);
+		QByteArray got;
+		std::atomic<bool> done{ false };
+		std::thread reader([&] {
+			QFile file(opened.first().toLocalFile());
+			if (file.open(QIODevice::ReadOnly) && file.seek(far)) got = file.read(span);
+			done = true;
+		});
+		QTRY_VERIFY_WITH_TIMEOUT(done.load(), 30000);
+		const bool gap_before = watched && !watched->has(far / 2, span);
+		reader.join();
+		QVERIFY2(got == bytes.mid(int(far), span), "the mounted file read at the seek differs from the host's");
+		QVERIFY2(gap_before, "the mounted read's range came only after everything before it");
+		QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty(), 60000);
+		QVERIFY2(finished.last().at(0).toBool(), qPrintable(finished.last().at(3).toString()));
+		QFile whole(opened.first().toLocalFile());
+		QVERIFY(whole.open(QIODevice::ReadOnly));
+		QVERIFY2(whole.readAll() == bytes, "the file filled out of order is not the host's");
+		finished.clear();
+	}
+
+	/* Through the bytes BeerSSH's own player reads. */
+	std::shared_ptr<bssh_media_bytes> handed;
+	bssh_in_app_player() = [&handed](const bssh_media_t &media, QWidget *) {
+		handed = media.bytes;
+		return true;
+	};
+	QVERIFY(panel.play_selected());
+	QVERIFY(handed);
+	QByteArray got(span, '\0');
+	qint64 read = 0;
+	bool gap_before = false;
+	std::atomic<bool> done{ false };
+	std::thread reader([&] {
+		for (int tries = 0; tries < 3000 && read < span; ++tries) {
+			const qint64 n = handed->read(far + read, reinterpret_cast<uint8_t *>(got.data()) + read, span - read);
+			if (n < 0) break;
+			if (n == 0) {
+				handed->wait(10);
+				continue;
+			}
+			if (read == 0) gap_before = !handed->has(far / 2, span);
+			read += n;
+		}
+		done = true;
+	});
+	QTRY_VERIFY_WITH_TIMEOUT(done.load(), 40000);
+	reader.join();
+	QCOMPARE(read, qint64(span));
+	QVERIFY2(got == bytes.mid(int(far), span), "the player's bytes at the seek differ from the host's");
+	QVERIFY2(gap_before, "the seek's bytes came only after everything before them");
+	QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty(), 60000);
+	QVERIFY2(finished.last().at(0).toBool(), qPrintable(finished.last().at(3).toString()));
 	delete session;
 }

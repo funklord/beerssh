@@ -1,5 +1,7 @@
 #include "ssh/ssh_session.h"
 
+#include "model/piece_map.h"
+
 bssh_ssh_session::bssh_ssh_session(QObject *parent)
     : QObject(parent),
       m_state(DISCONNECTED) {
@@ -68,6 +70,12 @@ void bssh_ssh_session::list_directory(const QString &path) {
 		emit directory_listed(path, QList<bssh_remote_entry_t>(),
 		                      QStringLiteral("this connection has no files to list"));
 	}, Qt::QueuedConnection);
+}
+
+void bssh_ssh_session::download_pieces(const QString &path, const QString &directory,
+                                       std::shared_ptr<bssh_piece_map> pieces) {
+	if (pieces) pieces->set_in_order();
+	download({ path }, directory);
 }
 
 void bssh_ssh_session::download(const QStringList &paths, const QString &directory) {

@@ -6,6 +6,9 @@
 #include <QWaitCondition>
 
 #include <cstdint>
+#include <memory>
+
+class bssh_piece_map;
 
 /*
  * A file a copy back is still writing, read at an offset without waiting
@@ -20,13 +23,21 @@
  * when it has ended, whole or not; past that, a read short of the size
  * is the end rather than a stall.
  *
- * Read from any one thread -- a player's reader -- while the window's
- * thread reports the copy's progress and end.
+ * Read from several threads at once -- snurra reads a file's sound,
+ * waveform, picture and beats each on its own -- while the window's
+ * thread reports the copy's progress and end: each read opens the file
+ * for itself, and the rest is under a lock.
  */
 class bssh_media_bytes {
 public:
 	/* `staging` is the file the copy writes; `size` what it will reach. */
 	bssh_media_bytes(const QString &staging, qint64 size);
+	/*
+	 * A file filled out of order: what has arrived is what `pieces` says,
+	 * and want() is passed on, so the copy fetches where this reader goes
+	 * -- a seek ahead gets its bytes without waiting for those before.
+	 */
+	explicit bssh_media_bytes(std::shared_ptr<bssh_piece_map> pieces);
 
 	qint64 size() const { return m_size; }
 
@@ -61,6 +72,7 @@ private:
 
 	const QString m_staging;
 	const qint64 m_size;
+	const std::shared_ptr<bssh_piece_map> m_pieces;
 	mutable QMutex m_lock;
 	QWaitCondition m_more;
 	bool m_finished = false;

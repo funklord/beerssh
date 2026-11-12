@@ -9,6 +9,8 @@
 #include <QDateTime>
 #include <QMetaType>
 #include <QObject>
+
+#include <memory>
 #include <QString>
 
 #include "ssh/working_directory.h"
@@ -51,6 +53,8 @@ struct bssh_remote_entry_t {
  * SSH channel IS the byte stream that feeds the emulator (sec 3, core
  * principle 1).
  */
+class bssh_piece_map;
+
 class bssh_ssh_session : public QObject {
 	Q_OBJECT
 
@@ -319,6 +323,16 @@ public:
 	 */
 	virtual void download(const QStringList &paths, const QString &directory);
 	virtual void cancel_download() {}
+
+	/*
+	 * One file copied as download() copies it, but in the order `pieces`
+	 * asks -- the piece its reader wants first (sec 6.4, *Playing a
+	 * file*) -- each marked there once it is on disk. The staging file is
+	 * `pieces->staging()`, in a `directory` made for it. The default copies
+	 * in order with download() and says so on the map.
+	 */
+	virtual void download_pieces(const QString &path, const QString &directory,
+	                             std::shared_ptr<bssh_piece_map> pieces);
 
 	/*
 	 * Holds the copy under way between two of its pieces, or lets it go
