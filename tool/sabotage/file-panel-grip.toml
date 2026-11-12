@@ -35,3 +35,29 @@ file = "src/ui/file_panel.cpp"
 find = "\tif (m_overlay && watched == parentWidget() && event->type() == QEvent::Resize)\n\t\tsetGeometry(parentWidget()->rect());\n"
 replace = ""
 expect = "the_file_panel_on_touch_covers_the_terminal_without_resizing_it"
+
+# The pane's corner raised over the panel lying on the terminal: on a
+# phone it covered the panel's close button (seen on an emulator).
+[[sabotage]]
+name = "the corner covers the panel over the terminal"
+file = "src/ui/terminal_view.cpp"
+find = "\tif (QWidget *panel = findChild<QWidget *>(QStringLiteral(\"file-panel\"), Qt::FindDirectChildrenOnly))\n\t\tpanel->raise();\n"
+replace = ""
+expect = "the_file_panel_on_touch_covers_the_terminal_without_resizing_it"
+
+# The panel's field not taken for a form's: on a phone the path typed
+# there goes to the terminal's keyboard, into the shell.
+[[sabotage]]
+name = "the panel's field types into the terminal"
+file = "src/ui/main_window.cpp"
+find = "\tconst bool on_form = m_pages->currentWidget() != m_terminal_page || in_panel;"
+replace = "\tconst bool on_form = m_pages->currentWidget() != m_terminal_page;"
+expect = "the_file_panels_field_gets_the_forms_keyboard"
+
+# The terminal's keyboard left up under the forms': two keyboards stacked.
+[[sabotage]]
+name = "two keyboards stack for the panel's field"
+file = "src/ui/main_window.cpp"
+find = "\tm_keyboard->setVisible(built_in && !m_keyboard_hidden_by_user && !m_panel_field_focused);"
+replace = "\tm_keyboard->setVisible(built_in && !m_keyboard_hidden_by_user);"
+expect = "the_file_panels_field_gets_the_forms_keyboard"

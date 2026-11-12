@@ -294,6 +294,7 @@ private slots:
 	 * its system key undoes all of it. The terminal's page has neither.
 	 */
 	void the_forms_start_on_the_chosen_keyboard();
+	void the_file_panels_field_gets_the_forms_keyboard();
 	void a_form_switches_to_softkeys_and_back();
 
 	/*

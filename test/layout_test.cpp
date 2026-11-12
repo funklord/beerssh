@@ -6123,6 +6123,66 @@ void layout_test::the_forms_start_on_the_chosen_keyboard() {
 	QVERIFY(qApp->autoSipEnabled());
 }
 
+void layout_test::the_file_panels_field_gets_the_forms_keyboard() {
+	/*
+	 * The file panel lies on the terminal's page (sec 6.4), where the
+	 * terminal's keyboard types into the session: a path typed in the
+	 * panel's field went to the shell, its Enter with it, and once the
+	 * field was taken for a form's two keyboards stood stacked -- both
+	 * seen on an API 36 emulator, 2026-11-12. A focused panel field gets
+	 * the forms' keyboard and the terminal's steps aside; let go, it is
+	 * back.
+	 */
+	const forced_touch_t touch(1);
+	forced_screen_t held(QSize(360, 740));
+	bssh_app_settings settings;
+	const bssh_app_settings::keyboard_t before = settings.keyboard();
+	struct restore_t {
+		bssh_app_settings::keyboard_t was;
+		~restore_t() { bssh_app_settings().set_keyboard(was); }
+	} restore{before};
+	settings.set_keyboard(bssh_app_settings::KEYBOARD_BUILT_IN);
+
+	bssh_main_window window;
+	window.resize(360, 700);
+	window.show();
+	window.activateWindow();
+	QVERIFY(QTest::qWaitForWindowActive(&window));
+	const registry_left_as_found_t tidy(window.registry());
+	window.adopt_session(window.registry()->create(named(QStringLiteral("alpha"))));
+	QCoreApplication::processEvents();
+
+	sk_keyboard *form = window.findChild<sk_keyboard *>(QStringLiteral("form-keyboard"));
+	sk_keyboard *terminal = nullptr;
+	for (sk_keyboard *each : window.findChildren<sk_keyboard *>())
+		if (each != form) terminal = each;
+	sk_keyboard_switch *toggle = window.findChild<sk_keyboard_switch *>();
+	QVERIFY(form && terminal && toggle);
+	toggle->set_panel_probe([] { return true; });
+	toggle->switch_requested();   /* the forms on softkeys, as the emulator's were */
+	QTRY_VERIFY(terminal->isVisible());
+
+	QMenu *menu = window.build_terminal_menu(&window);
+	QAction *files = menu->findChild<QAction *>(QStringLiteral("terminal_files"));
+	QVERIFY2(files, "no Show Files in the touch menu");
+	window.act_on_terminal_menu(menu, files);
+	delete menu;
+	QTRY_VERIFY(window.findChild<QWidget *>(QStringLiteral("file-panel")));
+	QWidget *panel = window.findChild<QWidget *>(QStringLiteral("file-panel"));
+	QLineEdit *field = nullptr;
+	for (QLineEdit *each : panel->findChildren<QLineEdit *>())
+		if (each->accessibleName() == QStringLiteral("Remote directory")) field = each;
+	QVERIFY(field);
+
+	field->setFocus();
+	QTRY_VERIFY2(form->isVisible(), "the panel's field did not get the forms' keyboard");
+	QTRY_VERIFY2(!terminal->isVisible(), "the terminal's keyboard stayed up under the forms'");
+
+	field->clearFocus();
+	QTRY_VERIFY2(terminal->isVisible(), "the terminal's keyboard did not come back");
+	QVERIFY(!form->isVisible());
+}
+
 void layout_test::a_form_switches_to_softkeys_and_back() {
 	const forced_touch_t touch(1);
 	forced_screen_t held(QSize(360, 740));

@@ -2317,7 +2317,7 @@ void bssh_main_window::apply_keyboard_choice() {
 	 * The hide key is theirs; this function runs on every session event
 	 * and would otherwise overrule it moments later.
 	 */
-	m_keyboard->setVisible(built_in && !m_keyboard_hidden_by_user);
+	m_keyboard->setVisible(built_in && !m_keyboard_hidden_by_user && !m_panel_field_focused);
 	if (built_in) m_key_row->hide();
 	else m_key_row->setVisible(m_key_row->should_be_visible());
 
@@ -4872,9 +4872,25 @@ void bssh_main_window::use_softkeys_in_forms(bool use) {
 void bssh_main_window::update_form_keyboard() {
 	if (!m_form_keyboard || !m_pages || !m_keyboard_switch) return;
 
-	const bool on_form = m_pages->currentWidget() != m_terminal_page;
-	const bool ours = on_form && m_forms_use_softkeys;
 	QWidget *focus = QApplication::focusWidget();
+	/*
+	 * A field of the file panel (sec 6.4) is a form's too, though the
+	 * panel lies on the terminal's page: the terminal's keyboard types
+	 * into the session, so a path typed in the panel went to the shell
+	 * and its Enter with it -- seen on an API 36 emulator, 2026-11-12.
+	 */
+	bool in_panel = false;
+	for (QWidget *at = focus; at; at = at->parentWidget())
+		if (at->objectName() == QLatin1String("file-panel")) in_panel = true;
+	const bool on_form = m_pages->currentWidget() != m_terminal_page || in_panel;
+	/* And the terminal's keyboard steps aside meanwhile: two keyboards
+	 * stacked was what the panel's field first got. */
+	const bool panel_field = in_panel && focus && focus->inputMethodQuery(Qt::ImEnabled).toBool();
+	if (panel_field != m_panel_field_focused) {
+		m_panel_field_focused = panel_field;
+		apply_keyboard_choice();
+	}
+	const bool ours = on_form && m_forms_use_softkeys;
 
 	/*
 	 * Not while the focus is in another window -- the password prompt,

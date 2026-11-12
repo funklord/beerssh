@@ -4364,13 +4364,37 @@ model on a finger.
   does, and the menu gains "Send Files Here...", the platform's picker.
   Android has no Downloads default (its location there is the app's own),
   so a file opened asks where to go, through the document picker.
-  **Open, and why it is untested:** the copy back writes by path, and
-  whether a folder the picker returns (a `content://` tree) takes it is
-  read from Qt 6.12's `androidcontentfileengine.cpp` -- `open()` for
-  writing makes the file in its parent tree, `mkdir` and `exists` work --
-  not measured; nor whether `NewOnly` holds on one. Seeing it needs the
-  emulator, a throwaway sshd at 10.0.2.2 and a key placed in the app.
+  The copy back into a `content://` tree, read from Qt 6.12's
+  `androidcontentfileengine.cpp` at first, was then seen working on an
+  emulator (below).
   The x86_64 APK builds.
+  **Seen on an API 36 emulator 2026-11-12** (x86_64, against a
+  throwaway sshd on the host reached as 10.0.2.2, its key placed with
+  run-as): the host key asked with the right fingerprint, the session
+  up, "Show Files" in the touch menu, the panel over the terminal at
+  the shell's directory, its listing whole (230 entries). **It found a
+  fault:** the pane's corner -- Pan, Scroll, Select, the screen button
+  -- lay over the panel and hid its close, since the view raises its
+  corner whenever it places it; the view now raises the panel above it
+  after (`the_file_panel_on_touch_covers_the_terminal_without_resizing_it`,
+  with a sabotage). **And a second: the panel's location field typed
+  into the shell.** The terminal's keyboard types into the session
+  wherever the focus is, so a path typed in the panel, and its Enter,
+  went to the remote shell; a focused field of the panel is now a
+  form's, getting the forms' keyboard, and the terminal's steps aside
+  -- taken for a form's at first, two keyboards stood stacked
+  (`the_file_panels_field_gets_the_forms_keyboard`, two sabotages). On
+  touch a tap now opens an entry, as a phone's file managers do, where
+  it took a double tap. **Seen working after:** "Copy to..." through
+  Android's document picker into a folder made in Download -- Android
+  refuses Download itself to a folder picker, its privacy rule -- the
+  file there byte for byte, and copied again it arrived as
+  `hello (1).txt` beside the first, so the free name holds on a
+  `content://` tree; the tile names such a folder by the path the picker
+  showed, not its URI. Both status-bar marks seen: BeerSSH's `>_` and
+  beersshd's two units, no arrow left. The AVD keeps a known-hosts
+  entry for the throwaway server and the derived `id_test.pub` the app
+  wrote; its host list was put back as it was.
   **A reconnect ends a copy on the old transport, and the session says
   so itself** (2026-10-31): the transport's own report comes after it is
   deleted -- dropped outright by a local copy's guard, and behind the

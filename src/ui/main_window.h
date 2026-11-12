@@ -498,6 +498,8 @@ private:
 	 * would look like the setting had changed itself.
 	 */
 	bool m_keyboard_hidden_by_user;
+	/* A field of the file panel has the focus: its keyboard is the form's. */
+	bool m_panel_field_focused = false;
 	QWidget *m_device_settings;
 
 	/*

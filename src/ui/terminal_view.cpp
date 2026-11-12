@@ -1897,6 +1897,15 @@ void bssh_terminal_view::place_corner() {
 	m_corner->setGeometry(right - size.width(), BSSH_GRID_INSET_PX, size.width(), size.height());
 	m_corner->raise();
 	if (m_mux_drawer && m_mux_drawer->is_open()) m_mux_drawer->raise();
+	/*
+	 * A file panel lying over the terminal (a phone, sec 6.4) stays over
+	 * the corner as well: raised beneath it, the corner covered the
+	 * panel's own buttons, its close among them -- seen on an API 36
+	 * emulator, 2026-11-12. The corner's modes are the terminal's, which
+	 * the panel covers anyway.
+	 */
+	if (QWidget *panel = findChild<QWidget *>(QStringLiteral("file-panel"), Qt::FindDirectChildrenOnly))
+		panel->raise();
 }
 
 

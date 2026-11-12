@@ -1693,6 +1693,18 @@ void terminal_view_test::the_file_panel_on_touch_covers_the_terminal_without_res
 	view.resize(500, 260);
 	QCoreApplication::processEvents();
 	QCOMPARE(panel->geometry(), view.rect());
+
+	/* And above the pane's corner, which the view raises whenever it
+	 * places it: beneath it, the corner covered the panel's close. */
+	view.set_pane_handle(true);
+	view.resize(520, 280);
+	QCoreApplication::processEvents();
+	QWidget *corner = nullptr;
+	for (QObject *child : view.children())
+		if (child->inherits("bssh_pane_corner")) corner = qobject_cast<QWidget *>(child);
+	QVERIFY2(corner, "the view made no corner to stack against");
+	QVERIFY2(view.children().indexOf(panel) > view.children().indexOf(corner),
+	         "the pane's corner lies over the file panel");
 }
 
 void terminal_view_test::the_terminal_reads_itself_to_assistive_technology() {

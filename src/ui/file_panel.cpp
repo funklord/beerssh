@@ -29,6 +29,7 @@
 
 #include "model/session.h"
 #include "platform/fuse_shelf.h"
+#include "platform/platform.h"
 #include "ui/remote_drag.h"
 
 #include <QFileInfo>
@@ -167,7 +168,15 @@ bssh_file_panel::bssh_file_panel(bssh_session *session, QWidget *parent)
 	connect(shell, &QToolButton::clicked, this, &bssh_file_panel::open_shells_directory);
 	connect(again, &QToolButton::clicked, this, [this] { open_directory(m_path); });
 	connect(close, &QToolButton::clicked, this, &bssh_file_panel::close_requested);
-	connect(m_list, &QTreeWidget::itemActivated, this, [this](QTreeWidgetItem *item) { activate(item); });
+	/*
+	 * On touch a tap opens, as a phone's file managers do; a double tap is
+	 * a desktop's gesture, and with both wired a double tap would open
+	 * three times. More acts on the selection either way.
+	 */
+	if (bssh_platform::instance() && bssh_platform::instance()->is_touch_primary())
+		connect(m_list, &QTreeWidget::itemClicked, this, [this](QTreeWidgetItem *item) { activate(item); });
+	else
+		connect(m_list, &QTreeWidget::itemActivated, this, [this](QTreeWidgetItem *item) { activate(item); });
 	connect(m_list, &QWidget::customContextMenuRequested, this, [this](const QPoint &at) {
 		show_menu(m_list->viewport()->mapToGlobal(at));
 	});
@@ -243,8 +252,18 @@ QString bssh_file_panel::transfer_label(const bssh_session::transfer_t &transfer
 	QString what = names.size() == 1 ? names.first() : tr("%n items", nullptr, int(names.size()));
 	const bool staging = transfer.destination.startsWith(bssh_drag_staging_path() + QLatin1Char('/'));
 	if (staging) return tr("%1, for the drag").arg(what);
-	return transfer.direction == bssh_session::TRANSFER_UP ? tr("%1 to %2").arg(what, transfer.destination)
-	                                                        : tr("%1 here, to %2").arg(what, transfer.destination);
+	/*
+	 * A folder Android's document picker gave is a content:// URI whose
+	 * last part is an encoded document id, "primary:Download/beerssh-test":
+	 * shown as the path after the colon, which is what the picker showed.
+	 */
+	QString where = transfer.destination;
+	if (where.startsWith(QStringLiteral("content://"))) {
+		const QString id = QUrl::fromPercentEncoding(where.section(QLatin1Char('/'), -1).toUtf8());
+		where = id.contains(QLatin1Char(':')) ? id.section(QLatin1Char(':'), 1) : id;
+	}
+	return transfer.direction == bssh_session::TRANSFER_UP ? tr("%1 to %2").arg(what, where)
+	                                                        : tr("%1 here, to %2").arg(what, where);
 }
 
 bssh_file_panel::tile_t &bssh_file_panel::tile_for(int id) {
