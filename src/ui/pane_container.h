@@ -54,6 +54,14 @@ public:
 	void set_file_panel_open(bssh_session *session, bool open);
 
 	/*
+	 * A file panel is showing in some pane. Kept as a list rather than
+	 * found by walking the tree: the window asks from its focus handler,
+	 * which a rebuild reaches while it is deleting the very widgets such
+	 * a walk would visit.
+	 */
+	bool file_panel_shown() const;
+
+	/*
 	 * The same, rebuilding only what changed when that is one pane's
 	 * terminal -- a tab picked in its bar -- and everything else rebuilt
 	 * as rebuild() does.
@@ -348,6 +356,7 @@ private:
 	/* One per pane, in step with m_views: what holds its bar and its view. */
 	QList<QWidget *> m_frames;
 	QList<QWidget *> m_bars;
+	QList<QPointer<QWidget>> m_file_panels;
 	std::function<QWidget *(bssh_session *, QWidget *)> m_bar_factory;
 	Qt::Edge m_bar_edge = Qt::TopEdge;
 	bool m_rebuilding = false;

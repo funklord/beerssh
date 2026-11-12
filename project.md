@@ -4355,6 +4355,19 @@ model on a finger.
   same day as `snurra`** (`~/src/snurra`, skeleton `b0bceff`): the
   player and the library, which this media tile is to link -- vendored
   as softkeys is -- with the SFTP reads as its byte source.
+  **snurra says it can be taken up** (its inbox note of 2026-11-12,
+  snurra `dd1f2da`/`f8761ca`): a submodule with `snurra/snurra.pri`
+  for qmake, headers as `"snurra/deck.h"`; the byte source is an
+  implementation of `snurra_bytes` (`include/snurra/source.h`) --
+  read at an offset without blocking (bytes here, 0 for not yet, -1
+  past the end), `has`, `want(offset)` naming what to fetch first, and
+  `wait` -- handed over through `snurra_deck::start_t::bytes`. Its
+  stall contract is fuzzypickles': silent and held where bytes stop, on
+  from the next frame when they come, a seek into missing bytes waits
+  there and asks for them. One cost: an exact seek in an arriving MP3
+  without a TOC reads from the edge of what is here. Not yet taken up:
+  it is the media tile's first step, and what it adds to the APK is to
+  be measured then.
   **Step 3, the phone's form, built 2026-11-11 and not yet seen on a
   device.** On touch the panel lies over the terminal view, its child,
   following its size, rather than beside it: the view keeps its size, so
@@ -4383,7 +4396,17 @@ model on a finger.
   went to the remote shell; a focused field of the panel is now a
   form's, getting the forms' keyboard, and the terminal's steps aside
   -- taken for a form's at first, two keyboards stood stacked
-  (`the_file_panels_field_gets_the_forms_keyboard`, two sabotages). On
+  (`the_file_panels_field_gets_the_forms_keyboard`, two sabotages).
+  **The holder's word the same day: the terminal's keyboard stays down
+  for as long as the panel is open**, field focused or not -- on a
+  phone the panel covers the terminal it would type into -- **and the
+  find bar's search is a form's field too**, getting the forms'
+  keyboard as the panel's path does, where it had the terminal's and
+  typed the query into the session. The container keeps a list of the
+  panels it made (`file_panel_shown()`) rather than the window walking
+  the tree for them: the walk ran from the focus handler while a
+  rebuild was deleting the panes and crashed the test (four more
+  sabotages). On
   touch a tap now opens an entry, as a phone's file managers do, where
   it took a double tap. **Seen working after:** "Copy to..." through
   Android's document picker into a folder made in Download -- Android

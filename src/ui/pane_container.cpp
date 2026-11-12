@@ -267,6 +267,8 @@ bssh_terminal_view *bssh_pane_container::add_pane_view(bssh_session *session,
 		bssh_file_panel *panel = new bssh_file_panel(session, touch ? static_cast<QWidget *>(view) : frame);
 		if (touch) panel->set_overlay(true);
 		else row->addWidget(panel, 0);
+		m_file_panels.removeAll(QPointer<QWidget>());
+		m_file_panels.append(panel);
 		const QPointer<bssh_session> held = session;
 		connect(panel, &bssh_file_panel::close_requested, this, [this, held] {
 			if (held) set_file_panel_open(held, false);
@@ -1286,6 +1288,12 @@ void bssh_pane_container::apply_drop_planner(bssh_terminal_view *view, bssh_sess
 	                                                                      int edge) {
 		return alive && m_drop_planner ? m_drop_planner(mime, alive.data(), edge) : BSSH_DROP_CANCEL;
 	});
+}
+
+bool bssh_pane_container::file_panel_shown() const {
+	for (const QPointer<QWidget> &panel : m_file_panels)
+		if (panel && panel->isVisible()) return true;
+	return false;
 }
 
 void bssh_pane_container::set_file_panel_open(bssh_session *session, bool open) {

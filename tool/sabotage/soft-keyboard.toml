@@ -10,12 +10,12 @@
 name = "the built-in keyboard joins the key row instead of replacing it"
 file = "src/ui/main_window.cpp"
 find = '''
-	m_keyboard->setVisible(built_in && !m_keyboard_hidden_by_user && !m_panel_field_focused);
+	m_keyboard->setVisible(built_in && !m_keyboard_hidden_by_user && !m_terminal_keyboard_aside);
 	if (built_in) m_key_row->hide();
 	else m_key_row->setVisible(m_key_row->should_be_visible());
 '''
 replace = '''
-	m_keyboard->setVisible(built_in && !m_keyboard_hidden_by_user && !m_panel_field_focused);
+	m_keyboard->setVisible(built_in && !m_keyboard_hidden_by_user && !m_terminal_keyboard_aside);
 	m_key_row->setVisible(m_key_row->should_be_visible());
 '''
 expect = "only_one_on_screen_keyboard_is_ever_shown"

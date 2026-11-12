@@ -708,6 +708,9 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	connect(m_panes, &bssh_pane_container::panes_rebuilt, this, [this] {
 		on_pane_focus_changed(m_panes->focused_session());
 
+		/* A file panel opened or closed moves the terminal's keyboard. */
+		update_form_keyboard();
+
 		/* What a pane can be shrunk to may have changed with its bar. */
 		queue_room();
 
@@ -2317,7 +2320,7 @@ void bssh_main_window::apply_keyboard_choice() {
 	 * The hide key is theirs; this function runs on every session event
 	 * and would otherwise overrule it moments later.
 	 */
-	m_keyboard->setVisible(built_in && !m_keyboard_hidden_by_user && !m_panel_field_focused);
+	m_keyboard->setVisible(built_in && !m_keyboard_hidden_by_user && !m_terminal_keyboard_aside);
 	if (built_in) m_key_row->hide();
 	else m_key_row->setVisible(m_key_row->should_be_visible());
 
@@ -4874,20 +4877,27 @@ void bssh_main_window::update_form_keyboard() {
 
 	QWidget *focus = QApplication::focusWidget();
 	/*
-	 * A field of the file panel (sec 6.4) is a form's too, though the
-	 * panel lies on the terminal's page: the terminal's keyboard types
-	 * into the session, so a path typed in the panel went to the shell
-	 * and its Enter with it -- seen on an API 36 emulator, 2026-11-12.
+	 * A field on the terminal's page is a form's too: the file panel's
+	 * path (sec 6.4) and the find bar's search. The terminal's keyboard
+	 * types into the session, so a path typed in the panel went to the
+	 * shell and its Enter with it -- seen on an API 36 emulator,
+	 * 2026-11-12.
 	 */
-	bool in_panel = false;
+	bool in_field_row = false;
 	for (QWidget *at = focus; at; at = at->parentWidget())
-		if (at->objectName() == QLatin1String("file-panel")) in_panel = true;
-	const bool on_form = m_pages->currentWidget() != m_terminal_page || in_panel;
-	/* And the terminal's keyboard steps aside meanwhile: two keyboards
-	 * stacked was what the panel's field first got. */
-	const bool panel_field = in_panel && focus && focus->inputMethodQuery(Qt::ImEnabled).toBool();
-	if (panel_field != m_panel_field_focused) {
-		m_panel_field_focused = panel_field;
+		if (at->objectName() == QLatin1String("file-panel") || at == m_find_bar) in_field_row = true;
+	const bool field = in_field_row && focus && focus->inputMethodQuery(Qt::ImEnabled).toBool();
+	const bool on_form = m_pages->currentWidget() != m_terminal_page || field;
+	/*
+	 * And the terminal's keyboard steps aside meanwhile -- two keyboards
+	 * stacked was what the panel's field first got -- and for as long as
+	 * the panel is open, field or not: on a phone the panel covers the
+	 * terminal the keyboard would type into (the holder, 2026-11-12).
+	 */
+	const bool panel_shown = m_pages->currentWidget() == m_terminal_page && m_panes && m_panes->file_panel_shown();
+	const bool aside = field || panel_shown;
+	if (aside != m_terminal_keyboard_aside) {
+		m_terminal_keyboard_aside = aside;
 		apply_keyboard_choice();
 	}
 	const bool ours = on_form && m_forms_use_softkeys;

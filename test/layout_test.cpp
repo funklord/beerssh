@@ -6173,13 +6173,42 @@ void layout_test::the_file_panels_field_gets_the_forms_keyboard() {
 	for (QLineEdit *each : panel->findChildren<QLineEdit *>())
 		if (each->accessibleName() == QStringLiteral("Remote directory")) field = each;
 	QVERIFY(field);
+	/* Open, the panel covers the terminal: its keyboard steps aside. */
+	QTRY_VERIFY2(!terminal->isVisible(), "the terminal's keyboard stayed up over the open panel");
 
 	field->setFocus();
 	QTRY_VERIFY2(form->isVisible(), "the panel's field did not get the forms' keyboard");
-	QTRY_VERIFY2(!terminal->isVisible(), "the terminal's keyboard stayed up under the forms'");
+	QVERIFY2(!terminal->isVisible(), "the terminal's keyboard stayed up under the forms'");
 
 	field->clearFocus();
-	QTRY_VERIFY2(terminal->isVisible(), "the terminal's keyboard did not come back");
+	QTRY_VERIFY(!form->isVisible());
+	QVERIFY2(!terminal->isVisible(), "the terminal's keyboard came back with the panel still open");
+
+	menu = window.build_terminal_menu(&window);
+	files = menu->findChild<QAction *>(QStringLiteral("terminal_files"));
+	QVERIFY(files);
+	window.act_on_terminal_menu(menu, files);
+	delete menu;
+	QTRY_VERIFY(!window.findChild<QWidget *>(QStringLiteral("file-panel")));
+	QTRY_VERIFY2(terminal->isVisible(), "the terminal's keyboard did not come back once the panel closed");
+
+	/*
+	 * The find bar's search is the same: it lies on the terminal's page,
+	 * and the terminal's keyboard would type the query into the session.
+	 */
+	menu = window.build_terminal_menu(&window);
+	QAction *find = menu->findChild<QAction *>(QStringLiteral("terminal_find"));
+	QVERIFY2(find, "no Find in the touch menu");
+	window.act_on_terminal_menu(menu, find);
+	delete menu;
+	QLineEdit *search = window.findChild<QLineEdit *>(QStringLiteral("find_field"));
+	QVERIFY(search);
+	QTRY_VERIFY(search->hasFocus());
+	QTRY_VERIFY2(form->isVisible(), "the find bar's field did not get the forms' keyboard");
+	QVERIFY2(!terminal->isVisible(), "the terminal's keyboard stayed up under the find bar's");
+
+	search->clearFocus();
+	QTRY_VERIFY2(terminal->isVisible(), "the terminal's keyboard did not come back from the find bar");
 	QVERIFY(!form->isVisible());
 }
 

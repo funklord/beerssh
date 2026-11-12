@@ -498,8 +498,12 @@ private:
 	 * would look like the setting had changed itself.
 	 */
 	bool m_keyboard_hidden_by_user;
-	/* A field of the file panel has the focus: its keyboard is the form's. */
-	bool m_panel_field_focused = false;
+	/*
+	 * The terminal's keyboard is put aside: a file panel is open, or a
+	 * field on the terminal's page -- the panel's, the find bar's -- has
+	 * the focus and the forms' keyboard instead.
+	 */
+	bool m_terminal_keyboard_aside = false;
 	QWidget *m_device_settings;
 
 	/*

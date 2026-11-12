@@ -50,14 +50,40 @@ expect = "the_file_panel_on_touch_covers_the_terminal_without_resizing_it"
 [[sabotage]]
 name = "the panel's field types into the terminal"
 file = "src/ui/main_window.cpp"
-find = "\tconst bool on_form = m_pages->currentWidget() != m_terminal_page || in_panel;"
+find = "\tconst bool on_form = m_pages->currentWidget() != m_terminal_page || field;"
 replace = "\tconst bool on_form = m_pages->currentWidget() != m_terminal_page;"
+expect = "the_file_panels_field_gets_the_forms_keyboard"
+
+# The find bar's field not counted with the panel's: its search goes to
+# the terminal's keyboard, into the shell.
+[[sabotage]]
+name = "the find bar's field types into the terminal"
+file = "src/ui/main_window.cpp"
+find = "objectName() == QLatin1String(\"file-panel\") || at == m_find_bar) in_field_row"
+replace = "objectName() == QLatin1String(\"file-panel\")) in_field_row"
+expect = "the_file_panels_field_gets_the_forms_keyboard"
+
+# The open panel ignored: the terminal's keyboard stays up over a panel
+# that covers the terminal it would type into.
+[[sabotage]]
+name = "the terminal's keyboard stays up over the open panel"
+file = "src/ui/main_window.cpp"
+find = "\tconst bool aside = field || panel_shown;"
+replace = "\tconst bool aside = field;"
+expect = "the_file_panels_field_gets_the_forms_keyboard"
+
+# Panels not remembered: the window cannot tell one is open.
+[[sabotage]]
+name = "the container forgets the panels it made"
+file = "src/ui/pane_container.cpp"
+find = "\t\tm_file_panels.append(panel);\n"
+replace = ""
 expect = "the_file_panels_field_gets_the_forms_keyboard"
 
 # The terminal's keyboard left up under the forms': two keyboards stacked.
 [[sabotage]]
 name = "two keyboards stack for the panel's field"
 file = "src/ui/main_window.cpp"
-find = "\tm_keyboard->setVisible(built_in && !m_keyboard_hidden_by_user && !m_panel_field_focused);"
+find = "\tm_keyboard->setVisible(built_in && !m_keyboard_hidden_by_user && !m_terminal_keyboard_aside);"
 replace = "\tm_keyboard->setVisible(built_in && !m_keyboard_hidden_by_user);"
 expect = "the_file_panels_field_gets_the_forms_keyboard"

@@ -10,8 +10,8 @@
 [[sabotage]]
 name = "the hide key is applied but not remembered"
 file = "src/ui/main_window.cpp"
-find = "\tm_keyboard->setVisible(built_in && !m_keyboard_hidden_by_user && !m_panel_field_focused);"
-replace = "\tm_keyboard->setVisible(built_in && !m_panel_field_focused);"
+find = "\tm_keyboard->setVisible(built_in && !m_keyboard_hidden_by_user && !m_terminal_keyboard_aside);"
+replace = "\tm_keyboard->setVisible(built_in && !m_terminal_keyboard_aside);"
 expect = "the_hide_key_is_remembered_and_a_tap_undoes_it"
 
 # 2. The view reports the tap only where the SYSTEM panel would be raised.
