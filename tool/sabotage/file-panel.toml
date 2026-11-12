@@ -201,3 +201,47 @@ file = "src/model/session.cpp"
 find = "\tfor (transfer_t &transfer : m_transfers) {\n\t\tif (transfer.direction != direction || transfer.state != TRANSFER_QUEUED) continue;\n\t\tbegin_transfer(transfer);\n\t\treturn;\n\t}\n"
 replace = ""
 expect = "copies_queue_as_tiles_and_pause_between_pieces"
+
+# XDS spoken on the top level, not the window Qt drags from: a real
+# target (pcmanfm-qt) reads no name there and BeerSSH no answer, "E".
+[[sabotage]]
+name = "XDS is spoken on the top level"
+file = "src/ui/file_panel.cpp"
+find = "\tif (owner != XCB_WINDOW_NONE && (owner & ~mask) == (top_level & ~mask)) return owner;\n"
+replace = ""
+expect = "a_file_dragged_out_is_saved_where_the_file_manager_says"
+
+# A folder named alone taken as a file's URL: the copy lands beside the
+# folder pcmanfm-qt was showing, not in it.
+[[sabotage]]
+name = "an XDS answer naming a folder saves beside it"
+file = "src/ui/file_panel.cpp"
+find = "\tconst QString folder = named.isDir() ? named.absoluteFilePath() : named.absolutePath();"
+replace = "\tconst QString folder = named.absolutePath();"
+expect = "a_file_dragged_out_is_saved_where_the_file_manager_says"
+
+# A whole staging the save went by stays on disk, its tile saying
+# "Ready to drop" until BeerSSH quits.
+[[sabotage]]
+name = "a whole staging outlives the save that went by it"
+file = "src/ui/file_panel.cpp"
+find = "\t/* The drop went by the save, so the drag's staged copy serves no one. */\n\tput_away_finished_staging();\n"
+replace = ""
+expect = "a_file_dragged_out_is_saved_where_the_file_manager_says"
+
+# The staging a save stopped keeps its tile, saying "Stopped".
+[[sabotage]]
+name = "a stopped staging keeps its tile"
+file = "src/ui/file_panel.cpp"
+find = "\t\tm_put_away.insert(m_staging_dir);\n"
+replace = ""
+expect = "a_file_dragged_out_is_saved_where_the_file_manager_says"
+
+# The finish announced before the transfer ends: the save a listener
+# starts on hearing it is the transfer end_transfer then ends.
+[[sabotage]]
+name = "a copy started on a finish is ended in its place"
+file = "src/model/session.cpp"
+find = "\t\tend_transfer(TRANSFER_DOWN, ok, directory, written, why);\n\t\temit download_finished(ok, directory, written, why);"
+replace = "\t\temit download_finished(ok, directory, written, why);\n\t\tend_transfer(TRANSFER_DOWN, ok, directory, written, why);"
+expect = "a_file_dragged_out_is_saved_where_the_file_manager_says"

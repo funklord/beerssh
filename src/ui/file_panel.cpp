@@ -334,7 +334,9 @@ void bssh_file_panel::transfer_changed(int id) {
 	if (!m_session) return;
 	for (const bssh_session::transfer_t &transfer : m_session->transfers()) {
 		if (transfer.id != id) continue;
+		if (m_put_away.contains(transfer.destination)) return;
 		tile_t &tile = tile_for(id);
+		tile.destination = transfer.destination;
 		tile.label->setText(transfer_label(transfer));
 		tile.label->setToolTip(transfer.paths.join(QLatin1Char('\n')));
 		show_tile_state(tile, transfer.state);
@@ -362,7 +364,19 @@ void bssh_file_panel::transfer_progress(int id, qint64 done, qint64 total) {
 
 void bssh_file_panel::transfer_finished(int id, bool ok, const QString &destination, const QStringList &written,
                                         const QString &why) {
+	if (m_put_away.contains(destination)) {
+		/* A staging a save took the place of: its tile goes with it. Kept
+		 * in the set, which a staging's directory never leaves: a change
+		 * reported after the finish would otherwise bring the tile back. */
+		auto found = m_tiles.find(id);
+		if (found != m_tiles.end()) {
+			found->frame->deleteLater();
+			m_tiles.erase(found);
+		}
+		return;
+	}
 	tile_t &tile = tile_for(id);
+	tile.destination = destination;
 	tile.over = true;
 	tile.pause->hide();
 	tile.bar->hide();
@@ -795,6 +809,7 @@ bssh_remote_drag *bssh_file_panel::drag_data_for_selection() {
 					m_staging_mounted << mounted;
 				}
 				data->set_mounted(m_staging_mounted);
+				m_last_mounted = m_staging_mounted;
 			}
 			m_session->download(paths, dir);
 		}
@@ -809,6 +824,13 @@ void bssh_file_panel::start_drag() {
 	 * event loop runs during exec, so the staging goes on under it. */
 	QDrag *drag = new QDrag(this);
 	drag->setMimeData(data);
+	/*
+	 * XDS's name again once the drag has begun: exec makes Qt's own
+	 * window the source, and that is where a target looks for it. The
+	 * timer runs in exec's loop, before any target can have asked.
+	 */
+	if (!m_direct_save_name.isEmpty())
+		QTimer::singleShot(0, this, [this] { set_direct_save_name(m_direct_save_name); });
 	drag_ended(drag->exec(Qt::CopyAction));
 	set_direct_save_name(QString());
 	/* Kept a moment past the drop: Dolphin calls after it has returned. */
@@ -849,6 +871,28 @@ xcb_connection_t *x11_connection() {
 	return x11 ? x11->connection() : nullptr;
 }
 
+/*
+ * The window XDS speaks on: the drag's source as XdndEnter names it, which
+ * is where a target reads the proposed name and writes its answer. Qt drags
+ * from a window of its own, not the top level, and makes it XdndSelection's
+ * owner as the drag starts -- so that owner, where it is one of this
+ * connection's windows, and the top level before any drag has made one.
+ *
+ * Writing on the top level alone was seen failing 2026-11-12 against
+ * pcmanfm-qt (libfm-qt), which read an empty name from Qt's window, wrote
+ * its answer there, and BeerSSH, reading its top level, answered "E".
+ */
+xcb_window_t xds_window(xcb_connection_t *connection, xcb_window_t top_level) {
+	xcb_get_selection_owner_reply_t *reply = xcb_get_selection_owner_reply(connection,
+	        xcb_get_selection_owner(connection, intern(connection, "XdndSelection")), nullptr);
+	const xcb_window_t owner = reply ? reply->owner : xcb_window_t(XCB_WINDOW_NONE);
+	free(reply);
+	/* Ours by its id: a connection's ids share the bits outside its mask. */
+	const uint32_t mask = xcb_get_setup(connection)->resource_id_mask;
+	if (owner != XCB_WINDOW_NONE && (owner & ~mask) == (top_level & ~mask)) return owner;
+	return top_level;
+}
+
 }
 #endif
 
@@ -858,13 +902,16 @@ xcb_connection_t *x11_connection() {
  * the property away, as the drag ends.
  */
 void bssh_file_panel::set_direct_save_name(const QString &name) {
+	m_direct_save_name = name;
 #if !defined(Q_OS_ANDROID) && QT_CONFIG(xcb)
 	xcb_connection_t *connection = x11_connection();
 	if (!connection || !window()->windowHandle()) return;
-	const xcb_window_t source = xcb_window_t(window()->winId());
+	const xcb_window_t top_level = xcb_window_t(window()->winId());
+	const xcb_window_t source = xds_window(connection, top_level);
 	const xcb_atom_t property = intern(connection, "XdndDirectSave0");
 	if (name.isEmpty()) {
 		xcb_delete_property(connection, source, property);
+		if (source != top_level) xcb_delete_property(connection, top_level, property);
 	} else {
 		const QByteArray bytes = name.toUtf8();
 		xcb_change_property(connection, XCB_PROP_MODE_REPLACE, source, property,
@@ -886,7 +933,7 @@ QByteArray bssh_file_panel::direct_save(const QStringList &paths) {
 #if !defined(Q_OS_ANDROID) && QT_CONFIG(xcb)
 	xcb_connection_t *connection = x11_connection();
 	if (!connection || !m_session) return QByteArrayLiteral("E");
-	const xcb_window_t source = xcb_window_t(window()->winId());
+	const xcb_window_t source = xds_window(connection, xcb_window_t(window()->winId()));
 	xcb_get_property_reply_t *reply = xcb_get_property_reply(connection,
 	        xcb_get_property(connection, 0, source, intern(connection, "XdndDirectSave0"),
 	                         XCB_GET_PROPERTY_TYPE_ANY, 0, 4096), nullptr);
@@ -903,8 +950,15 @@ QByteArray bssh_file_panel::direct_save(const QStringList &paths) {
 	const QString host = url.host();
 	if (!host.isEmpty() && host != QStringLiteral("localhost") && host != QSysInfo::machineHostName())
 		return QByteArrayLiteral("E");
-	return save_into(paths, QFileInfo(url.toLocalFile()).absolutePath()) ? QByteArrayLiteral("S")
-	                                                                     : QByteArrayLiteral("E");
+	/*
+	 * The file's URL, as XDS asks -- or a folder's, which pcmanfm-qt
+	 * writes: it reads the proposal with delete set while the drag moves,
+	 * finds nothing at the drop and names the folder alone (seen
+	 * 2026-11-12, libfm-qt 2.x). Into that folder, then, not beside it.
+	 */
+	const QFileInfo named(url.toLocalFile());
+	const QString folder = named.isDir() ? named.absoluteFilePath() : named.absolutePath();
+	return save_into(paths, folder) ? QByteArrayLiteral("S") : QByteArrayLiteral("E");
 #else
 	Q_UNUSED(paths);
 	return QByteArrayLiteral("E");
@@ -919,7 +973,10 @@ QByteArray bssh_file_panel::direct_save(const QStringList &paths) {
  */
 bool bssh_file_panel::save_into(const QStringList &paths, const QString &folder) {
 	if (!m_session || !QFileInfo(folder).isDir()) return false;
+	/* The drop went by the save, so the drag's staged copy serves no one. */
+	put_away_finished_staging();
 	if (!m_staging_dir.isEmpty() && m_session->download_in_progress()) {
+		m_put_away.insert(m_staging_dir);
 		m_discard_dir = m_staging_dir;
 		m_after_discard_paths = paths;
 		m_after_discard_dir = folder;
@@ -929,6 +986,35 @@ bool bssh_file_panel::save_into(const QStringList &paths, const QString &folder)
 	if (m_session->download_in_progress()) return false;
 	m_session->download(paths, folder);
 	return true;
+}
+
+/*
+ * A drag's staging the drop did not use -- an XDS or Ark save took its
+ * place: its copy and its place on the mount go, and its tile with them,
+ * where it would go on saying "Ready to drop" over a file that is gone.
+ * Measured against pcmanfm-qt 2026-11-12: a finished staging stayed on
+ * disk until BeerSSH quit, and with the mount there is no size limit.
+ */
+void bssh_file_panel::put_away_finished_staging() {
+	if (m_last_staged_dir.isEmpty() || !m_staging_dir.isEmpty()) return;
+	const QString dir = m_last_staged_dir;
+	m_last_staged_dir.clear();
+	put_away_staging(dir);
+}
+
+void bssh_file_panel::put_away_staging(const QString &dir) {
+	if (!dir.startsWith(bssh_drag_staging_root() + QLatin1Char('/'))) return;
+	for (const QString &path : m_last_mounted) bssh_fuse_shelf::remove(path);
+	m_last_mounted.clear();
+	QDir(dir).removeRecursively();
+	for (auto it = m_tiles.begin(); it != m_tiles.end();) {
+		if (it->over && it->destination == dir) {
+			it->frame->deleteLater();
+			it = m_tiles.erase(it);
+		} else {
+			++it;
+		}
+	}
 }
 
 /* The drag's Ark object, taken off the bus as the drag ends. */

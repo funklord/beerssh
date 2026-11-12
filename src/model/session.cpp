@@ -438,8 +438,15 @@ void bssh_session::wire_transport() {
 	         [this](bool ok, const QString &directory, const QStringList &written, const QString &why) {
 		m_uploading = false;
 		m_upload_directory.clear();
-		emit upload_finished(ok, directory, written, why);
+		/*
+		 * The transfer ended before the news goes out: a listener may start
+		 * the next copy (the panel's XDS save, behind the staging it
+		 * stopped), and end_transfer would otherwise end THAT one -- its
+		 * tile said "Stopped" over a running copy and the stopped one's
+		 * never finished (live test, 2026-11-12).
+		 */
 		end_transfer(TRANSFER_UP, ok, directory, written, why);
+		emit upload_finished(ok, directory, written, why);
 	});
 
 	/* The file panel's listing and copies back (sec 6.4). */
@@ -453,8 +460,9 @@ void bssh_session::wire_transport() {
 	         [this](bool ok, const QString &directory, const QStringList &written, const QString &why) {
 		m_downloading = false;
 		m_download_directory.clear();
-		emit download_finished(ok, directory, written, why);
+		/* Ended first, as the upload's above, for the same reason. */
 		end_transfer(TRANSFER_DOWN, ok, directory, written, why);
+		emit download_finished(ok, directory, written, why);
 	});
 
 	/*
@@ -795,20 +803,20 @@ void bssh_session::reconnect() {
 			const QString directory = m_upload_directory;
 			m_uploading = false;
 			m_upload_directory.clear();
-			emit upload_finished(false, directory, QStringList(),
-			                     QStringLiteral("the connection closed during the copy"));
 			end_transfer(TRANSFER_UP, false, directory, QStringList(),
 			             QStringLiteral("the connection closed during the copy"));
+			emit upload_finished(false, directory, QStringList(),
+			                     QStringLiteral("the connection closed during the copy"));
 		}
 		if (m_downloading) {
 			m_transport->cancel_download();
 			const QString directory = m_download_directory;
 			m_downloading = false;
 			m_download_directory.clear();
-			emit download_finished(false, directory, QStringList(),
-			                       QStringLiteral("the connection closed during the copy"));
 			end_transfer(TRANSFER_DOWN, false, directory, QStringList(),
 			             QStringLiteral("the connection closed during the copy"));
+			emit download_finished(false, directory, QStringList(),
+			                       QStringLiteral("the connection closed during the copy"));
 		}
 		/* Queued copies wait for a connection that is going: said, not kept. */
 		const QList<transfer_t> queued = m_transfers;

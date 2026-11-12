@@ -1,4 +1,5 @@
 #include <QDir>
+#include <QLabel>
 #include <QFile>
 #include <QStandardPaths>
 #include <QElapsedTimer>
@@ -2063,7 +2064,27 @@ void live_ssh_test::a_file_dragged_out_is_saved_where_the_file_manager_says()
 	auto *x11 = qApp->nativeInterface<QNativeInterface::QX11Application>();
 	QVERIFY(x11 && x11->connection());
 	xcb_connection_t *connection = x11->connection();
-	const xcb_window_t source = xcb_window_t(panel.window()->winId());
+	/*
+	 * The drag's source as a target sees it: not the top level but the
+	 * window Qt drags from, which it makes XdndSelection's owner as the
+	 * drag starts and names in XdndEnter. One of this connection's, made
+	 * here to stand in for it. pcmanfm-qt read and wrote that window and
+	 * found nothing when BeerSSH used its top level (2026-11-12).
+	 */
+	const xcb_window_t top_level = xcb_window_t(panel.window()->winId());
+	const xcb_window_t source = xcb_generate_id(connection);
+	xcb_create_window(connection, XCB_COPY_FROM_PARENT, source, top_level, 0, 0, 1, 1, 0,
+	                  XCB_WINDOW_CLASS_INPUT_ONLY, XCB_COPY_FROM_PARENT, 0, nullptr);
+	xcb_set_selection_owner(connection, source, test_atom(connection, "XdndSelection"), XCB_CURRENT_TIME);
+	xcb_flush(connection);
+	struct window_t {
+		xcb_connection_t *connection;
+		xcb_window_t id;
+		~window_t() {
+			xcb_destroy_window(connection, id);
+			xcb_flush(connection);
+		}
+	} held_source{connection, source};
 
 	QSignalSpy finished(session, &bssh_session::download_finished);
 	QPointer<bssh_remote_drag> data = panel.drag_data_for_selection();
@@ -2071,6 +2092,7 @@ void live_ssh_test::a_file_dragged_out_is_saved_where_the_file_manager_says()
 	QVERIFY2(session->download_in_progress(), "the staging was not running when the save was asked");
 	QCOMPARE(data->formats().value(0), QStringLiteral("XdndDirectSave0"));
 	QCOMPARE(read_direct_save(connection, source), QByteArray("saved.bin"));
+	QVERIFY2(read_direct_save(connection, top_level).isEmpty(), "the name went on the top level, where no target looks");
 
 	/* The file manager's answer, then its ask. */
 	write_direct_save(connection, source, QUrl::fromLocalFile(here.filePath(QStringLiteral("saved.bin"))).toEncoded());
@@ -2086,6 +2108,39 @@ void live_ssh_test::a_file_dragged_out_is_saved_where_the_file_manager_says()
 		if (done.at(1).toString() != here.path())
 			QVERIFY2(!QFileInfo::exists(done.at(1).toString()), "the staging an XDS save replaced was left behind");
 
+	const auto drag_tiles = [&panel] {
+		int count = 0;
+		for (QLabel *label : panel.findChildren<QLabel *>(QStringLiteral("transfer-label")))
+			if (label->text().endsWith(QStringLiteral(", for the drag"))) ++count;
+		return count;
+	};
+	/* The staging the save stopped: its tile goes with it. */
+	QTRY_COMPARE(drag_tiles(), 0);
+
+	/*
+	 * A staging already whole when the save is asked -- the common case for
+	 * a small file -- goes too: its copy, and its tile, which would say
+	 * "Ready to drop" over a file nobody will read (pcmanfm-qt, 2026-11-12).
+	 */
+	select(QStringLiteral("small.txt"));
+	finished.clear();
+	QPointer<bssh_remote_drag> whole = panel.drag_data_for_selection();
+	QVERIFY(whole && whole->direct_save());
+	QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty() && !session->download_in_progress(), 15000);
+	const QString staged_dir = finished.last().at(1).toString();
+	QVERIFY2(QFileInfo(staged_dir).isDir(), "the staging was not where it said");
+	QTRY_COMPARE(drag_tiles(), 1);
+	QDir(here.path()).mkdir(QStringLiteral("whole"));
+	finished.clear();
+	write_direct_save(connection, source,
+	                  QUrl::fromLocalFile(here.filePath(QStringLiteral("whole/small.txt"))).toEncoded());
+	QCOMPARE(whole->data(QStringLiteral("XdndDirectSave0")), QByteArray("S"));
+	QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty(), 15000);
+	QVERIFY(QFileInfo::exists(here.filePath(QStringLiteral("whole/small.txt"))));
+	QVERIFY2(!QFileInfo::exists(staged_dir), "a whole staging the save went by was left on disk");
+	QTRY_COMPARE(drag_tiles(), 0);
+	delete whole;
+
 	/* With nothing staging, the save begins at once. */
 	panel.set_staging_enabled(false);
 	select(QStringLiteral("small.txt"));
@@ -2100,6 +2155,23 @@ void live_ssh_test::a_file_dragged_out_is_saved_where_the_file_manager_says()
 	QVERIFY(small_arrived.open(QIODevice::ReadOnly));
 	QCOMPARE(small_arrived.readAll(), QByteArray("small"));
 	delete direct;
+
+	/*
+	 * A folder named alone, as pcmanfm-qt answers once it has read the
+	 * proposal away: into that folder, not beside it.
+	 */
+	QDir(here.path()).mkdir(QStringLiteral("inner"));
+	select(QStringLiteral("small.txt"));
+	QPointer<bssh_remote_drag> folder_only = panel.drag_data_for_selection();
+	QVERIFY(folder_only && folder_only->direct_save());
+	finished.clear();
+	write_direct_save(connection, source, QUrl::fromLocalFile(here.filePath(QStringLiteral("inner"))).toEncoded());
+	QCOMPARE(folder_only->data(QStringLiteral("XdndDirectSave0")), QByteArray("S"));
+	QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty(), 15000);
+	QVERIFY2(finished.last().at(0).toBool(), qPrintable(finished.last().at(3).toString()));
+	QVERIFY2(QFileInfo::exists(here.filePath(QStringLiteral("inner/small.txt"))),
+	         "a folder named alone was not saved into");
+	delete folder_only;
 
 	/* Somewhere this connection cannot write: refused. */
 	write_direct_save(connection, source, QByteArray("file://elsewhere.example/tmp/saved.bin"));

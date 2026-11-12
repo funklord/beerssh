@@ -4235,7 +4235,36 @@ model on a finger.
   roads, a save asked while its staging still copies (it waits for the
   stop) and one with nothing staging (it begins at once), each with a
   sabotage; the first version took one road only, and its sabotage of
-  the other was missed. Not yet seen with a real file manager.
+  the other was missed.
+  **Seen with a real file manager the same day, and it failed until
+  fixed twice:** pcmanfm-qt (libfm-qt, which speaks XDS) under Xvfb,
+  driven with xdotool, BeerSSH on a loopback sshd -- a 5 MB file then
+  arrived in the folder dropped on, byte for byte. (1) The property was
+  on BeerSSH's top level, while the XDS source is the window XdndEnter
+  names, which Qt drags from and makes `XdndSelection`'s owner: the
+  file manager read no name there and BeerSSH no answer, "E". XDS now
+  speaks on that owner where it is this connection's window (its id
+  shares the bits outside the resource mask), and the name is written
+  again from a 0 ms timer inside `exec`, since before the first drag
+  there is no owner yet -- that timer is covered only by the real drag,
+  as no test runs `exec`. (2) libfm-qt reads the proposal with delete
+  set as the drag moves, finds nothing at the drop, and writes the
+  folder's own URL: an answer naming an existing folder is now taken as
+  "into it". And a finished staging the save went by is put away --
+  its copy, its mount entries and its "Ready to drop" tile, which had
+  stayed until quit -- as is the tile of one the save stopped (four
+  sabotages, the test's source now a window owning `XdndSelection`).
+  **And the stopped staging's tile found a fault in the session:** it
+  announced a copy's end (`download_finished`) before ending its
+  transfer, so the save the panel starts on hearing it became the
+  running transfer and `end_transfer` ended that one -- the save's tile
+  said "Stopped" over a running copy, the staging's never finished. A
+  transfer is now ended first and then announced, at all four sites
+  (with a sabotage).
+  The live test had passed throughout, because it read and wrote the
+  same wrong window BeerSSH did. libssh's default identities come from
+  the account's passwd home, not `$HOME`, so the run used a sandbox
+  ssh-agent holding a throwaway key.
   **Ark's protocol built 2026-11-12** -- KDE's, and Dolphin's on Wayland,
   where XDS cannot reach. The drag carries
   `application/x-kde-ark-dndextract-service` and `-path`, naming this

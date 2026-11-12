@@ -145,6 +145,11 @@ private:
 	QString m_last_staged_dir;   /* the last drag's, staged or staging */
 	QString m_discard_dir;       /* an abandoned drag's, removed once stopped */
 	QStringList m_staging_mounted;   /* its copies on the FUSE mount, if any */
+	QStringList m_last_mounted;   /* the last drag's, kept past its staging */
+	/* Stagings put away with their tiles: a tile still to finish goes too. */
+	QSet<QString> m_put_away;
+	void put_away_staging(const QString &dir);
+	void put_away_finished_staging();
 	void end_mounted(bool whole);
 	/* A copy waiting for the staging it replaces to stop: XDS's. */
 	QStringList m_after_discard_paths;
@@ -155,6 +160,7 @@ private:
 	QPointer<QObject> m_ark_object;
 	void drop_ark();
 	void set_direct_save_name(const QString &name);
+	QString m_direct_save_name;   /* XDS's proposal while a drag offers it */
 	QPoint m_drag_press;
 	void start_drag();
 
@@ -175,6 +181,7 @@ private:
 		QProgressBar *bar = nullptr;
 		QToolButton *pause = nullptr;
 		QToolButton *close = nullptr;
+		QString destination;
 		bool over = false;
 	};
 	QVBoxLayout *m_tile_column = nullptr;
