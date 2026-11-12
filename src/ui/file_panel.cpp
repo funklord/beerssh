@@ -1,6 +1,7 @@
 #include "ui/file_panel.h"
 
 #include <QApplication>
+#include <QDesktopServices>
 #include <QDir>
 #include <QDrag>
 #include <QFrame>
@@ -28,6 +29,8 @@
 #include <algorithm>
 
 #include "model/session.h"
+#include "media/media_bytes.h"
+#include "media/media_player.h"
 #include "platform/fuse_shelf.h"
 #include "platform/platform.h"
 #include "ui/remote_drag.h"
@@ -145,7 +148,19 @@ bssh_file_panel::bssh_file_panel(bssh_session *session, QWidget *parent)
 	m_list->header()->setSectionResizeMode(NAME, QHeaderView::Stretch);
 	m_list->header()->setSectionResizeMode(SIZE, QHeaderView::ResizeToContents);
 	m_list->header()->setSectionResizeMode(MODIFIED, QHeaderView::ResizeToContents);
+	/*
+	 * BeerSSH's own player, where the build has one: above the files, as
+	 * the holder placed a media tile (sec 6.4). Empty and hidden until a
+	 * Play puts a player in it.
+	 */
+	m_media_area = new QWidget(this);
+	m_media_area->setObjectName(QStringLiteral("media-area"));
+	QVBoxLayout *media = new QVBoxLayout(m_media_area);
+	media->setContentsMargins(0, 0, 0, 0);
+	m_media_area->hide();
+	column->addWidget(m_media_area);
 	column->addWidget(m_list, 1);
+	m_opener = [](const QUrl &url) { return QDesktopServices::openUrl(url); };
 
 	/*
 	 * The listing's own line, then one row per direction of copy with a
@@ -218,6 +233,11 @@ bssh_file_panel::bssh_file_panel(bssh_session *session, QWidget *parent)
 			}
 			return;
 		}
+		if (!m_play_dir.isEmpty() && directory == m_play_dir) {
+			end_play(ok);
+			if (!ok && why != QLatin1String(BSSH_COPY_STOPPED)) say(tr("Could not play: %1").arg(why));
+			return;
+		}
 		if (!m_staging_dir.isEmpty() && directory == m_staging_dir) {
 			/* A drag's copies, whole: a drop from now on gets them. */
 			QStringList staged;
@@ -250,6 +270,7 @@ QString bssh_file_panel::transfer_label(const bssh_session::transfer_t &transfer
 	QStringList names;
 	for (const QString &path : transfer.paths) names << path.section(QLatin1Char('/'), -1);
 	QString what = names.size() == 1 ? names.first() : tr("%n items", nullptr, int(names.size()));
+	if (!m_play_dir.isEmpty() && transfer.destination == m_play_dir) return tr("%1, playing").arg(what);
 	const bool staging = transfer.destination.startsWith(bssh_drag_staging_path() + QLatin1Char('/'));
 	if (staging) return tr("%1, for the drag").arg(what);
 	/*
@@ -349,6 +370,8 @@ void bssh_file_panel::transfer_changed(int id) {
 }
 
 void bssh_file_panel::transfer_progress(int id, qint64 done, qint64 total) {
+	/* A reader of the file being played waits for exactly this. */
+	if (m_play_bytes) m_play_bytes->arrived();
 	auto it = m_tiles.find(id);
 	if (it == m_tiles.end()) return;
 	/*
@@ -381,8 +404,10 @@ void bssh_file_panel::transfer_finished(int id, bool ok, const QString &destinat
 	tile.pause->hide();
 	tile.bar->hide();
 	tile.close->setAccessibleName(tr("Put away"));
+	const bool playing = !m_play_dir.isEmpty() && destination == m_play_dir;
 	const bool staging = destination.startsWith(bssh_drag_staging_path() + QLatin1Char('/'));
-	if (ok) tile.status->setText(staging ? tr("Ready to drop") : tr("Copied %1").arg(written.join(QStringLiteral(", "))));
+	if (ok && playing) tile.status->setText(tr("All here"));
+	else if (ok) tile.status->setText(staging ? tr("Ready to drop") : tr("Copied %1").arg(written.join(QStringLiteral(", "))));
 	else if (why == QLatin1String(BSSH_COPY_STOPPED)) tile.status->setText(tr("Stopped"));
 	else tile.status->setText(tr("Failed: %1").arg(why));
 	if (tile.label->text().isEmpty()) tile.label->setText(destination);
@@ -578,6 +603,12 @@ void bssh_file_panel::show_menu(const QPoint &at) {
 	QAction *elsewhere = nullptr;
 	QAction *rename = nullptr;
 	QAction *remove = nullptr;
+	QAction *play = nullptr;
+	if (can_play_selected()) {
+		play = menu.addAction(tr("Play"));
+		play->setObjectName(QStringLiteral("file-panel-play"));
+		menu.addSeparator();
+	}
 	if (!selected.isEmpty()) {
 		if (!m_download_directory.isEmpty()) downloads = menu.addAction(tr("Copy to Downloads"));
 		elsewhere = menu.addAction(tr("Copy to..."));
@@ -596,7 +627,8 @@ void bssh_file_panel::show_menu(const QPoint &at) {
 		copy_here(QFileDialog::getOpenFileNames(this, tr("Send to %1").arg(m_path)));
 		return;
 	}
-	if (downloads && chosen == downloads) copy_selected_to(m_download_directory);
+	if (play && chosen == play) play_selected();
+	else if (downloads && chosen == downloads) copy_selected_to(m_download_directory);
 	else if (chosen == elsewhere) copy_selected_elsewhere();
 	else if (chosen == rename) {
 		const bssh_remote_entry_t &entry = m_entries.at(selected.first()->data(NAME, Qt::UserRole).toInt());
@@ -620,6 +652,113 @@ void bssh_file_panel::show_menu(const QPoint &at) {
 		                                           QString(), &ok);
 		if (ok) make_folder(name);
 	}
+}
+
+bool bssh_file_panel::can_play_selected() const {
+	if (!m_session || m_path.isEmpty()) return false;
+	const QList<QTreeWidgetItem *> selected = m_list->selectedItems();
+	if (selected.size() != 1) return false;
+	const int at = selected.first()->data(NAME, Qt::UserRole).toInt();
+	if (at < 0 || at >= m_entries.size()) return false;
+	const bssh_remote_entry_t &entry = m_entries.at(at);
+	if (opens(entry) || !bssh_is_playable(entry.name)) return false;
+#ifdef Q_OS_ANDROID
+	/* Android opens no app's private file in another app, so the
+	 * desktop's road is closed here: only BeerSSH's own player plays. */
+	if (!bssh_in_app_player()) return false;
+#endif
+	return true;
+}
+
+bool bssh_file_panel::play_selected() {
+	if (!can_play_selected()) return false;
+	const bssh_remote_entry_t entry = m_entries.at(m_list->selectedItems().first()->data(NAME, Qt::UserRole).toInt());
+	const QString path = remote_path_of(entry);
+	bssh_media_t media;
+	media.name = entry.name;
+
+	if (!m_session->is_remote()) {
+		/* Here already: played where it is, nothing staged. */
+		media.path = path;
+		media.bytes = std::make_shared<bssh_media_bytes>(path, entry.size);
+		media.bytes->finished(true);
+		if (bssh_in_app_player() && bssh_in_app_player()(media, m_media_area)) {
+			m_media_area->show();
+			return true;
+		}
+		return m_opener && m_opener(QUrl::fromLocalFile(path));
+	}
+
+	/* One copy back at a time: a Play waits for none, it says so. */
+	if (m_session->download_in_progress()) {
+		say(tr("A copy is running; Play when it is done"));
+		return false;
+	}
+	put_away_play();
+	const QString dir = bssh_drag_staging_root() + QStringLiteral("/play-") + QString::number(++m_drags);
+	if (!QDir().mkpath(dir)) return false;
+	m_play_dir = dir;
+	m_play_file = QDir(dir).filePath(entry.name);
+	m_play_bytes = std::make_shared<bssh_media_bytes>(m_play_file, entry.size);
+	media.bytes = m_play_bytes;
+	/* On the mount it is a file from the first moment, whose reads wait. */
+	if (bssh_fuse_shelf::available()) m_play_mounted = bssh_fuse_shelf::add(entry.name, m_play_file, entry.size);
+	m_session->download({ path }, dir);
+
+	if (bssh_in_app_player() && bssh_in_app_player()(media, m_media_area)) {
+		m_media_area->show();
+		return true;
+	}
+	if (!m_play_mounted.isEmpty()) return m_opener && m_opener(QUrl::fromLocalFile(m_play_mounted));
+	/* No mount: a player of the desktop's cannot read a file still
+	 * growing, so it is opened once the copy is whole. */
+	m_play_open_when_whole = true;
+	say(tr("Copying %1 to play it").arg(entry.name));
+	return true;
+}
+
+/* The played file's copy ended: whole, or not. */
+void bssh_file_panel::end_play(bool whole) {
+	if (m_play_bytes) m_play_bytes->finished(whole);
+	if (!m_play_mounted.isEmpty()) {
+		bssh_fuse_shelf::finish(m_play_mounted, whole);
+		if (!whole) {
+			bssh_fuse_shelf::remove(m_play_mounted);
+			m_play_mounted.clear();
+		}
+	}
+	if (m_play_open_when_whole) {
+		m_play_open_when_whole = false;
+		if (whole && m_opener) m_opener(QUrl::fromLocalFile(m_play_file));
+	}
+}
+
+/*
+ * The last file played goes when another is: its copy stopped, its place
+ * on the mount and its staging removed. Kept until then, since a player
+ * may be reading it long after the copy is whole.
+ */
+void bssh_file_panel::put_away_play() {
+	if (m_play_dir.isEmpty()) return;
+	const QString dir = m_play_dir;
+	if (m_play_bytes) m_play_bytes->finished(false);
+	/* Its copy has ended: a Play begins only with none running. */
+	if (!m_play_mounted.isEmpty()) bssh_fuse_shelf::remove(m_play_mounted);
+	m_put_away.insert(dir);
+	for (auto it = m_tiles.begin(); it != m_tiles.end();) {
+		if (it->over && it->destination == dir) {
+			it->frame->deleteLater();
+			it = m_tiles.erase(it);
+		} else {
+			++it;
+		}
+	}
+	if (dir.startsWith(bssh_drag_staging_root() + QLatin1Char('/'))) QDir(dir).removeRecursively();
+	m_play_dir.clear();
+	m_play_file.clear();
+	m_play_mounted.clear();
+	m_play_open_when_whole = false;
+	m_play_bytes.reset();
 }
 
 /* A name for an entry here: one path component, nothing that leaves it. */

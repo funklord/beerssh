@@ -6,6 +6,9 @@
 #include <QPointer>
 #include <QWidget>
 
+#include <functional>
+#include <memory>
+
 #include "model/session.h"
 #include "ssh/ssh_session.h"
 
@@ -18,6 +21,8 @@ class QToolButton;
 class QTreeWidget;
 class QTreeWidgetItem;
 class bssh_session;
+class bssh_media_bytes;
+class QUrl;
 
 /*
  * The files on the other end of a session, beside its terminal (project.md
@@ -94,6 +99,25 @@ public:
 	/* Where a double-clicked file goes; the Downloads folder by default. */
 	void set_download_directory(const QString &directory) { m_download_directory = directory; }
 
+	/*
+	 * Plays the one file selected (sec 6.4, *Playing a file*): audio or
+	 * video, by its name. In BeerSSH's own player where the build has one
+	 * (bssh_in_app_player), above the list; otherwise in the desktop's,
+	 * opened at once on the FUSE mount -- whose reads wait for bytes still
+	 * coming -- or once the copy is whole where there is no mount. A
+	 * local shell's file is opened where it is. False when nothing began.
+	 */
+	bool play_selected();
+	/* Whether play_selected() would begin: one file, and playable here. */
+	bool can_play_selected() const;
+
+	/* How the desktop's player is asked; QDesktopServices by default.
+	 * Tests set their own, to see what would have opened. */
+	void set_opener(std::function<bool(const QUrl &)> opener) { m_opener = std::move(opener); }
+
+	/* Where BeerSSH's own player goes: above the list. */
+	QWidget *media_area() const { return m_media_area; }
+
 	/* Shown over its parent, the terminal view, and kept its size. */
 	void set_overlay(bool overlay);
 	bool is_overlay() const { return m_overlay; }
@@ -161,6 +185,16 @@ private:
 	void drop_ark();
 	void set_direct_save_name(const QString &name);
 	QString m_direct_save_name;   /* XDS's proposal while a drag offers it */
+	/* The file being played, staged as a drag's is but kept apart from it. */
+	QString m_play_dir;
+	QString m_play_file;
+	QString m_play_mounted;
+	bool m_play_open_when_whole = false;
+	std::shared_ptr<bssh_media_bytes> m_play_bytes;
+	std::function<bool(const QUrl &)> m_opener;
+	QWidget *m_media_area = nullptr;
+	void end_play(bool whole);
+	void put_away_play();
 	QPoint m_drag_press;
 	void start_drag();
 

@@ -254,3 +254,35 @@ file = "src/platform/fuse_shelf.cpp"
 find = "\tattr.mode = n.directory ? (S_IFDIR | 0755) : (S_IFREG | 0644);"
 replace = "\tattr.mode = n.directory ? (S_IFDIR | 0555) : (S_IFREG | 0444);"
 expect = "a_file_dropped_on_a_plain_file_manager_is_read_as_it_arrives"
+
+# Play offered for anything: a text file handed to a media player.
+[[sabotage]]
+name = "Play is offered for a file that is not media"
+file = "src/ui/file_panel.cpp"
+find = "\tif (opens(entry) || !bssh_is_playable(entry.name)) return false;\n#ifdef Q_OS_ANDROID"
+replace = "\tif (opens(entry)) return false;\n#ifdef Q_OS_ANDROID"
+expect = "a_file_played_is_opened_as_it_arrives"
+
+# The mount ignored: a large file plays only once all of it has come.
+[[sabotage]]
+name = "a played file waits for the whole copy though the mount could show it"
+file = "src/ui/file_panel.cpp"
+find = "\tif (!m_play_mounted.isEmpty()) return m_opener && m_opener(QUrl::fromLocalFile(m_play_mounted));\n"
+replace = ""
+expect = "a_file_played_is_opened_as_it_arrives"
+
+# BeerSSH's own player never asked: the desktop's always opens.
+[[sabotage]]
+name = "the in-app player is never asked"
+file = "src/ui/file_panel.cpp"
+find = "\tm_session->download({ path }, dir);\n\n\tif (bssh_in_app_player() && bssh_in_app_player()(media, m_media_area)) {"
+replace = "\tm_session->download({ path }, dir);\n\n\tif (false) {"
+expect = "a_file_played_is_opened_as_it_arrives"
+
+# The file played before kept on disk and on the mount, one per Play.
+[[sabotage]]
+name = "a file played before is never put away"
+file = "src/ui/file_panel.cpp"
+find = "\tput_away_play();\n\tconst QString dir = bssh_drag_staging_root() + QStringLiteral(\"/play-\")"
+replace = "\tconst QString dir = bssh_drag_staging_root() + QStringLiteral(\"/play-\")"
+expect = "a_file_played_is_opened_as_it_arrives"

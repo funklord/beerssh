@@ -4414,6 +4414,46 @@ model on a finger.
   without a TOC reads from the edge of what is here. Not yet taken up:
   it is the media tile's first step, and what it adds to the APK is to
   be measured then.
+  **Playing a file -- [DECIDED 2026-11-12, the holder: snurra "is very
+  far from completion", so adopt it so that it grows into place].**
+  Three steps, each worth having if snurra stalled:
+  (1) **The bytes, BeerSSH's own** (`src/media/media_bytes.*`): a file a
+  copy back is still writing, read at an offset without waiting -- what
+  is on disk is the host's (the shelf's rule), past it is a stall (0)
+  until the copy ends, then the end (-1); `want` is recorded for the
+  later range fetch; `wait` is woken by each piece. The four calls are
+  `snurra_bytes`', so the default build needs nothing of snurra's.
+  (2) **Play in the file panel**, for one audio or video file by its
+  name. In BeerSSH's own player where the build has one
+  (`bssh_in_app_player()`, empty by default), in an area above the
+  list; otherwise in the desktop's (`QDesktopServices`), opened at once
+  on the FUSE mount -- whose reads wait for bytes still coming, so a
+  large file plays as it copies -- or once whole where there is no
+  mount. A local shell's file opens where it is. Staged as a drag is, in
+  a `play-<n>` directory of its own, and put away when the next Play
+  begins; a Play while another copy back runs says so and waits for
+  none. Not on Android unless an in-app player exists (Android opens no
+  app's private file in another app). Seeking ahead waits for the copy
+  to reach it -- the range fetch following `want` is the next step.
+  `a_file_played_is_opened_as_it_arrives` (live: both roads, the file
+  read whole equals the host's) and
+  `a_file_still_arriving_is_read_as_far_as_it_has_come`; six sabotages.
+  (3) **snurra behind `make BSSH_MEDIA=1`**, off by default, through a
+  facade BeerSSH designed for snurra at the holder's word and sent it
+  (snurra inbox 20261112T1444Z): **`snurra/embed.h`** -- `snurra_media`
+  (name, path, bytes) and one widget, `snurra_player` (`can_play`,
+  `open`, `count`, `close_all`, `emptied`, `failed`), pimpl'd, versioned
+  by `SNURRA_EMBED_VERSION` and additive only; the engine inside; bytes
+  that stall and never fail; bytes callable from several snurra threads
+  at once; a destructor safe at any moment, since panels are rebuilt and
+  sessions move between processes. BeerSSH uses nothing below it, so
+  snurra's engine, decks and tiles stay snurra's to rework. The glue
+  (`src/media/media_player.cpp`) compiles the snurra road only when
+  `BSSH_MEDIA` is set and `__has_include("snurra/embed.h")`: until a
+  pinned snurra has the header, the media build plays in the desktop's
+  player, and the day the pin passes it BeerSSH plays in snurra's tile
+  with nothing here changed. The glue was compiled against the proposed
+  header verbatim (syntax only, snurra's real `source.h`).
   **Step 3, the phone's form, built 2026-11-11 and not yet seen on a
   device.** On touch the panel lies over the terminal view, its child,
   following its size, rather than beside it: the view keeps its size, so

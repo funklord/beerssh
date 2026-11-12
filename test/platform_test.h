@@ -106,6 +106,13 @@ private slots:
 	void an_lxqt_palette_file_named_light_holding_dark_reads_dark();
 	void the_applied_lxqt_palette_is_read_from_lxqt_conf_itself();
 	void brightness_and_contrast_do_not_outlive_the_run();
+
+	/*
+	 * A file still arriving, read as a player reads it (sec 6.4, *Playing
+	 * a file*): what is on disk is given, past it is a stall rather than
+	 * the end until the copy has ended, and a reader waiting is woken.
+	 */
+	void a_file_still_arriving_is_read_as_far_as_it_has_come();
 };
 
 #endif /* BSSH_PLATFORM_TEST_H */

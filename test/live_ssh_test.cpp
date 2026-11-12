@@ -1,4 +1,6 @@
 #include <QDir>
+#include "media/media_bytes.h"
+#include "media/media_player.h"
 #include <QLabel>
 #include <QFile>
 #include <QStandardPaths>
@@ -22,6 +24,7 @@
 
 #include <atomic>
 #include <thread>
+#include <vector>
 
 #include <QFrame>
 #include <QToolButton>
@@ -2965,4 +2968,128 @@ void live_ssh_test::a_session_through_a_jump_host_moves_too() {
 
 	to->disconnect_from_host();
 	delete to;
+}
+
+void live_ssh_test::a_file_played_is_opened_as_it_arrives()
+{
+	if (!server_available()) return;
+	if (!fresh_connection_expected()) {
+		QSKIP("this phase has taken the link down or swapped the key before "
+		       "here; a fresh connection cannot authenticate by design");
+	}
+
+	/*
+	 * Play (sec 6.4, *Playing a file*): offered for audio and video by
+	 * name, never for anything else. In the desktop's player, opened at
+	 * once on the FUSE mount while the copy runs -- or, with no mount,
+	 * once it is whole -- and what is read there is the host's file. In
+	 * BeerSSH's own player, where the build has one, the player is handed
+	 * the bytes as they arrive, the desktop's is not asked, and the file
+	 * played before goes when another is.
+	 */
+	QTemporaryDir there;
+	QVERIFY(there.isValid());
+	QByteArray bytes(20 * 1024 * 1024, '\0');
+	for (int i = 0; i < bytes.size(); ++i) bytes[i] = char(i * 37 + 5);
+	{
+		QFile clip(there.filePath(QStringLiteral("clip.ogg")));
+		QVERIFY(clip.open(QIODevice::WriteOnly));
+		clip.write(bytes);
+		QFile notes(there.filePath(QStringLiteral("notes.txt")));
+		QVERIFY(notes.open(QIODevice::WriteOnly));
+		notes.write("notes");
+	}
+
+	bssh_session *session = connected_session(QStringLiteral("play-test"));
+	QVERIFY2(session, "the test server did not take the connection");
+	bssh_file_panel panel(session);
+	QSignalSpy listed(&panel, &bssh_file_panel::listed);
+	panel.open_directory(there.path());
+	QTRY_VERIFY_WITH_TIMEOUT(listed.size() == 1, 15000);
+	QTreeWidget *list = panel.findChild<QTreeWidget *>(QStringLiteral("file-panel-list"));
+	QVERIFY(list && list->topLevelItemCount() == 2);
+	const auto select = [list](const QString &name) {
+		list->clearSelection();
+		for (int i = 0; i < list->topLevelItemCount(); ++i)
+			if (list->topLevelItem(i)->text(0) == name) list->topLevelItem(i)->setSelected(true);
+	};
+
+	QList<QUrl> opened;
+	panel.set_opener([&opened](const QUrl &url) {
+		opened << url;
+		return true;
+	});
+	/* The in-app player as the build has it, put back after. */
+	const bssh_in_app_player_t built = bssh_in_app_player();
+	struct restore_t {
+		bssh_in_app_player_t was;
+		~restore_t() { bssh_in_app_player() = was; }
+	} restore{ built };
+	bssh_in_app_player() = nullptr;
+
+	select(QStringLiteral("notes.txt"));
+	QVERIFY2(!panel.can_play_selected() && !panel.play_selected(), "Play was offered for a text file");
+
+	select(QStringLiteral("clip.ogg"));
+	QVERIFY(panel.can_play_selected());
+	QSignalSpy finished(session, &bssh_session::download_finished);
+	QVERIFY(panel.play_selected());
+	const bool mounted = bssh_fuse_shelf::available();
+	if (mounted) {
+		QCOMPARE(opened.size(), 1);
+		QVERIFY2(opened.first().toLocalFile().startsWith(bssh_fuse_shelf::mount_point()),
+		         qPrintable(QStringLiteral("opened %1, not the mounted file").arg(opened.first().toString())));
+		QVERIFY2(finished.isEmpty(), "the player was asked only once the copy was whole");
+	} else {
+		QVERIFY2(opened.isEmpty(), "a file still growing was opened with no mount to wait on");
+	}
+	QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty(), 60000);
+	QVERIFY2(finished.last().at(0).toBool(), qPrintable(finished.last().at(3).toString()));
+	QTRY_COMPARE(opened.size(), 1);
+	{
+		QFile played(opened.first().toLocalFile());
+		QVERIFY(played.open(QIODevice::ReadOnly));
+		QVERIFY2(played.readAll() == bytes, "what the player opened differs from the host's");
+	}
+	const QString first_opened = opened.first().toLocalFile();
+
+	/* BeerSSH's own player: handed the bytes, the desktop's not asked. */
+	std::shared_ptr<bssh_media_bytes> handed;
+	QString handed_name;
+	bssh_in_app_player() = [&handed, &handed_name](const bssh_media_t &media, QWidget *area) {
+		if (!area) return false;
+		handed = media.bytes;
+		handed_name = media.name;
+		return true;
+	};
+	opened.clear();
+	finished.clear();
+	QVERIFY(panel.play_selected());
+	QVERIFY2(handed && handed_name == QStringLiteral("clip.ogg"), "the in-app player was not handed the file");
+	QVERIFY2(opened.isEmpty(), "the desktop's player was asked as well");
+	QVERIFY(panel.media_area() && !panel.media_area()->isHidden());
+	/* Gone once the kernel's look-up of it lapses, as an abandoned drag's is. */
+	if (mounted) QTRY_VERIFY2_WITH_TIMEOUT(!QFileInfo::exists(first_opened), "the file played before is still on the mount", 5000);
+	QByteArray read_back;
+	std::atomic<bool> done{ false };
+	std::thread reader([&] {
+		std::vector<uint8_t> chunk(256 * 1024);
+		for (int stalls = 0; stalls < 6000;) {
+			const qint64 got = handed->read(read_back.size(), chunk.data(), qint64(chunk.size()));
+			if (got < 0) break;
+			if (got == 0) {
+				handed->wait(10);
+				++stalls;
+				continue;
+			}
+			read_back.append(reinterpret_cast<const char *>(chunk.data()), int(got));
+		}
+		done = true;
+	});
+	QTRY_VERIFY_WITH_TIMEOUT(done.load(), 60000);
+	reader.join();
+	QCOMPARE(read_back.size(), bytes.size());
+	QVERIFY2(read_back == bytes, "the in-app player read other bytes than the host's");
+	QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty(), 15000);
+	delete session;
 }

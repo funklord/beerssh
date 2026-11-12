@@ -1,0 +1,20 @@
+# Sabotages for sec 6.4's played file: bytes still arriving read as far
+# as they have come, a stall rather than the end until the copy ends.
+# A widget-free test, so `make test` is the suite.
+
+# Past what has come taken for the end: a player stops at the first
+# piece not yet copied.
+[[sabotage]]
+name = "a stall is read as the end"
+file = "src/media/media_bytes.cpp"
+find = "\tif (offset >= here) return finished ? -1 : 0;"
+replace = "\tif (offset >= here) return -1;"
+expect = "a_file_still_arriving_is_read_as_far_as_it_has_come"
+
+# A waiting reader not woken: it sleeps out its whole timeout per piece.
+[[sabotage]]
+name = "a waiting reader is not woken by a piece"
+file = "src/media/media_bytes.cpp"
+find = "void bssh_media_bytes::arrived() {\n\tQMutexLocker held(&m_lock);\n\tm_more.wakeAll();"
+replace = "void bssh_media_bytes::arrived() {\n\tQMutexLocker held(&m_lock);"
+expect = "a_file_still_arriving_is_read_as_far_as_it_has_come"

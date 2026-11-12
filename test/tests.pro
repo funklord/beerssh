@@ -173,6 +173,8 @@ SOURCES += \
     ../src/ui/file_panel.cpp \
     ../src/ui/remote_drag.cpp \
     ../src/platform/fuse_shelf.cpp \
+    ../src/media/media_bytes.cpp \
+    ../src/media/media_player.cpp \
     ../src/ui/find_bar.cpp \
     ../src/ui/input_selector.cpp \
     ../src/ui/pane_corner.cpp \
@@ -299,6 +301,8 @@ HEADERS += \
     ../src/ui/file_panel.h \
     ../src/ui/remote_drag.h \
     ../src/platform/fuse_shelf.h \
+    ../src/media/media_bytes.h \
+    ../src/media/media_player.h \
     ../src/ui/find_bar.h \
     ../src/ui/input_selector.h \
     ../src/ui/pane_corner.h \

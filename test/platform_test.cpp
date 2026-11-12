@@ -6,6 +6,9 @@
 
 #include "hang_watchdog.h"
 #include "platform/platform.h"
+#include "media/media_bytes.h"
+#include <QElapsedTimer>
+#include <thread>
 #include "model/app_settings.h"
 #include <QTemporaryDir>
 #include <QFile>
@@ -1158,4 +1161,52 @@ void platform_test::brightness_and_contrast_do_not_outlive_the_run() {
 
 	settings.set_text_brightness(100);
 	settings.set_raise_contrast(true);
+}
+
+void platform_test::a_file_still_arriving_is_read_as_far_as_it_has_come() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	const QString path = dir.filePath(QStringLiteral("arriving.bin"));
+	QFile file(path);
+	QVERIFY(file.open(QIODevice::WriteOnly));
+	file.write("0123456789");
+	file.flush();
+
+	bssh_media_bytes bytes(path, 20);
+	QCOMPARE(bytes.size(), qint64(20));
+	uint8_t out[32] = {};
+	QCOMPARE(bytes.read(4, out, 32), qint64(6));
+	QCOMPARE(QByteArray(reinterpret_cast<const char *>(out), 6), QByteArray("456789"));
+	QVERIFY(bytes.has(0, 10));
+	QVERIFY(!bytes.has(5, 10));
+	/* Past what has come, while the copy runs: a stall, not the end. */
+	QCOMPARE(bytes.read(10, out, 4), qint64(0));
+	/* At or past the size: the end, copy or no copy. */
+	QCOMPARE(bytes.read(20, out, 4), qint64(-1));
+	bytes.want(12);
+	QCOMPARE(bytes.wanted(), qint64(12));
+
+	/* A reader waiting is woken by the next piece, not left to its timeout. */
+	QElapsedTimer waited;
+	waited.start();
+	std::thread writer([&bytes, &file] {
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		file.write("abcdef");
+		file.flush();
+		bytes.arrived();
+	});
+	bytes.wait(5000);
+	writer.join();
+	QVERIFY2(waited.elapsed() < 4000, "a waiting reader slept through the piece that came");
+	QCOMPARE(bytes.read(10, out, 32), qint64(6));
+	QCOMPARE(QByteArray(reinterpret_cast<const char *>(out), 6), QByteArray("abcdef"));
+
+	/* Ended short: what is missing is the end now, and waits return at once. */
+	bytes.finished(false);
+	QVERIFY(bytes.is_finished());
+	QCOMPARE(bytes.read(16, out, 4), qint64(-1));
+	waited.restart();
+	bytes.wait(5000);
+	QVERIFY(waited.elapsed() < 1000);
+	file.close();
 }
