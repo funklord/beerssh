@@ -4472,6 +4472,12 @@ model on a finger.
   (`object_parallel_to_source`), and `tool/qmake-deps.mk` reads the `.d`
   files below the top, which it otherwise never would. Android stays
   off until the APK cost is measured.
+  **Played with it the same day**, under Xvfb against a loopback sshd: the
+  panel's menu offered Play for an `.ogg`, which went by `xdg-open` to
+  the desktop's player (Audacious there), holding the file open on the
+  FUSE mount and reading its length (0:08). No sound: the sandbox's own
+  runtime directory hides the sound server, and Audacious said "Error
+  opening output stream" -- the test's, not BeerSSH's.
   **Step 3, the phone's form, built 2026-11-11 and not yet seen on a
   device.** On touch the panel lies over the terminal view, its child,
   following its size, rather than beside it: the view keeps its size, so
