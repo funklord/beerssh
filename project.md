@@ -18912,7 +18912,20 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
   keepalive and its backoff keep running there is unknown, and an emulator's CPU
   does not suspend. Capture on the server side (tcpdump in a throwaway sshd
   container) and read `dumpsys meminfo`'s Uptime against Realtime for the time
-  slept. If timers stall, "Keep the computer awake" on Android is the candidate,
+  slept. **The emulator's half, measured 2026-11-12** (API 36, x86_64,
+  `dumpsys battery unplug` then `deviceidle force-idle`, deep IDLE
+  confirmed throughout; a throwaway sshd on the host with ClientAlive
+  every 10 s, three missed and it drops the client): a connected session
+  sent Home stayed up for 100 s of deep Doze, ten probes answered, no
+  timeout, and typed into afterwards on the same connection; and with
+  the server side of the session killed mid-Doze, BeerSSH signed in again
+  2 s later while still IDLE, the old history above the new login. So
+  Doze's network cut does not reach BeerSSH's dataSync foreground
+  service. **What the emulator cannot say** is whether timers stall when
+  the CPU itself sleeps -- its CPU never suspends -- which remains the
+  Fold's, unplugged. The AVD keeps an `id_doze.pub` the app derived
+  from the throwaway key; the key itself and the host were removed.
+  If timers stall, "Keep the computer awake" on Android is the candidate,
   against sec 16's recorded "not on Android", and that call is the holder's. For a run that shortens the
   limit: `device_config set_sync_disabled_for_tests until_reboot` FIRST, then
   `put` (§19.6), and restore with `delete` and `set_sync_disabled_for_tests
