@@ -1457,6 +1457,9 @@ const bssh_remote_entry_t *entry_named(const QList<bssh_remote_entry_t> &entries
 void live_ssh_test::the_file_panel_lists_a_remote_directory()
 {
 	if (!server_available()) return;
+	/* The plain phase's: the phases that break the link wait on a session of
+	 * their own, and these copies ran first and outlasted that wait. */
+	if (!ordinary_phase()) QSKIP("this belongs to the plain phase");
 	if (!fresh_connection_expected()) {
 		QSKIP("this phase has taken the link down or swapped the key before "
 		       "here; a fresh connection cannot authenticate by design");
@@ -1529,6 +1532,9 @@ void live_ssh_test::the_file_panel_lists_a_remote_directory()
 void live_ssh_test::files_come_back_from_the_remote_never_over_what_is_here()
 {
 	if (!server_available()) return;
+	/* The plain phase's: the phases that break the link wait on a session of
+	 * their own, and these copies ran first and outlasted that wait. */
+	if (!ordinary_phase()) QSKIP("this belongs to the plain phase");
 	if (!fresh_connection_expected()) {
 		QSKIP("this phase has taken the link down or swapped the key before "
 		       "here; a fresh connection cannot authenticate by design");
@@ -1588,6 +1594,9 @@ void live_ssh_test::files_come_back_from_the_remote_never_over_what_is_here()
 void live_ssh_test::a_copy_back_can_be_stopped_and_leaves_nothing_half_written()
 {
 	if (!server_available()) return;
+	/* The plain phase's: the phases that break the link wait on a session of
+	 * their own, and these copies ran first and outlasted that wait. */
+	if (!ordinary_phase()) QSKIP("this belongs to the plain phase");
 	if (!fresh_connection_expected()) {
 		QSKIP("this phase has taken the link down or swapped the key before "
 		       "here; a fresh connection cannot authenticate by design");
@@ -1638,6 +1647,9 @@ void live_ssh_test::a_copy_back_can_be_stopped_and_leaves_nothing_half_written()
 void live_ssh_test::the_file_panel_browses_and_copies_both_ways()
 {
 	if (!server_available()) return;
+	/* The plain phase's: the phases that break the link wait on a session of
+	 * their own, and these copies ran first and outlasted that wait. */
+	if (!ordinary_phase()) QSKIP("this belongs to the plain phase");
 	if (!fresh_connection_expected()) {
 		QSKIP("this phase has taken the link down or swapped the key before "
 		       "here; a fresh connection cannot authenticate by design");
@@ -1717,6 +1729,9 @@ void live_ssh_test::the_file_panel_browses_and_copies_both_ways()
 void live_ssh_test::the_file_panel_renames_makes_and_removes()
 {
 	if (!server_available()) return;
+	/* The plain phase's: the phases that break the link wait on a session of
+	 * their own, and these copies ran first and outlasted that wait. */
+	if (!ordinary_phase()) QSKIP("this belongs to the plain phase");
 	if (!fresh_connection_expected()) {
 		QSKIP("this phase has taken the link down or swapped the key before "
 		       "here; a fresh connection cannot authenticate by design");
@@ -1786,6 +1801,9 @@ void live_ssh_test::the_file_panel_renames_makes_and_removes()
 void live_ssh_test::browsing_goes_on_while_a_copy_runs()
 {
 	if (!server_available()) return;
+	/* The plain phase's: the phases that break the link wait on a session of
+	 * their own, and these copies ran first and outlasted that wait. */
+	if (!ordinary_phase()) QSKIP("this belongs to the plain phase");
 	if (!fresh_connection_expected()) {
 		QSKIP("this phase has taken the link down or swapped the key before "
 		       "here; a fresh connection cannot authenticate by design");
@@ -1849,6 +1867,9 @@ void live_ssh_test::browsing_goes_on_while_a_copy_runs()
 void live_ssh_test::a_file_dragged_out_is_staged_before_it_is_dropped()
 {
 	if (!server_available()) return;
+	/* The plain phase's: the phases that break the link wait on a session of
+	 * their own, and these copies ran first and outlasted that wait. */
+	if (!ordinary_phase()) QSKIP("this belongs to the plain phase");
 	if (!fresh_connection_expected()) {
 		QSKIP("this phase has taken the link down or swapped the key before "
 		       "here; a fresh connection cannot authenticate by design");
@@ -2251,6 +2272,9 @@ void live_ssh_test::a_file_dropped_on_a_plain_file_manager_is_read_as_it_arrives
 {
 	if (!bssh_fuse_shelf::available()) QSKIP("no FUSE here: /dev/fuse or fusermount3 is missing");
 	if (!server_available()) return;
+	/* The plain phase's: the phases that break the link wait on a session of
+	 * their own, and these copies ran first and outlasted that wait. */
+	if (!ordinary_phase()) QSKIP("this belongs to the plain phase");
 	if (!fresh_connection_expected()) {
 		QSKIP("this phase has taken the link down or swapped the key before "
 		       "here; a fresh connection cannot authenticate by design");
@@ -2357,6 +2381,9 @@ void live_ssh_test::a_file_dropped_on_a_plain_file_manager_is_read_as_it_arrives
 void live_ssh_test::copies_queue_as_tiles_and_pause_between_pieces()
 {
 	if (!server_available()) return;
+	/* The plain phase's: the phases that break the link wait on a session of
+	 * their own, and these copies ran first and outlasted that wait. */
+	if (!ordinary_phase()) QSKIP("this belongs to the plain phase");
 	if (!fresh_connection_expected()) {
 		QSKIP("this phase has taken the link down or swapped the key before "
 		       "here; a fresh connection cannot authenticate by design");
@@ -2974,6 +3001,9 @@ void live_ssh_test::a_session_through_a_jump_host_moves_too() {
 void live_ssh_test::a_file_played_is_opened_as_it_arrives()
 {
 	if (!server_available()) return;
+	/* The plain phase's: the phases that break the link wait on a session of
+	 * their own, and these copies ran first and outlasted that wait. */
+	if (!ordinary_phase()) QSKIP("this belongs to the plain phase");
 	if (!fresh_connection_expected()) {
 		QSKIP("this phase has taken the link down or swapped the key before "
 		       "here; a fresh connection cannot authenticate by design");
@@ -3098,6 +3128,9 @@ void live_ssh_test::a_file_played_is_opened_as_it_arrives()
 void live_ssh_test::a_seek_in_a_played_file_fetches_its_range_first()
 {
 	if (!server_available()) return;
+	/* The plain phase's: the phases that break the link wait on a session of
+	 * their own, and these copies ran first and outlasted that wait. */
+	if (!ordinary_phase()) QSKIP("this belongs to the plain phase");
 	if (!fresh_connection_expected()) {
 		QSKIP("this phase has taken the link down or swapped the key before "
 		       "here; a fresh connection cannot authenticate by design");
