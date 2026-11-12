@@ -10,4 +10,7 @@
 #     $(MAKE) -C dir -f Makefile -f $(CURDIR)/tool/qmake-deps.mk
 #
 # Second on that line, so that qmake's first target stays the default goal.
--include $(wildcard *.d)
+# And below it, where a build keeps objects beside their sources' paths
+# (the media build's object_parallel_to_source): unread, those trees
+# would never rebuild for a changed header.
+-include $(wildcard *.d */*.d */*/*.d */*/*/*.d)

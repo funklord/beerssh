@@ -757,10 +757,14 @@ MEDIA_BUILD_DIR ?= build-media
 SNURRA_DIR = snurra
 SNURRA_PKGS = libavformat libavcodec libswresample libswscale libavutil alsa xcb
 
+# qmake as a file rule, as the default build's is: run again only when a
+# project file it reads has moved, so a second `make media` writes nothing.
 media: QMAKE_CONFIG += BSSH_MEDIA=1
-media: media-check $(VTERM_LIB) $(LIBSSH_LIB)
-	$(call bssh_qmake,$(MEDIA_BUILD_DIR),beerssh.pro)
+media: media-check $(VTERM_LIB) $(LIBSSH_LIB) $(MEDIA_BUILD_DIR)/Makefile
 	$(MAKE) -C $(MEDIA_BUILD_DIR) $(QMAKE_SUBMAKE)
+
+$(MEDIA_BUILD_DIR)/Makefile: beerssh.pro $(SNURRA_DIR)/snurra.pri
+	$(call bssh_qmake,$(MEDIA_BUILD_DIR),beerssh.pro)
 	@echo "media: built $(MEDIA_BUILD_DIR)/$(TARGET) with snurra at $$(git -C $(SNURRA_DIR) rev-parse --short HEAD)"
 
 media-check:

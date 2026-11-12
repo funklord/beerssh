@@ -4461,11 +4461,17 @@ model on a finger.
   pkg-config for snurra's libraries first, naming the Debian package for
   any missing (`media-check`). Moving the pin is how BeerSSH takes up
   snurra's progress; the facade is what keeps that a one-line change.
-  **Not yet built here:** this machine has libswscale's runtime and not
-  its `-dev` package, which snurra's video code needs since `611b7f9`,
-  so `make media` stops at the preflight naming `libswscale-dev`
-  (installing it is the holder's). Android stays off until the APK cost
-  is measured.
+  **First built 2026-11-12**, once the holder had installed
+  `libswscale-dev` (the preflight had stopped there, naming it): from
+  clean, `--version` and `--self-test` pass, and a second `make media`
+  writes nothing -- qmake is a file rule on `beerssh.pro` and
+  `snurra.pri`, as the default tree's is. **Its first link failed:**
+  snurra's `src/wire.cpp` and BeerSSH's `src/session/wire.c` are both
+  `wire.o` in qmake's one object directory, the second replacing the
+  first. The media build keeps objects beside their sources' paths
+  (`object_parallel_to_source`), and `tool/qmake-deps.mk` reads the `.d`
+  files below the top, which it otherwise never would. Android stays
+  off until the APK cost is measured.
   **Step 3, the phone's form, built 2026-11-11 and not yet seen on a
   device.** On touch the panel lies over the terminal view, its child,
   following its size, rather than beside it: the view keeps its size, so

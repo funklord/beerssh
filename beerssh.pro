@@ -411,4 +411,10 @@ QMAKE_CLEAN    += *.d
 equals(BSSH_MEDIA, 1) {
     DEFINES += BSSH_MEDIA
     include(snurra/snurra.pri)
+    # Objects beside their sources' paths, not in one directory: snurra's
+    # src/wire.cpp and BeerSSH's src/session/wire.c are both wire.o there,
+    # and the second replaced the first -- duplicate symbols and missing
+    # ones at the link (2026-11-12). tool/qmake-deps.mk reads the .d files
+    # this puts in subdirectories.
+    CONFIG += object_parallel_to_source
 }
