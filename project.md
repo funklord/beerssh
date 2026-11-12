@@ -4406,7 +4406,14 @@ model on a finger.
   panels it made (`file_panel_shown()`) rather than the window walking
   the tree for them: the walk ran from the focus handler while a
   rebuild was deleting the panes and crashed the test (four more
-  sabotages). On
+  sabotages). **Seen on the API 36 emulator the same day**, on the
+  device's local shell with BeerSSH's own keyboard: Show Files took the
+  terminal's keyboard away; a tap in the path field brought the forms'
+  keyboard alone, and a key typed into the path, not the shell; a tap
+  in the list let it go with no keyboard back; closing the panel
+  brought the terminal's back. Find gave the forms' keyboard alone, the
+  query went into the bar ("no matches"), the prompt untouched, and
+  closing it brought the terminal's back. On
   touch a tap now opens an entry, as a phone's file managers do, where
   it took a double tap. **Seen working after:** "Copy to..." through
   Android's document picker into a folder made in Download -- Android
