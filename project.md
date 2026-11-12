@@ -4467,6 +4467,16 @@ model on a finger.
   only the mounted read can have asked.
   Not covered by a test: the flush before a piece is marked (a 64 KiB
   write passes QFile's buffer anyway).
+  **A second Play no longer cuts off the first in BeerSSH's own player**
+  (found reading the code, 2026-11-12): each Play put the last file
+  away -- bytes ended, staging and mount entry removed -- which was
+  right for the desktop's player, which cannot be asked when it is done,
+  and wrong for snurra's, whose tiles play side by side: the first tile
+  would read the end of its file mid-play. A file handed to the in-app
+  player is kept past the next Play and goes once nothing holds its
+  bytes (a weak reference, swept as each Play begins); the desktop's
+  file is put away as before.
+  `a_second_file_played_leaves_the_first_playing`.
   **The panel on a phone, measured by the sweeps it had missed
   (2026-11-12).** `every_touch_surface_names_its_controls` and
   `every_touch_surface_fits_a_phone` predate the panel; with it added,

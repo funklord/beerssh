@@ -311,3 +311,20 @@ file = "src/media/media_bytes.cpp"
 find = "\t\tif (run == 0) {\n\t\t\tm_pieces->want(offset);\n"
 replace = "\t\tif (run == 0) {\n"
 expect = "a_seek_in_a_played_file_fetches_its_range_first"
+
+# The in-app player's file put away at the next Play: the tile still
+# playing it reads its end, or nothing.
+[[sabotage]]
+name = "a second Play cuts off the first tile's file"
+file = "src/ui/file_panel.cpp"
+find = "\tif (m_play_in_app && m_play_bytes) {"
+replace = "\tif (false) {"
+expect = "a_second_file_played_leaves_the_first_playing"
+
+# Kept files never swept: one staging per file played, until quit.
+[[sabotage]]
+name = "files nothing plays any more are kept"
+file = "src/ui/file_panel.cpp"
+find = "void bssh_file_panel::put_away_play() {\n\tsweep_kept_plays();\n"
+replace = "void bssh_file_panel::put_away_play() {\n"
+expect = "a_second_file_played_leaves_the_first_playing"

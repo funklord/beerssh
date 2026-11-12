@@ -193,8 +193,21 @@ private:
 	std::shared_ptr<bssh_media_bytes> m_play_bytes;
 	std::function<bool(const QUrl &)> m_opener;
 	QWidget *m_media_area = nullptr;
+	bool m_play_in_app = false;   /* handed to BeerSSH's own player */
 	void end_play(bool whole);
 	void put_away_play();
+	/*
+	 * Files played in BeerSSH's own player, kept past the next Play: its
+	 * tiles go on reading them, one per file, and each goes once nothing
+	 * holds its bytes any more -- looked at as each Play begins.
+	 */
+	struct kept_play_t {
+		QString dir;
+		QString mounted;
+		std::weak_ptr<bssh_media_bytes> bytes;
+	};
+	QList<kept_play_t> m_kept_plays;
+	void sweep_kept_plays();
 	QPoint m_drag_press;
 	void start_drag();
 

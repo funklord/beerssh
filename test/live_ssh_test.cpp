@@ -3245,3 +3245,91 @@ void live_ssh_test::a_seek_in_a_played_file_fetches_its_range_first()
 	QVERIFY2(finished.last().at(0).toBool(), qPrintable(finished.last().at(3).toString()));
 	delete session;
 }
+
+void live_ssh_test::a_second_file_played_leaves_the_first_playing()
+{
+	if (!server_available()) return;
+	/* The plain phase's: the phases that break the link wait on a session of
+	 * their own, and these copies ran first and outlasted that wait. */
+	if (!ordinary_phase()) QSKIP("this belongs to the plain phase");
+	if (!fresh_connection_expected()) {
+		QSKIP("this phase has taken the link down or swapped the key before "
+		       "here; a fresh connection cannot authenticate by design");
+	}
+
+	/*
+	 * BeerSSH's own player plays its files side by side, a tile each
+	 * (sec 6.4): a second Play leaves the first file's bytes whole and
+	 * readable for the tile still playing it, and the file goes only
+	 * once nothing holds its bytes -- at the next Play after that.
+	 */
+	QTemporaryDir there;
+	QVERIFY(there.isValid());
+	QByteArray first(3 * 1024 * 1024, '\0');
+	for (int i = 0; i < first.size(); ++i) first[i] = char(i * 7 + 1);
+	{
+		QFile a(there.filePath(QStringLiteral("a.ogg")));
+		QVERIFY(a.open(QIODevice::WriteOnly));
+		a.write(first);
+		QFile b(there.filePath(QStringLiteral("b.ogg")));
+		QVERIFY(b.open(QIODevice::WriteOnly));
+		b.write("b");
+	}
+
+	bssh_session *session = connected_session(QStringLiteral("two-plays"));
+	QVERIFY2(session, "the test server did not take the connection");
+	bssh_file_panel panel(session);
+	QSignalSpy listed(&panel, &bssh_file_panel::listed);
+	panel.open_directory(there.path());
+	QTRY_VERIFY_WITH_TIMEOUT(listed.size() == 1, 15000);
+	QTreeWidget *list = panel.findChild<QTreeWidget *>(QStringLiteral("file-panel-list"));
+	QVERIFY(list && list->topLevelItemCount() == 2);
+	const auto select = [list](const QString &name) {
+		list->clearSelection();
+		for (int i = 0; i < list->topLevelItemCount(); ++i)
+			if (list->topLevelItem(i)->text(0) == name) list->topLevelItem(i)->setSelected(true);
+	};
+
+	const bssh_in_app_player_t built = bssh_in_app_player();
+	struct restore_t {
+		bssh_in_app_player_t was;
+		~restore_t() { bssh_in_app_player() = was; }
+	} restore{ built };
+	QList<std::shared_ptr<bssh_media_bytes>> tiles;
+	bssh_in_app_player() = [&tiles](const bssh_media_t &media, QWidget *) {
+		tiles << media.bytes;
+		return true;
+	};
+	QSignalSpy finished(session, &bssh_session::download_finished);
+
+	select(QStringLiteral("a.ogg"));
+	QVERIFY(panel.play_selected());
+	QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty(), 30000);
+	QVERIFY(finished.last().at(0).toBool());
+	const QString first_dir = finished.last().at(1).toString();
+	finished.clear();
+
+	select(QStringLiteral("b.ogg"));
+	QVERIFY(panel.play_selected());
+	QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty(), 30000);
+	QCOMPARE(tiles.size(), 2);
+
+	/* The first tile reads its file whole, after the second Play. */
+	QByteArray read_back;
+	std::vector<uint8_t> chunk(256 * 1024);
+	for (;;) {
+		const qint64 n = tiles.first()->read(read_back.size(), chunk.data(), qint64(chunk.size()));
+		if (n <= 0) break;
+		read_back.append(reinterpret_cast<const char *>(chunk.data()), int(n));
+	}
+	QVERIFY2(read_back == first, "the first tile's file was cut off by the second Play");
+	QVERIFY(QFileInfo::exists(first_dir));
+
+	/* Its tile closed, nothing holds the bytes: the next Play sweeps it. */
+	tiles.removeFirst();
+	finished.clear();
+	QVERIFY(panel.play_selected());
+	QVERIFY2(!QFileInfo::exists(first_dir), "a file nothing plays any more was kept");
+	QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty(), 30000);
+	delete session;
+}

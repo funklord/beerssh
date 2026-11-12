@@ -737,6 +737,7 @@ bool bssh_file_panel::play_selected() {
 	m_session->download_pieces(path, dir, pieces);
 
 	if (bssh_in_app_player() && bssh_in_app_player()(media, m_media_area)) {
+		m_play_in_app = true;
 		m_media_area->show();
 		return true;
 	}
@@ -765,16 +766,26 @@ void bssh_file_panel::end_play(bool whole) {
 }
 
 /*
- * The last file played goes when another is: its copy stopped, its place
- * on the mount and its staging removed. Kept until then, since a player
- * may be reading it long after the copy is whole.
+ * The last file played goes when another is: its place on the mount and
+ * its staging removed. Kept until then, since a player may be reading it
+ * long after the copy is whole -- and kept past it where BeerSSH's own
+ * player has it, whose tiles play side by side: a second Play cut the
+ * first tile's bytes off mid-play when it went too (2026-11-12). The
+ * desktop's player cannot be asked when it is done, so its file goes.
  */
 void bssh_file_panel::put_away_play() {
+	sweep_kept_plays();
 	if (m_play_dir.isEmpty()) return;
 	const QString dir = m_play_dir;
-	if (m_play_bytes) m_play_bytes->finished(false);
-	/* Its copy has ended: a Play begins only with none running. */
-	if (!m_play_mounted.isEmpty()) bssh_fuse_shelf::remove(m_play_mounted);
+	if (m_play_in_app && m_play_bytes) {
+		/* Its copy has ended (a Play begins with none running); the
+		 * player's hold on the bytes is now the only one. */
+		m_kept_plays.append({ dir, m_play_mounted, m_play_bytes });
+	} else {
+		if (m_play_bytes) m_play_bytes->finished(false);
+		if (!m_play_mounted.isEmpty()) bssh_fuse_shelf::remove(m_play_mounted);
+		if (dir.startsWith(bssh_drag_staging_root() + QLatin1Char('/'))) QDir(dir).removeRecursively();
+	}
 	m_put_away.insert(dir);
 	for (auto it = m_tiles.begin(); it != m_tiles.end();) {
 		if (it->over && it->destination == dir) {
@@ -784,12 +795,23 @@ void bssh_file_panel::put_away_play() {
 			++it;
 		}
 	}
-	if (dir.startsWith(bssh_drag_staging_root() + QLatin1Char('/'))) QDir(dir).removeRecursively();
 	m_play_dir.clear();
 	m_play_file.clear();
 	m_play_mounted.clear();
 	m_play_open_when_whole = false;
+	m_play_in_app = false;
 	m_play_bytes.reset();
+}
+
+/* Kept files nothing reads any more: off the mount and off the disk. */
+void bssh_file_panel::sweep_kept_plays() {
+	for (int i = int(m_kept_plays.size()) - 1; i >= 0; --i) {
+		const kept_play_t &kept = m_kept_plays.at(i);
+		if (!kept.bytes.expired()) continue;
+		if (!kept.mounted.isEmpty()) bssh_fuse_shelf::remove(kept.mounted);
+		if (kept.dir.startsWith(bssh_drag_staging_root() + QLatin1Char('/'))) QDir(kept.dir).removeRecursively();
+		m_kept_plays.removeAt(i);
+	}
 }
 
 /* A name for an entry here: one path component, nothing that leaves it. */
