@@ -8855,6 +8855,15 @@ void layout_test::the_hide_key_is_remembered_and_a_tap_undoes_it() {
 	          "a pane rebuild must not overrule the hide key");
 
 	/*
+	 * And the settings applied again -- as on every save -- must not
+	 * either. The resize above reaches no recomputation of the keyboard's
+	 * visibility, so a hide applied and not remembered passed it: the
+	 * sabotage of exactly that was MISSED, found 2026-11-12.
+	 */
+	window.apply_device_settings();
+	QVERIFY2(!keys->isVisible(), "applying the settings must not overrule the hide key");
+
+	/*
 	 * The way back: a tap in the terminal. Driven as a real click on the
 	 * view rather than by emitting anything, because the path under test
 	 * IS the plumbing -- mouseReleaseEvent to request_input_panel to the
