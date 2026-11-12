@@ -4478,6 +4478,25 @@ model on a finger.
   FUSE mount and reading its length (0:08). No sound: the sandbox's own
   runtime directory hides the sound server, and Audacious said "Error
   opening output stream" -- the test's, not BeerSSH's.
+  **snurra built the facade the same day** (holder's request relayed;
+  snurra's inbox note to beerssh 20261112T1700Z): `embed.h` landed in
+  snurra `54ad772` exactly as proposed, the six promises written into
+  it. Measured on its side: the destructor joins every reader of the
+  host's bytes (without the join, 288 calls in 300 ms after deletion);
+  the bytes go to the waveform too, so two snurra threads read at once;
+  `failed()` fires once, after `open()`, for bytes FFmpeg cannot read,
+  and the tile stays, silent, until closed. Several `open()` calls make
+  a row of tiles; trains and stacks are not in the facade yet. **The pin
+  moved to `6fa8d4f`** (tempo and key lock on top, the header unchanged)
+  and `make media` found the header and linked `snurra_player`.
+  **Played in it:** Play put snurra's tile above the list -- waveform,
+  pause, ten seconds back and on, level, tempo and key -- and it played
+  the 8 s tone to the end on the machine's sound card (`pcmC0D0p`
+  open). **One fault, BeerSSH's:** the glue made the player the area's
+  child without adding it to the area's layout, so it got no room and
+  showed as a sliver; it is added to the layout now. The glue has no
+  test of its own -- the suite does not build snurra -- so this run is
+  its check.
   **Step 3, the phone's form, built 2026-11-11 and not yet seen on a
   device.** On touch the panel lies over the terminal view, its child,
   following its size, rather than beside it: the view keeps its size, so

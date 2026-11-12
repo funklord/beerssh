@@ -23,6 +23,7 @@ bool bssh_is_playable(const QString &name) {
 #if defined(BSSH_MEDIA) && __has_include("snurra/embed.h")
 #include "snurra/embed.h"
 
+#include <QLayout>
 #include <QWidget>
 
 namespace {
@@ -48,6 +49,9 @@ bool play_in_snurra(const bssh_media_t &media, QWidget *area) {
 	if (!player) {
 		player = new snurra_player(area);
 		player->setObjectName(QStringLiteral("media-player"));
+		/* Into the area's layout: a child not in it is given no room, and
+		 * the first player shown was a sliver (2026-11-12). */
+		if (area->layout()) area->layout()->addWidget(player);
 		QObject::connect(player, &snurra_player::emptied, player, &QObject::deleteLater);
 	}
 	snurra_media wanted;
