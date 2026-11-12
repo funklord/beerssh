@@ -125,7 +125,7 @@ public:
 	void list_directory(const QString &path) override;
 	void download(const QStringList &paths, const QString &directory) override;
 	void cancel_download() override;
-	void change_remote(change_t change, const QString &path, const QString &to) override;
+	void change_remote(change_t change, const QString &path, const QString &to = QString()) override;
 	void restart_shell(const QStringList &command) override;
 	bool export_transport(QByteArray &state, QList<int> &fds, QString *why) override;
 	void release_transport() override;

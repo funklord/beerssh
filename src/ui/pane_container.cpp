@@ -260,7 +260,7 @@ bssh_terminal_view *bssh_pane_container::add_pane_view(bssh_session *session,
 	box->addLayout(row, 1);
 	bssh_terminal_view *view = new bssh_terminal_view(frame);
 	row->addWidget(view, 1);
-	if (session->is_remote() && session->file_panel_open()) {
+	if (session->file_panel_open()) {
 		/* Over the terminal on touch, where beside it would leave it
 		 * nothing; beside it elsewhere. */
 		const bool touch = bssh_platform::instance() && bssh_platform::instance()->is_touch_primary();

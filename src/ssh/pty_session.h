@@ -124,6 +124,16 @@ public:
 	void find_working_directory() override;
 	void upload(const QStringList &paths, const QString &directory) override;
 	void cancel_upload() override;
+
+	/*
+	 * The file panel on a local shell (project.md sec 6.4): this
+	 * machine's files, listed directly, copied by bssh_copy_into on a
+	 * thread of its own as upload() copies, changed in place.
+	 */
+	void list_directory(const QString &path) override;
+	void download(const QStringList &paths, const QString &directory) override;
+	void cancel_download() override;
+	void change_remote(change_t change, const QString &path, const QString &to = QString()) override;
 	void restart_shell(const QStringList &command) override;
 	bool export_transport(QByteArray &state, QList<int> &fds, QString *why) override;
 	void release_transport() override;
@@ -152,6 +162,11 @@ private:
 	std::shared_ptr<std::atomic<bool>> m_copy_stop;
 	bool m_copying = false;
 	QPointer<QThread> m_copier;
+	/* The panel's copy back, the same way, apart from the upload's. */
+	std::shared_ptr<std::atomic<bool>> m_download_stop;
+	bool m_downloading = false;
+	QPointer<QThread> m_download_copier;
+	QPointer<QThread> m_remover;
 	qint64 m_child;
 	QSocketNotifier *m_notifier;
 

@@ -6510,11 +6510,12 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 	}
 
 	/*
-	 * The files on the host, beside this pane (sec 6.4). A remote session
-	 * only: a local shell's files are this machine's, and its own file
-	 * manager shows them. On touch it opens over the terminal.
+	 * The files where the shell is, beside this pane (sec 6.4): the
+	 * host's for a remote session, this machine's for a local shell --
+	 * the same panel either way, for every tab alike (the holder,
+	 * 2026-11-12). On touch it opens over the terminal.
 	 */
-	if (m_current && m_current->is_remote()) {
+	if (m_current) {
 		QAction *files = menu->addAction(m_current->file_panel_open() ? QStringLiteral("Hide &Files")
 		                                                              : QStringLiteral("Show &Files"));
 		files->setObjectName(QStringLiteral("terminal_files"));

@@ -27,6 +27,7 @@ private slots:
 	void the_probe_finds_the_shell_on_its_connections_terminal();
 	void a_local_shells_directory_is_read_from_proc();
 	void a_local_copy_keeps_both_when_a_name_is_taken();
+	void the_file_panel_works_on_a_local_shell_too();
 	void a_local_copy_can_be_stopped();
 	void a_closed_local_session_leaves_no_half_copied_file();
 	void a_copy_cut_off_by_a_reconnect_is_reported_once();

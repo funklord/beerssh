@@ -602,9 +602,23 @@ bool bssh_file_panel::copy_here(const QStringList &paths) {
 
 bssh_remote_drag *bssh_file_panel::drag_data_for_selection() {
 	if (!m_session || m_path.isEmpty()) return nullptr;
+	/* A local shell's files are here already: the drag is their paths,
+	 * whole from the start, with nothing to stage, mount or link. */
+	if (!m_session->is_remote()) {
+		QStringList local;
+		for (QTreeWidgetItem *item : m_list->selectedItems()) {
+			const int at = item->data(NAME, Qt::UserRole).toInt();
+			if (at >= 0 && at < m_entries.size()) local << remote_path_of(m_entries.at(at));
+		}
+		if (local.isEmpty()) return nullptr;
+		bssh_remote_drag *data = new bssh_remote_drag({});
+		data->set_staged(local);
+		return data;
+	}
 	QStringList paths;
 	QList<QUrl> remote;
 	qint64 bytes = 0;
+	QList<qint64> sizes;
 	bool folder = false;
 	const bssh_profile_t &profile = m_session->profile();
 	for (QTreeWidgetItem *item : m_list->selectedItems()) {

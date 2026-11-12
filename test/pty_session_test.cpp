@@ -835,6 +835,78 @@ void pty_session_test::a_local_shells_directory_is_read_from_proc() {
 	QCOMPARE(QFileInfo(answer.path).canonicalFilePath(), QFileInfo(where.path()).canonicalFilePath());
 }
 
+void pty_session_test::the_file_panel_works_on_a_local_shell_too() {
+	/*
+	 * The file panel on a local shell (sec 6.4, the holder 2026-11-12):
+	 * this machine's files through the same calls as a host's. A listing
+	 * says what each entry is, a link to a directory included; a missing
+	 * directory is said so; a copy back keeps what is there; a rename
+	 * never replaces; a new folder; and a removal takes a tree, its link
+	 * to a directory outside removed as a link, what it led to left.
+	 */
+	QTemporaryDir here;
+	QTemporaryDir into;
+	QTemporaryDir outside;
+	QVERIFY(here.isValid() && into.isValid() && outside.isValid());
+	const auto write = [](const QString &path, const QByteArray &bytes) {
+		QFile file(path);
+		QVERIFY(file.open(QIODevice::WriteOnly));
+		file.write(bytes);
+	};
+	write(here.filePath(QStringLiteral("notes.txt")), "notes");
+	write(here.filePath(QStringLiteral("taken.txt")), "taken");
+	QVERIFY(QDir(here.path()).mkpath(QStringLiteral("tree/deep")));
+	write(here.filePath(QStringLiteral("tree/deep/leaf")), "leaf");
+	write(outside.filePath(QStringLiteral("keep")), "keep");
+	QVERIFY(QFile::link(outside.path(), here.filePath(QStringLiteral("tree/out"))));
+	QVERIFY(QFile::link(here.filePath(QStringLiteral("tree")), here.filePath(QStringLiteral("to-tree"))));
+	write(into.filePath(QStringLiteral("notes.txt")), "already here");
+
+	bssh_pty_session session;
+	QSignalSpy listed(&session, &bssh_ssh_session::directory_listed);
+	session.list_directory(here.path());
+	QVERIFY(listed.wait(5000));
+	QCOMPARE(listed.at(0).at(0).toString(), QFileInfo(here.path()).canonicalFilePath());
+	const auto entries = listed.at(0).at(1).value<QList<bssh_remote_entry_t>>();
+	QCOMPARE(entries.size(), 4);
+	for (const bssh_remote_entry_t &entry : entries) {
+		if (entry.name == QStringLiteral("tree")) QCOMPARE(entry.kind, bssh_remote_entry_t::DIRECTORY);
+		if (entry.name == QStringLiteral("to-tree")) {
+			QCOMPARE(entry.kind, bssh_remote_entry_t::LINK);
+			QVERIFY(entry.leads_to_directory);
+		}
+		if (entry.name == QStringLiteral("notes.txt")) QCOMPARE(entry.size, qint64(5));
+	}
+	session.list_directory(here.filePath(QStringLiteral("not-here")));
+	QVERIFY(listed.wait(5000));
+	QVERIFY(!listed.at(1).at(2).toString().isEmpty());
+
+	QSignalSpy copied(&session, &bssh_ssh_session::download_finished);
+	session.download({ here.filePath(QStringLiteral("notes.txt")) }, into.path());
+	QVERIFY(copied.wait(10000));
+	QVERIFY2(copied.first().at(0).toBool(), qPrintable(copied.first().at(3).toString()));
+	QCOMPARE(copied.first().at(2).toStringList(), QStringList({ QStringLiteral("notes (1).txt") }));
+
+	QSignalSpy changed(&session, &bssh_ssh_session::remote_changed);
+	session.change_remote(bssh_ssh_session::RENAME, here.filePath(QStringLiteral("notes.txt")),
+	                      here.filePath(QStringLiteral("taken.txt")));
+	QVERIFY(changed.wait(5000));
+	QVERIFY2(!changed.last().at(0).toBool(), "a rename replaced what was there");
+	session.change_remote(bssh_ssh_session::RENAME, here.filePath(QStringLiteral("notes.txt")),
+	                      here.filePath(QStringLiteral("renamed.txt")));
+	QVERIFY(changed.wait(5000));
+	QVERIFY(changed.last().at(0).toBool());
+	QVERIFY(QFileInfo::exists(here.filePath(QStringLiteral("renamed.txt"))));
+	session.change_remote(bssh_ssh_session::MAKE_DIRECTORY, here.filePath(QStringLiteral("made")));
+	QVERIFY(changed.wait(5000));
+	QVERIFY(QFileInfo(here.filePath(QStringLiteral("made"))).isDir());
+	session.change_remote(bssh_ssh_session::REMOVE, here.filePath(QStringLiteral("tree")));
+	QVERIFY(changed.wait(10000));
+	QVERIFY2(changed.last().at(0).toBool(), qPrintable(changed.last().at(2).toString()));
+	QVERIFY(!QFileInfo::exists(here.filePath(QStringLiteral("tree"))));
+	QVERIFY2(QFileInfo::exists(outside.filePath(QStringLiteral("keep"))), "a removal followed a link out");
+}
+
 void pty_session_test::a_local_copy_keeps_both_when_a_name_is_taken() {
 	QTemporaryDir from;
 	QTemporaryDir into;

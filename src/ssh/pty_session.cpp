@@ -4,6 +4,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QFileInfo>
 #include <QElapsedTimer>
 #include <QDataStream>
 #include <QPointer>
@@ -19,6 +20,7 @@
 #include <csignal>
 #include <cstdlib>
 #include <cstring>
+#include <sys/stat.h>
 
 #include <fcntl.h>
 #include "posix_compat.h"
@@ -147,6 +149,11 @@ bssh_pty_session::~bssh_pty_session() {
 		cancel_upload();
 		m_copier->wait();
 	}
+	if (m_download_copier) {
+		cancel_download();
+		m_download_copier->wait();
+	}
+	if (m_remover) m_remover->wait();
 	disconnect_from_host();
 }
 
@@ -616,6 +623,132 @@ void bssh_pty_session::cancel_upload() {
 	if (m_copy_stop) m_copy_stop->store(true);
 }
 
+void bssh_pty_session::list_directory(const QString &path) {
+	/*
+	 * Read here, answered a turn later as every other answer is, so the
+	 * panel never meets a listing that arrived before it asked.
+	 */
+	const QString asked = path.isEmpty() ? QDir::homePath() : path;
+	const QFileInfo where(asked);
+	QList<bssh_remote_entry_t> entries;
+	QString why;
+	const QString canonical = where.canonicalFilePath();
+	if (canonical.isEmpty() || !where.isDir()) {
+		why = QStringLiteral("no such directory");
+	} else if (!where.isReadable()) {
+		why = QStringLiteral("permission denied");
+	} else {
+		const QFileInfoList found = QDir(canonical).entryInfoList(
+		        QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System, QDir::NoSort);
+		for (const QFileInfo &info : found) {
+			bssh_remote_entry_t entry;
+			entry.name = info.fileName();
+			if (info.isSymLink()) {
+				entry.kind = bssh_remote_entry_t::LINK;
+				entry.leads_to_directory = info.isDir();
+			} else if (info.isDir()) {
+				entry.kind = bssh_remote_entry_t::DIRECTORY;
+			} else if (info.isFile()) {
+				entry.kind = bssh_remote_entry_t::FILE;
+			} else {
+				entry.kind = bssh_remote_entry_t::OTHER;
+			}
+			entry.size = info.isSymLink() ? 0 : info.size();
+			entry.modified = info.lastModified();
+			struct stat st{};
+			if (::lstat(QFile::encodeName(info.filePath()).constData(), &st) == 0) entry.permissions = st.st_mode & 07777;
+			entries << entry;
+		}
+	}
+	const QString answered = canonical.isEmpty() ? asked : canonical;
+	QMetaObject::invokeMethod(this, [this, answered, entries, why] {
+		emit directory_listed(answered, why.isEmpty() ? entries : QList<bssh_remote_entry_t>(), why);
+	}, Qt::QueuedConnection);
+}
+
+void bssh_pty_session::download(const QStringList &paths, const QString &directory) {
+	/* As upload(), the other way: on a thread, stoppable, never over
+	 * what is there. Both ends are this machine. */
+	if (m_downloading) {
+		QMetaObject::invokeMethod(this, [this, directory] {
+			emit download_finished(false, directory, QStringList(), QStringLiteral("another copy is still running"));
+		}, Qt::QueuedConnection);
+		return;
+	}
+	const QPointer<bssh_pty_session> guard(this);
+	auto stop = std::make_shared<std::atomic<bool>>(false);
+	m_download_stop = stop;
+	m_downloading = true;
+	QThread *copier = QThread::create([guard, paths, directory, stop] {
+		QStringList written;
+		QString why;
+		QElapsedTimer since;
+		since.start();
+		const bool ok = bssh_copy_into(paths, directory, written, why,
+		                               [guard, &since](qint64 done, qint64 total) {
+			if (since.elapsed() < 100 && done < total) return;
+			since.restart();
+			QMetaObject::invokeMethod(qApp, [guard, done, total] {
+				if (guard) emit guard->download_progress(done, total);
+			}, Qt::QueuedConnection);
+		}, [stop] { return stop->load(); });
+		QMetaObject::invokeMethod(qApp, [guard, ok, directory, written, why] {
+			if (!guard) return;
+			guard->m_downloading = false;
+			emit guard->download_finished(ok, directory, written, why);
+		}, Qt::QueuedConnection);
+	});
+	QObject::connect(copier, &QThread::finished, copier, &QObject::deleteLater);
+	m_download_copier = copier;
+	copier->start();
+}
+
+void bssh_pty_session::cancel_download() {
+	if (m_download_stop) m_download_stop->store(true);
+}
+
+void bssh_pty_session::change_remote(change_t change, const QString &path, const QString &to) {
+	/*
+	 * In place: a rename never over what is there, a new folder, or a
+	 * removal -- a folder with everything in it, on a thread since a tree
+	 * can be large, a link removed as a link and never followed.
+	 */
+	if (change == REMOVE) {
+		if (m_remover) {
+			QMetaObject::invokeMethod(this, [this, path] {
+				emit remote_changed(false, path, QStringLiteral("a removal is still running"));
+			}, Qt::QueuedConnection);
+			return;
+		}
+		const QPointer<bssh_pty_session> guard(this);
+		QThread *remover = QThread::create([guard, path] {
+			const QFileInfo info(path);
+			bool ok;
+			if (info.isSymLink() || !info.isDir()) ok = QFile::remove(path);
+			else ok = QDir(path).removeRecursively();   /* removes links inside, follows none */
+			const QString why = ok ? QString() : QStringLiteral("could not remove %1").arg(path);
+			QMetaObject::invokeMethod(qApp, [guard, ok, path, why] {
+				if (guard) emit guard->remote_changed(ok, path, why);
+			}, Qt::QueuedConnection);
+		});
+		QObject::connect(remover, &QThread::finished, remover, &QObject::deleteLater);
+		m_remover = remover;
+		remover->start();
+		return;
+	}
+	QString why;
+	if (change == RENAME) {
+		if (QFileInfo::exists(to) || QFileInfo(to).isSymLink()) why = QStringLiteral("%1 is already there").arg(to);
+		else if (::rename(QFile::encodeName(path).constData(), QFile::encodeName(to).constData()) != 0)
+			why = QString::fromLocal8Bit(strerror(errno));
+	} else if (change == MAKE_DIRECTORY) {
+		if (!QDir().mkdir(path)) why = QStringLiteral("could not make %1").arg(path);
+	}
+	QMetaObject::invokeMethod(this, [this, path, why] {
+		emit remote_changed(why.isEmpty(), path, why);
+	}, Qt::QueuedConnection);
+}
+
 void bssh_pty_session::run_on_the_side(const QString &command) {
 	/*
 	 * A process beside the shell, through /bin/sh as an SSH exec request
@@ -670,7 +803,7 @@ bool bssh_pty_session::export_transport(QByteArray &state, QList<int> &fds, QStr
 	 * half a file left behind, and nobody told. As the SSH transport
 	 * refuses for its SFTP copy.
 	 */
-	if (m_copying) {
+	if (m_copying || m_downloading || m_remover) {
 		if (why) *why = QStringLiteral("a copy is still running; stop it or let it finish");
 		return false;
 	}
