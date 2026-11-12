@@ -4278,7 +4278,13 @@ model on a finger.
   over a private bus (`dbus-run-session`, in check-ssh's X step). The
   protocol is read from how Ark and Dolphin use it, as recalled, and not
   yet seen with a real Dolphin -- the names are the ones to check first if
-  it does not take.
+  it does not take. **Checked against Dolphin's source 2026-11-12**
+  (`src/views/draganddrophelper.{h,cpp}` on invent.kde.org master): the
+  two MIME names, the interface `org.kde.ark.DndExtract` and the method
+  `extractSelectedFilesTo` are BeerSSH's, and its one argument is
+  `destUrl.toDisplayString(QUrl::PreferLocalFile)` -- a plain path for a
+  local folder, which is what the test sends and the slot takes. Dolphin
+  is not installed here, so a real drop is still unseen.
   **The FUSE fallback speaks the kernel's protocol itself -- [DECIDED
   2026-11-12, the holder].** libfuse3's runtime is on this machine but
   not its headers; linking it would add a build and package dependency
