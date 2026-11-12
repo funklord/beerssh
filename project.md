@@ -17690,7 +17690,20 @@ Folded at 97 per cent of the weekly window; what the next session picks up.
   `build-libssh/.patched` touched since the copied sources are already
   patched, and then
   `make SANITIZE=1 VTERM_CFLAGS="-std=c99 -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer -w -Ivterm/include -Ivterm/src" build-tests/beerssh_test`.
-  A copy because `test/tests.pro` links `build-vterm/` by name. A trace
+  A copy because `test/tests.pro` links `build-vterm/` by name. **Bring
+  a copy up to date without keeping the sources' times** (`rsync -r`
+  with no `-t`, or `touch` what was copied): `rsync -a` gives a header
+  edited after the copy was made a time older than the objects built
+  from the copy, so make rebuilds nothing from it. It cost two false
+  findings on 2026-11-12 -- a slot missing from a stale moc, and an ASan
+  stack-buffer-overflow in `bssh_file_panel`'s constructor that was
+  `layout_test.o` built against the panel's old size. **Run again
+  2026-11-12, after the file panel, the FUSE mount, Play and the range
+  fetch:** the whole suite (1082 passed, 3 skipped) and `check-ssh`'s
+  live phases under ASan and UBSan, with no report -- the piece map,
+  the media bytes and the worker's range copy among the code exercised,
+  across the SSH worker, the mount's thread and readers of their own.
+  A trace
   shrinks by deleting steps while the fault still shows. About 300
   rounds take four minutes under ASan.
 - **Also found by the fuzzer, fixed the same day: shrinking the window
