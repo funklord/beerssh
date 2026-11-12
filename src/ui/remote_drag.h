@@ -5,6 +5,8 @@
 #include <QStringList>
 #include <QUrl>
 
+#include <functional>
+
 /*
  * What a drag out of the file panel carries (project.md sec 6.4, "Dragging
  * a file out"). The files are on the host, not here, so the URL list is
@@ -29,6 +31,16 @@ public:
 	/* What a drop asked for now would get. */
 	QList<QUrl> urls_now() const { return m_local.isEmpty() ? m_remote : m_local; }
 
+	/*
+	 * XDS, the X Direct Save protocol (X11): the target writes the folder
+	 * it wants the file in onto the source window, then asks for
+	 * XdndDirectSave0; `save` answers that ask -- "S" when the copy there
+	 * has begun, "E" when it cannot -- and the copy runs on after it, in
+	 * the panel's copy-back row. Offered only where the panel set it up.
+	 */
+	void enable_direct_save(std::function<QByteArray()> save) { m_direct_save = std::move(save); }
+	bool direct_save() const { return bool(m_direct_save); }
+
 	QStringList formats() const override;
 	bool hasFormat(const QString &mime) const override;
 
@@ -38,6 +50,7 @@ protected:
 private:
 	QList<QUrl> m_remote;
 	QList<QUrl> m_local;
+	std::function<QByteArray()> m_direct_save;
 };
 
 /*

@@ -22,6 +22,10 @@
 #include <QTreeWidget>
 
 #include <pwd.h>
+#include <QGuiApplication>
+#if QT_CONFIG(xcb)
+#include <xcb/xcb.h>
+#endif
 #include <unistd.h>
 
 namespace {
@@ -1940,6 +1944,147 @@ void live_ssh_test::a_file_dragged_out_is_staged_before_it_is_dropped()
 	delete data;
 	delete busy;
 	delete session;
+}
+
+#if QT_CONFIG(xcb)
+namespace {
+
+xcb_atom_t test_atom(xcb_connection_t *connection, const char *name) {
+	xcb_intern_atom_reply_t *reply = xcb_intern_atom_reply(connection,
+	        xcb_intern_atom(connection, 0, uint16_t(qstrlen(name)), name), nullptr);
+	const xcb_atom_t atom = reply ? reply->atom : xcb_atom_t(XCB_ATOM_NONE);
+	free(reply);
+	return atom;
+}
+
+QByteArray read_direct_save(xcb_connection_t *connection, xcb_window_t window) {
+	xcb_get_property_reply_t *reply = xcb_get_property_reply(connection,
+	        xcb_get_property(connection, 0, window, test_atom(connection, "XdndDirectSave0"),
+	                         XCB_GET_PROPERTY_TYPE_ANY, 0, 4096), nullptr);
+	QByteArray value;
+	if (reply) {
+		value = QByteArray(static_cast<const char *>(xcb_get_property_value(reply)),
+		                   xcb_get_property_value_length(reply));
+		free(reply);
+	}
+	return value;
+}
+
+/* What a file manager does at an XDS drop: its answer, on the source. */
+void write_direct_save(xcb_connection_t *connection, xcb_window_t window, const QByteArray &url) {
+	xcb_change_property(connection, XCB_PROP_MODE_REPLACE, window, test_atom(connection, "XdndDirectSave0"),
+	                    test_atom(connection, "text/plain"), 8, uint32_t(url.size()), url.constData());
+	xcb_flush(connection);
+}
+
+}
+#endif
+
+void live_ssh_test::a_file_dragged_out_is_saved_where_the_file_manager_says()
+{
+#if QT_CONFIG(xcb)
+	if (QGuiApplication::platformName() != QLatin1String("xcb"))
+		QSKIP("XDS is X11's: run under a virtual X server (check-ssh does, where xvfb-run is installed)");
+	if (!server_available()) return;
+	if (!fresh_connection_expected()) {
+		QSKIP("this phase has taken the link down or swapped the key before "
+		       "here; a fresh connection cannot authenticate by design");
+	}
+
+	/*
+	 * XDS (sec 6.4): offered first, the file's name proposed on the
+	 * dragging window; a file manager writes the folder it wants and asks,
+	 * and is answered at once with "S" -- the copy then runs here, in the
+	 * panel's copy-back row, into the folder it named, its staging stopped
+	 * and gone. A destination on another machine is answered "E".
+	 */
+	QTemporaryDir there;
+	QTemporaryDir here;
+	QVERIFY(there.isValid() && here.isValid());
+	/*
+	 * Two saves, one down each road: the first asked while its staging is
+	 * still copying (40 MB on loopback is not done in the moment the ask
+	 * comes), so the save waits for the staging to stop; the second with
+	 * staging off, so it begins at once.
+	 */
+	QByteArray bytes(40 * 1024 * 1024, '\0');
+	for (int i = 0; i < bytes.size(); ++i) bytes[i] = char(i * 31 + 7);
+	{
+		QFile file(there.filePath(QStringLiteral("saved.bin")));
+		QVERIFY(file.open(QIODevice::WriteOnly));
+		file.write(bytes);
+		QFile small(there.filePath(QStringLiteral("small.txt")));
+		QVERIFY(small.open(QIODevice::WriteOnly));
+		small.write("small");
+	}
+
+	bssh_session *session = connected_session(QStringLiteral("xds-test"));
+	QVERIFY2(session, "the test server did not take the connection");
+	bssh_file_panel panel(session);
+	panel.resize(400, 300);
+	panel.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&panel));
+	QSignalSpy listed(&panel, &bssh_file_panel::listed);
+	panel.open_directory(there.path());
+	QTRY_VERIFY_WITH_TIMEOUT(listed.size() == 1, 15000);
+	QTreeWidget *list = panel.findChild<QTreeWidget *>(QStringLiteral("file-panel-list"));
+	QVERIFY(list && list->topLevelItemCount() == 2);
+	const auto select = [list](const QString &name) {
+		list->clearSelection();
+		for (int i = 0; i < list->topLevelItemCount(); ++i)
+			if (list->topLevelItem(i)->text(0) == name) list->topLevelItem(i)->setSelected(true);
+	};
+	select(QStringLiteral("saved.bin"));
+
+	auto *x11 = qApp->nativeInterface<QNativeInterface::QX11Application>();
+	QVERIFY(x11 && x11->connection());
+	xcb_connection_t *connection = x11->connection();
+	const xcb_window_t source = xcb_window_t(panel.window()->winId());
+
+	QSignalSpy finished(session, &bssh_session::download_finished);
+	QPointer<bssh_remote_drag> data = panel.drag_data_for_selection();
+	QVERIFY(data && data->direct_save());
+	QVERIFY2(session->download_in_progress(), "the staging was not running when the save was asked");
+	QCOMPARE(data->formats().value(0), QStringLiteral("XdndDirectSave0"));
+	QCOMPARE(read_direct_save(connection, source), QByteArray("saved.bin"));
+
+	/* The file manager's answer, then its ask. */
+	write_direct_save(connection, source, QUrl::fromLocalFile(here.filePath(QStringLiteral("saved.bin"))).toEncoded());
+	QCOMPARE(data->data(QStringLiteral("XdndDirectSave0")), QByteArray("S"));
+
+	QTRY_VERIFY_WITH_TIMEOUT(!session->download_in_progress() && !finished.isEmpty()
+	                         && finished.last().at(1).toString() == here.path(), 20000);
+	QVERIFY2(finished.last().at(0).toBool(), qPrintable(finished.last().at(3).toString()));
+	QFile arrived(here.filePath(QStringLiteral("saved.bin")));
+	QVERIFY(arrived.open(QIODevice::ReadOnly));
+	QVERIFY2(arrived.readAll() == bytes, "the saved copy differs from the host's");
+	for (const QList<QVariant> &done : finished)
+		if (done.at(1).toString() != here.path())
+			QVERIFY2(!QFileInfo::exists(done.at(1).toString()), "the staging an XDS save replaced was left behind");
+
+	/* With nothing staging, the save begins at once. */
+	panel.set_staging_limit(0);
+	select(QStringLiteral("small.txt"));
+	QPointer<bssh_remote_drag> direct = panel.drag_data_for_selection();
+	QVERIFY(direct && direct->direct_save() && !session->download_in_progress());
+	finished.clear();
+	write_direct_save(connection, source, QUrl::fromLocalFile(here.filePath(QStringLiteral("small.txt"))).toEncoded());
+	QCOMPARE(direct->data(QStringLiteral("XdndDirectSave0")), QByteArray("S"));
+	QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty(), 15000);
+	QVERIFY2(finished.last().at(0).toBool(), qPrintable(finished.last().at(3).toString()));
+	QFile small_arrived(here.filePath(QStringLiteral("small.txt")));
+	QVERIFY(small_arrived.open(QIODevice::ReadOnly));
+	QCOMPARE(small_arrived.readAll(), QByteArray("small"));
+	delete direct;
+
+	/* Somewhere this connection cannot write: refused. */
+	write_direct_save(connection, source, QByteArray("file://elsewhere.example/tmp/saved.bin"));
+	QCOMPARE(data->data(QStringLiteral("XdndDirectSave0")), QByteArray("E"));
+	delete data;
+	delete session;
+#else
+	QSKIP("built without X11");
+#endif
 }
 
 void live_ssh_test::a_restarted_shell_runs_its_command_on_the_same_connection()

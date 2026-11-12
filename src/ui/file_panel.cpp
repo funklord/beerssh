@@ -29,6 +29,14 @@
 #include "model/session.h"
 #include "ui/remote_drag.h"
 
+#include <QFileInfo>
+#include <QGuiApplication>
+#include <QSysInfo>
+
+#if !defined(Q_OS_ANDROID) && QT_CONFIG(xcb)
+#include <xcb/xcb.h>
+#endif
+
 namespace {
 
 enum column_t { NAME, SIZE, MODIFIED };
@@ -183,6 +191,15 @@ bssh_file_panel::bssh_file_panel(bssh_session *session, QWidget *parent)
 			QDir(m_discard_dir).removeRecursively();
 			m_discard_dir.clear();
 			m_staging_dir.clear();
+			if (!m_after_discard_dir.isEmpty() && m_session) {
+				/* The staging made way for an XDS save: now it starts. */
+				const QStringList paths = m_after_discard_paths;
+				const QString dir = m_after_discard_dir;
+				m_after_discard_paths.clear();
+				m_after_discard_dir.clear();
+				m_session->download(paths, dir);
+				return;
+			}
 			end_copy(m_copy_back, ok, directory, written, why);
 			return;
 		}
@@ -606,6 +623,12 @@ bssh_remote_drag *bssh_file_panel::drag_data_for_selection() {
 	if (paths.isEmpty()) return nullptr;
 
 	bssh_remote_drag *data = new bssh_remote_drag(remote);
+	/* One entry, on X11: XDS too, which a target that speaks it prefers --
+	 * it names the folder, and the copy is ours, with its progress here. */
+	if (paths.size() == 1 && QGuiApplication::platformName() == QLatin1String("xcb")) {
+		set_direct_save_name(paths.first().section(QLatin1Char('/'), -1));
+		data->enable_direct_save([this, paths] { return direct_save(paths); });
+	}
 	/*
 	 * Staged from now, into a directory of this drag's own, on the SSH
 	 * worker a piece at a time -- the window does not wait for it, and the
@@ -634,6 +657,7 @@ void bssh_file_panel::start_drag() {
 	QDrag *drag = new QDrag(this);
 	drag->setMimeData(data);
 	drag_ended(drag->exec(Qt::CopyAction));
+	set_direct_save_name(QString());
 }
 
 void bssh_file_panel::drag_ended(Qt::DropAction action) {
@@ -650,4 +674,95 @@ void bssh_file_panel::drag_ended(Qt::DropAction action) {
 		return;
 	}
 	QDir(dir).removeRecursively();
+}
+
+#if !defined(Q_OS_ANDROID) && QT_CONFIG(xcb)
+namespace {
+
+xcb_atom_t intern(xcb_connection_t *connection, const char *name) {
+	xcb_intern_atom_reply_t *reply = xcb_intern_atom_reply(connection,
+	        xcb_intern_atom(connection, 0, uint16_t(qstrlen(name)), name), nullptr);
+	const xcb_atom_t atom = reply ? reply->atom : xcb_atom_t(XCB_ATOM_NONE);
+	free(reply);
+	return atom;
+}
+
+xcb_connection_t *x11_connection() {
+	auto *x11 = qApp->nativeInterface<QNativeInterface::QX11Application>();
+	return x11 ? x11->connection() : nullptr;
+}
+
+}
+#endif
+
+/*
+ * XDS's proposal: the file's name on the dragging window's XdndDirectSave0
+ * property, which the target replaces with where it wants it. Empty takes
+ * the property away, as the drag ends.
+ */
+void bssh_file_panel::set_direct_save_name(const QString &name) {
+#if !defined(Q_OS_ANDROID) && QT_CONFIG(xcb)
+	xcb_connection_t *connection = x11_connection();
+	if (!connection || !window()->windowHandle()) return;
+	const xcb_window_t source = xcb_window_t(window()->winId());
+	const xcb_atom_t property = intern(connection, "XdndDirectSave0");
+	if (name.isEmpty()) {
+		xcb_delete_property(connection, source, property);
+	} else {
+		const QByteArray bytes = name.toUtf8();
+		xcb_change_property(connection, XCB_PROP_MODE_REPLACE, source, property,
+		                    intern(connection, "text/plain"), 8, uint32_t(bytes.size()), bytes.constData());
+	}
+	xcb_flush(connection);
+#else
+	Q_UNUSED(name);
+#endif
+}
+
+/*
+ * The target has written where it wants the file and asks: begin the copy
+ * there and say "S" -- not after it, since the target waits on the answer
+ * and a large file would hold it up; the file appears when it is whole,
+ * its progress in the copy-back row. "E" where it cannot begin.
+ */
+QByteArray bssh_file_panel::direct_save(const QStringList &paths) {
+#if !defined(Q_OS_ANDROID) && QT_CONFIG(xcb)
+	xcb_connection_t *connection = x11_connection();
+	if (!connection || !m_session) return QByteArrayLiteral("E");
+	const xcb_window_t source = xcb_window_t(window()->winId());
+	xcb_get_property_reply_t *reply = xcb_get_property_reply(connection,
+	        xcb_get_property(connection, 0, source, intern(connection, "XdndDirectSave0"),
+	                         XCB_GET_PROPERTY_TYPE_ANY, 0, 4096), nullptr);
+	QByteArray written;
+	if (reply) {
+		written = QByteArray(static_cast<const char *>(xcb_get_property_value(reply)),
+		                     xcb_get_property_value_length(reply));
+		free(reply);
+	}
+	/* A file:// URL on this machine; a host part naming another is not ours
+	 * to write to, and a bare name means the target wrote nothing back. */
+	const QUrl url = QUrl::fromEncoded(written);
+	if (!url.isLocalFile()) return QByteArrayLiteral("E");
+	const QString host = url.host();
+	if (!host.isEmpty() && host != QStringLiteral("localhost") && host != QSysInfo::machineHostName())
+		return QByteArrayLiteral("E");
+	const QString folder = QFileInfo(url.toLocalFile()).absolutePath();
+	if (!QFileInfo(folder).isDir()) return QByteArrayLiteral("E");
+
+	if (!m_staging_dir.isEmpty() && m_session->download_in_progress()) {
+		/* Its staging is not wanted now: stopped, and this copy waits for
+		 * the stop, one copy back at a time. */
+		m_discard_dir = m_staging_dir;
+		m_after_discard_paths = paths;
+		m_after_discard_dir = folder;
+		m_session->cancel_download();
+		return QByteArrayLiteral("S");
+	}
+	if (m_session->download_in_progress()) return QByteArrayLiteral("E");
+	m_session->download(paths, folder);
+	return QByteArrayLiteral("S");
+#else
+	Q_UNUSED(paths);
+	return QByteArrayLiteral("E");
+#endif
 }

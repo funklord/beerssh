@@ -16,7 +16,11 @@ void bssh_remote_drag::set_staged(const QStringList &local_paths) {
 }
 
 QStringList bssh_remote_drag::formats() const {
-	return { QStringLiteral("text/uri-list"), QStringLiteral("text/plain") };
+	/* XDS first, as the protocol asks: a target that speaks it prefers it. */
+	QStringList list;
+	if (m_direct_save) list << QStringLiteral("XdndDirectSave0");
+	list << QStringLiteral("text/uri-list") << QStringLiteral("text/plain");
+	return list;
 }
 
 bool bssh_remote_drag::hasFormat(const QString &mime) const {
@@ -26,6 +30,7 @@ bool bssh_remote_drag::hasFormat(const QString &mime) const {
 QVariant bssh_remote_drag::retrieveData(const QString &mime, QMetaType type) const {
 	/* Asked at the drop, not at the drag's start: by then the staged copy
 	 * may be whole. */
+	if (mime == QLatin1String("XdndDirectSave0")) return m_direct_save ? m_direct_save() : QByteArray("E");
 	const QList<QUrl> urls = urls_now();
 	if (mime == QLatin1String("text/uri-list")) {
 		if (type.id() == QMetaType::QVariantList) {

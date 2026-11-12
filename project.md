@@ -4209,6 +4209,24 @@ model on a finger.
   manager's copy, which it reports; the staged copy is a copy back
   already. Only the `sftp://` link has none, the file manager fetching
   for itself -- one more reason it is last.
+  **XDS built 2026-11-12** (X11; one entry at a time, since XDS names
+  one destination). The drag offers `XdndDirectSave0` first and puts
+  the entry's name on the dragging window's property of that name; the
+  target writes back the `file://` URL it wants and asks, and is
+  answered "S" at once -- not after the copy, which would hold a large
+  file's target up -- while the copy runs on in the copy-back row with
+  its bar and Stop. A staging under way is stopped first and the save
+  begins when the worker says it has stopped, one copy back at a time.
+  A URL that is not this machine's folder is answered "E" (Qt makes
+  `file://otherhost/x` the path `//otherhost/x`, never a folder here,
+  so the host check behind it is belt and braces, not sabotaged).
+  `a_file_dragged_out_is_saved_where_the_file_manager_says` plays the
+  target's part on a real X server: check-ssh runs it under `xvfb-run`
+  after phase 1, and says so where xvfb-run is not installed -- both
+  roads, a save asked while its staging still copies (it waits for the
+  stop) and one with nothing staging (it begins at once), each with a
+  sabotage; the first version took one road only, and its sabotage of
+  the other was missed. Not yet seen with a real file manager.
   **Konqueror's sftp://
   checked 2026-11-11** (the holder: "probably broken by now"): TDE's
   `tdeio_sftp` links the system libssh, Debian's 0.11.5 -- the version

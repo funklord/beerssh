@@ -124,9 +124,11 @@ wait_for_port
 # their known-hosts into a store made for this run rather than into the
 # one belonging to whoever is running it.
 run_phase() {
+	phase=$1
+	shift
 	BSSH_TEST_SSH_PORT=$PORT \
 	BSSH_TEST_SSH_KEY="$DIR/home/.ssh/id_test" \
-	BSSH_TEST_SSH_PHASE="$1" \
+	BSSH_TEST_SSH_PHASE="$phase" \
 	BSSH_TEST_SESSION_DIR="$DIR/run/beerssh-session" \
 	BSSH_TEST_SESSION_BIN="$DIR/bin/beerssh-session" \
 	BSSH_TEST_SSH_READY="${BSSH_TEST_SSH_READY:-}" \
@@ -136,8 +138,8 @@ run_phase() {
 	HOME="$DIR/home" \
 	XDG_DATA_HOME="$DIR/home/.local/share" \
 	XDG_CONFIG_HOME="$DIR/home/.config" \
-	QT_QPA_PLATFORM=offscreen \
-		"$BIN_ABS" --live-ssh
+	QT_QPA_PLATFORM="${BSSH_TEST_PLATFORM:-offscreen}" \
+		${BSSH_TEST_WRAP:-} "$BIN_ABS" --live-ssh "$@"
 }
 
 BIN_ABS="$(cd "$(dirname "$BIN")" && pwd)/$(basename "$BIN")"
@@ -160,6 +162,17 @@ fi
 
 echo "check-ssh: phase 1 -- authentication, and trusting this host key"
 run_phase trust
+
+# The one test that needs a real X server: the file panel's XDS drag
+# (project.md sec 6.4), on a virtual one, with the phase's trust in place.
+# Said, not skipped in silence, where xvfb-run is not installed.
+if command -v xvfb-run >/dev/null 2>&1; then
+	echo "check-ssh: phase 1 under a virtual X server -- the XDS drag"
+	(export BSSH_TEST_PLATFORM=xcb BSSH_TEST_WRAP="xvfb-run -a" BSSH_TEST_CLASSES=live_ssh_test
+	 run_phase trust a_file_dragged_out_is_saved_where_the_file_manager_says)
+else
+	echo "check-ssh: no xvfb-run here, so the XDS drag is not checked"
+fi
 
 # The decisive check on what beerssh wrote: ssh(1) itself, in a mode
 # that prompts for nothing, so it can only succeed on a match. This has

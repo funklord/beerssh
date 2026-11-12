@@ -136,6 +136,11 @@ private:
 	qint64 m_staging_limit = 64 * 1024 * 1024;
 	QString m_last_staged_dir;   /* the last drag's, staged or staging */
 	QString m_discard_dir;       /* an abandoned drag's, removed once stopped */
+	/* A copy waiting for the staging it replaces to stop: XDS's. */
+	QStringList m_after_discard_paths;
+	QString m_after_discard_dir;
+	QByteArray direct_save(const QStringList &paths);
+	void set_direct_save_name(const QString &name);
 	QPoint m_drag_press;
 	void start_drag();
 
