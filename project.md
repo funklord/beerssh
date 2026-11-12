@@ -4497,6 +4497,13 @@ model on a finger.
   showed as a sliver; it is added to the layout now. The glue has no
   test of its own -- the suite does not build snurra -- so this run is
   its check.
+  **Video, pin `6c9869f`** (snurra's word the same day, no API change):
+  a video opened through the facade shows its picture, read from the
+  host's bytes -- four snurra threads now read them at once (sound,
+  waveform, picture, beats), which `bssh_media_bytes` allows, each read
+  opening the file for itself. A 10 s test pattern from the loopback
+  host played in the panel, its picture in snurra's drawer above the
+  tile, counting up to its last frame.
   **Step 3, the phone's form, built 2026-11-11 and not yet seen on a
   device.** On touch the panel lies over the terminal view, its child,
   following its size, rather than beside it: the view keeps its size, so
