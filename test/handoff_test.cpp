@@ -174,6 +174,16 @@ void handoff_test::a_live_session_moves_to_another_process() {
 	tmux.write("#!/bin/sh\nprintf 'work\\t1\\t0\\n'\n");
 	tmux.close();
 	tmux.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+	/*
+	 * And a screen with none, as screen says it: the machine's own screen
+	 * sessions were counted otherwise, and the test failed whenever
+	 * anyone on it had one open -- "multiplexers: 20", 2026-11-12.
+	 */
+	QFile screen(fakes.filePath(QStringLiteral("screen")));
+	QVERIFY(screen.open(QIODevice::WriteOnly));
+	screen.write("#!/bin/sh\necho 'No Sockets found in /nonexistent.'\nexit 1\n");
+	screen.close();
+	screen.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
 	const QByteArray path_before = qgetenv("PATH");
 	qputenv("PATH", fakes.path().toLocal8Bit() + ':' + path_before);
 	/* The suite turns the offer off in every process it starts, the taker
