@@ -14537,6 +14537,34 @@ void layout_test::every_touch_surface_names_its_controls() {
 		                              &features, &counted);
 		QVERIFY2(complaint.isEmpty(), qPrintable(complaint));
 	}
+	{
+		/*
+		 * sec 6.4's file panel, which came after this sweep and is a row
+		 * of icon buttons -- up, the shell's directory, more, refresh,
+		 * close -- that a reader would otherwise announce as their icons.
+		 */
+		bssh_main_window window;
+		window.resize(360, 700);
+		/* Shown: the sweep passes over what is not visible, and a panel
+		 * in a window never shown would be counted as nothing at all. */
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		const registry_left_as_found_t tidy(window.registry());
+		window.adopt_session(window.registry()->create(named(QStringLiteral("files"))));
+		QMenu *menu = window.build_terminal_menu(&window);
+		QAction *files = menu->findChild<QAction *>(QStringLiteral("terminal_files"));
+		QVERIFY(files);
+		window.act_on_terminal_menu(menu, files);
+		delete menu;
+		QTRY_VERIFY(window.findChild<QWidget *>(QStringLiteral("file-panel")));
+		QWidget *panel = window.findChild<QWidget *>(QStringLiteral("file-panel"));
+		const int before = counted;
+		complaint = unnamed_controls(QStringLiteral("file panel"), panel, &counted);
+		QVERIFY2(complaint.isEmpty(), qPrintable(complaint));
+		/* Up, the location, the shell's directory, more, again, close. */
+		QVERIFY2(counted - before >= 6, qPrintable(QStringLiteral("the file panel showed %1 controls to the sweep")
+		                                                   .arg(counted - before)));
+	}
 
 	/*
 	 * And say how many were looked at, because a sweep that inspected

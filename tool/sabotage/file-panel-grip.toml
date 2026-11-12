@@ -87,3 +87,11 @@ file = "src/ui/main_window.cpp"
 find = "\tm_keyboard->setVisible(built_in && !m_keyboard_hidden_by_user && !m_terminal_keyboard_aside);"
 replace = "\tm_keyboard->setVisible(built_in && !m_keyboard_hidden_by_user);"
 expect = "the_file_panels_field_gets_the_forms_keyboard"
+
+# The panel's up button unnamed: a screen reader announces its icon.
+[[sabotage]]
+name = "the file panel's up button has no name for a reader"
+file = "src/ui/file_panel.cpp"
+find = "\tm_up->setAccessibleName(tr(\"Up a directory\"));\n"
+replace = ""
+expect = "every_touch_surface_names_its_controls"
