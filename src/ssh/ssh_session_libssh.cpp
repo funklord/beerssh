@@ -232,6 +232,8 @@ public slots:
 	void do_list_directory(const QString &path);
 	void do_download(const QStringList &paths, const QString &directory);
 	void do_cancel_download();
+	void do_pause_upload(bool paused);
+	void do_pause_download(bool paused);
 	void drop_partial_download();
 	void do_change_remote(int change, const QString &path, const QString &to);
 	void do_restart_shell(const QStringList &command);
@@ -360,8 +362,11 @@ private:
 		QString directory;
 		QStringList written;
 		QElapsedTimer since_progress;
+		bool paused = false;
+		bool scheduled = false;   /* a step is queued: never two at once */
 	};
 	std::unique_ptr<upload_job> m_upload;
+	void schedule_upload();
 	void step_upload();
 	void finish_upload(bool ok, const QString &why);
 	QString sftp_error() const;
@@ -409,8 +414,11 @@ private:
 		QString directory;
 		QStringList written;
 		QElapsedTimer since_progress;
+		bool paused = false;
+		bool scheduled = false;
 	};
 	std::unique_ptr<download_job> m_download;
+	void schedule_download();
 	void step_download();
 	void finish_download(bool ok, const QString &why);
 
@@ -1484,12 +1492,26 @@ void bssh_libssh_worker::do_upload(const QStringList &paths, const QString &dire
 	}
 	job.since_progress.start();
 	emit upload_progress(0, job.total);
+	schedule_upload();
+}
+
+void bssh_libssh_worker::schedule_upload() {
+	if (!m_upload || m_upload->scheduled) return;
+	m_upload->scheduled = true;
 	QTimer::singleShot(0, this, &bssh_libssh_worker::step_upload);
+}
+
+void bssh_libssh_worker::do_pause_upload(bool paused) {
+	if (!m_upload) return;
+	m_upload->paused = paused;
+	if (!paused) schedule_upload();
 }
 
 void bssh_libssh_worker::step_upload() {
 	if (!m_upload) return;
 	upload_job &job = *m_upload;
+	job.scheduled = false;
+	if (job.paused) return;   /* held between pieces; resuming schedules again */
 
 	if (!job.file) {
 		if (job.at >= job.items.size()) {
@@ -1504,7 +1526,7 @@ void bssh_libssh_worker::step_upload() {
 				return;
 			}
 			++job.at;
-			QTimer::singleShot(0, this, &bssh_libssh_worker::step_upload);
+			schedule_upload();
 			return;
 		}
 		job.source.setFileName(item.local);
@@ -1547,7 +1569,7 @@ void bssh_libssh_worker::step_upload() {
 		job.since_progress.restart();
 		emit upload_progress(job.done, job.total);
 	}
-	QTimer::singleShot(0, this, &bssh_libssh_worker::step_upload);
+	schedule_upload();
 }
 
 void bssh_libssh_worker::do_cancel_upload() {
@@ -1721,12 +1743,26 @@ void bssh_libssh_worker::do_download(const QStringList &paths, const QString &di
 	}
 	job.since_progress.start();
 	emit download_progress(0, job.total);
+	schedule_download();
+}
+
+void bssh_libssh_worker::schedule_download() {
+	if (!m_download || m_download->scheduled) return;
+	m_download->scheduled = true;
 	QTimer::singleShot(0, this, &bssh_libssh_worker::step_download);
+}
+
+void bssh_libssh_worker::do_pause_download(bool paused) {
+	if (!m_download) return;
+	m_download->paused = paused;
+	if (!paused) schedule_download();
 }
 
 void bssh_libssh_worker::step_download() {
 	if (!m_download) return;
 	download_job &job = *m_download;
+	job.scheduled = false;
+	if (job.paused) return;
 
 	if (!job.file) {
 		if (job.at >= job.items.size()) {
@@ -1791,7 +1827,7 @@ void bssh_libssh_worker::step_download() {
 				job.inside.append({ joined(item.remote, name), joined(item.local, name), is_directory });
 				if (!is_directory) job.total += size;
 			}
-			QTimer::singleShot(0, this, &bssh_libssh_worker::step_download);
+			schedule_download();
 			return;
 		}
 		job.file = sftp_open(job.sftp, item.remote.toUtf8().constData(), O_RDONLY, 0);
@@ -1834,7 +1870,7 @@ void bssh_libssh_worker::step_download() {
 		job.since_progress.restart();
 		emit download_progress(job.done, job.total);
 	}
-	QTimer::singleShot(0, this, &bssh_libssh_worker::step_download);
+	schedule_download();
 }
 
 void bssh_libssh_worker::do_cancel_download() {
@@ -2719,6 +2755,14 @@ void bssh_ssh_session_libssh::change_remote(change_t change, const QString &path
 	QMetaObject::invokeMethod(m_worker, [this, change, path, to] {
 		m_worker->do_change_remote(int(change), path, to);
 	}, Qt::QueuedConnection);
+}
+
+void bssh_ssh_session_libssh::pause_upload(bool paused) {
+	QMetaObject::invokeMethod(m_worker, [this, paused] { m_worker->do_pause_upload(paused); }, Qt::QueuedConnection);
+}
+
+void bssh_ssh_session_libssh::pause_download(bool paused) {
+	QMetaObject::invokeMethod(m_worker, [this, paused] { m_worker->do_pause_download(paused); }, Qt::QueuedConnection);
 }
 
 void bssh_ssh_session_libssh::cancel_download() {

@@ -30,6 +30,16 @@
 #include <termios.h>
 #include <unistd.h>
 
+/*
+ * Asked by a local copy between its pieces: whether to stop -- waiting
+ * here, on the copy's own thread, while it is held (the transfer tiles'
+ * pause, sec 6.4). A stop asked while held ends the wait.
+ */
+static bool held(const std::atomic<bool> &stop, const std::atomic<bool> &pause) {
+	while (pause.load() && !stop.load()) QThread::msleep(50);
+	return stop.load();
+}
+
 namespace {
 
 /*
@@ -592,9 +602,11 @@ void bssh_pty_session::upload(const QStringList &paths, const QString &directory
 	 */
 	const QPointer<bssh_pty_session> guard(this);
 	auto stop = std::make_shared<std::atomic<bool>>(false);
+	auto pause = std::make_shared<std::atomic<bool>>(false);
 	m_copy_stop = stop;
+	m_copy_pause = pause;
 	m_copying = true;
-	QThread *copier = QThread::create([guard, paths, directory, stop] {
+	QThread *copier = QThread::create([guard, paths, directory, stop, pause] {
 		QStringList written;
 		QString why;
 		QElapsedTimer since;
@@ -606,7 +618,7 @@ void bssh_pty_session::upload(const QStringList &paths, const QString &directory
 			QMetaObject::invokeMethod(qApp, [guard, done, total] {
 				if (guard) emit guard->upload_progress(done, total);
 			}, Qt::QueuedConnection);
-		}, [stop] { return stop->load(); });
+		}, [stop, pause] { return held(*stop, *pause); });
 		const QString into = directory.isEmpty() ? QDir::homePath() : directory;
 		QMetaObject::invokeMethod(qApp, [guard, ok, into, written, why] {
 			if (!guard) return;
@@ -617,6 +629,14 @@ void bssh_pty_session::upload(const QStringList &paths, const QString &directory
 	QObject::connect(copier, &QThread::finished, copier, &QObject::deleteLater);
 	m_copier = copier;
 	copier->start();
+}
+
+void bssh_pty_session::pause_upload(bool paused) {
+	if (m_copy_pause) m_copy_pause->store(paused);
+}
+
+void bssh_pty_session::pause_download(bool paused) {
+	if (m_download_pause) m_download_pause->store(paused);
 }
 
 void bssh_pty_session::cancel_upload() {
@@ -677,9 +697,11 @@ void bssh_pty_session::download(const QStringList &paths, const QString &directo
 	}
 	const QPointer<bssh_pty_session> guard(this);
 	auto stop = std::make_shared<std::atomic<bool>>(false);
+	auto pause = std::make_shared<std::atomic<bool>>(false);
 	m_download_stop = stop;
+	m_download_pause = pause;
 	m_downloading = true;
-	QThread *copier = QThread::create([guard, paths, directory, stop] {
+	QThread *copier = QThread::create([guard, paths, directory, stop, pause] {
 		QStringList written;
 		QString why;
 		QElapsedTimer since;
@@ -691,7 +713,7 @@ void bssh_pty_session::download(const QStringList &paths, const QString &directo
 			QMetaObject::invokeMethod(qApp, [guard, done, total] {
 				if (guard) emit guard->download_progress(done, total);
 			}, Qt::QueuedConnection);
-		}, [stop] { return stop->load(); });
+		}, [stop, pause] { return held(*stop, *pause); });
 		QMetaObject::invokeMethod(qApp, [guard, ok, directory, written, why] {
 			if (!guard) return;
 			guard->m_downloading = false;

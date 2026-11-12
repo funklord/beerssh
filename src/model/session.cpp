@@ -430,23 +430,31 @@ void bssh_session::wire_transport() {
 			found.path = bssh_reported_directory(m_emulator->reported_directory(), found.host);
 		emit working_directory_found(found);
 	});
-	connect(m_transport, &bssh_ssh_session::upload_progress, this, &bssh_session::upload_progress);
+	connect(m_transport, &bssh_ssh_session::upload_progress, this, [this](qint64 done, qint64 total) {
+		emit upload_progress(done, total);
+		if (m_running_up) emit transfer_progress(m_running_up, done, total);
+	});
 	connect(m_transport, &bssh_ssh_session::upload_finished, this,
 	         [this](bool ok, const QString &directory, const QStringList &written, const QString &why) {
 		m_uploading = false;
 		m_upload_directory.clear();
 		emit upload_finished(ok, directory, written, why);
+		end_transfer(TRANSFER_UP, ok, directory, written, why);
 	});
 
 	/* The file panel's listing and copies back (sec 6.4). */
 	connect(m_transport, &bssh_ssh_session::directory_listed, this, &bssh_session::directory_listed);
-	connect(m_transport, &bssh_ssh_session::download_progress, this, &bssh_session::download_progress);
+	connect(m_transport, &bssh_ssh_session::download_progress, this, [this](qint64 done, qint64 total) {
+		emit download_progress(done, total);
+		if (m_running_down) emit transfer_progress(m_running_down, done, total);
+	});
 	connect(m_transport, &bssh_ssh_session::remote_changed, this, &bssh_session::remote_changed);
 	connect(m_transport, &bssh_ssh_session::download_finished, this,
 	         [this](bool ok, const QString &directory, const QStringList &written, const QString &why) {
 		m_downloading = false;
 		m_download_directory.clear();
 		emit download_finished(ok, directory, written, why);
+		end_transfer(TRANSFER_DOWN, ok, directory, written, why);
 	});
 
 	/*
@@ -789,6 +797,8 @@ void bssh_session::reconnect() {
 			m_upload_directory.clear();
 			emit upload_finished(false, directory, QStringList(),
 			                     QStringLiteral("the connection closed during the copy"));
+			end_transfer(TRANSFER_UP, false, directory, QStringList(),
+			             QStringLiteral("the connection closed during the copy"));
 		}
 		if (m_downloading) {
 			m_transport->cancel_download();
@@ -797,7 +807,15 @@ void bssh_session::reconnect() {
 			m_download_directory.clear();
 			emit download_finished(false, directory, QStringList(),
 			                       QStringLiteral("the connection closed during the copy"));
+			end_transfer(TRANSFER_DOWN, false, directory, QStringList(),
+			             QStringLiteral("the connection closed during the copy"));
 		}
+		/* Queued copies wait for a connection that is going: said, not kept. */
+		const QList<transfer_t> queued = m_transfers;
+		m_transfers.clear();
+		for (const transfer_t &left : queued)
+			emit transfer_finished(left.id, false, left.destination, QStringList(),
+			                       QStringLiteral("the connection closed before the copy began"));
 		m_transport->disconnect_from_host();
 		m_transport->deleteLater();
 		m_transport = nullptr;
@@ -1070,6 +1088,12 @@ bool bssh_session::export_handoff(QByteArray &state, QList<int> &fds, QString *w
 		return false;
 	}
 
+	/* Copies waiting their turn live here, and nothing carries them. */
+	if (!m_transfers.isEmpty()) {
+		if (why) *why = QStringLiteral("a copy is still running or waiting; stop it or let it finish");
+		return false;
+	}
+
 	/* Its place in the stream lives here, and nothing carries that yet. */
 	if (m_resume == RESUME_ACTIVE) {
 		if (why) *why = QStringLiteral("the session is kept on the server");
@@ -1266,9 +1290,13 @@ void bssh_session::upload(const QStringList &paths, const QString &directory) {
 	 */
 	if (m_uploading) return;
 	if (m_transport) {
-		m_uploading = true;
-		m_upload_directory = directory;
-		m_transport->upload(paths, directory);
+		transfer_t transfer;
+		transfer.id = ++m_next_transfer;
+		transfer.direction = TRANSFER_UP;
+		transfer.paths = paths;
+		transfer.destination = directory;
+		m_transfers << transfer;
+		begin_transfer(m_transfers.last());
 	}
 	else emit upload_finished(false, directory, QStringList(), QStringLiteral("not connected"));
 }
@@ -1291,11 +1319,117 @@ void bssh_session::download(const QStringList &paths, const QString &directory) 
 	/* One at a time, as upload(). */
 	if (m_downloading) return;
 	if (m_transport) {
-		m_downloading = true;
-		m_download_directory = directory;
-		m_transport->download(paths, directory);
+		transfer_t transfer;
+		transfer.id = ++m_next_transfer;
+		transfer.direction = TRANSFER_DOWN;
+		transfer.paths = paths;
+		transfer.destination = directory;
+		m_transfers << transfer;
+		begin_transfer(m_transfers.last());
 	}
 	else emit download_finished(false, directory, QStringList(), QStringLiteral("not connected"));
+}
+
+bssh_session::transfer_t *bssh_session::find_transfer(int id) {
+	for (transfer_t &transfer : m_transfers)
+		if (transfer.id == id) return &transfer;
+	return nullptr;
+}
+
+void bssh_session::begin_transfer(transfer_t &transfer) {
+	transfer.state = TRANSFER_RUNNING;
+	const int id = transfer.id;
+	const QStringList paths = transfer.paths;
+	const QString destination = transfer.destination;
+	if (transfer.direction == TRANSFER_UP) {
+		m_running_up = id;
+		m_uploading = true;
+		m_upload_directory = destination;
+		emit transfer_changed(id);
+		m_transport->upload(paths, destination);
+	} else {
+		m_running_down = id;
+		m_downloading = true;
+		m_download_directory = destination;
+		emit transfer_changed(id);
+		m_transport->download(paths, destination);
+	}
+}
+
+int bssh_session::queue_transfer(transfer_direction_t direction, const QStringList &paths,
+                                 const QString &destination) {
+	if (!m_transport || paths.isEmpty()) return 0;
+	transfer_t transfer;
+	transfer.id = ++m_next_transfer;
+	transfer.direction = direction;
+	transfer.paths = paths;
+	transfer.destination = destination;
+	m_transfers << transfer;
+	emit transfer_changed(transfer.id);
+	start_next(direction);
+	return transfer.id;
+}
+
+void bssh_session::start_next(transfer_direction_t direction) {
+	/* One running a direction; the first queued that is not held next. */
+	if ((direction == TRANSFER_UP ? m_uploading : m_downloading) || !m_transport) return;
+	for (transfer_t &transfer : m_transfers) {
+		if (transfer.direction != direction || transfer.state != TRANSFER_QUEUED) continue;
+		begin_transfer(transfer);
+		return;
+	}
+}
+
+void bssh_session::end_transfer(transfer_direction_t direction, bool ok, const QString &destination,
+                                const QStringList &written, const QString &why) {
+	int &running = direction == TRANSFER_UP ? m_running_up : m_running_down;
+	const int id = running;
+	running = 0;
+	if (id) {
+		for (int i = 0; i < m_transfers.size(); ++i)
+			if (m_transfers.at(i).id == id) m_transfers.removeAt(i--);
+		emit transfer_finished(id, ok, destination, written, why);
+	}
+	/* From the event loop: whoever listens to this end may start a copy. */
+	QMetaObject::invokeMethod(this, [this, direction] { start_next(direction); }, Qt::QueuedConnection);
+}
+
+void bssh_session::pause_transfer(int id, bool paused) {
+	transfer_t *transfer = find_transfer(id);
+	if (!transfer) return;
+	const bool running = (transfer->direction == TRANSFER_UP ? m_running_up : m_running_down) == id;
+	transfer->state = paused ? TRANSFER_PAUSED : (running ? TRANSFER_RUNNING : TRANSFER_QUEUED);
+	if (running && m_transport) {
+		/* Held between pieces by the transport; let go, it goes on. */
+		if (transfer->direction == TRANSFER_UP) m_transport->pause_upload(paused);
+		else m_transport->pause_download(paused);
+	}
+	const transfer_direction_t direction = transfer->direction;
+	emit transfer_changed(id);
+	/* A queued one held is passed over by start_next(); let go, its turn
+	 * may have come. */
+	if (!running && !paused) start_next(direction);
+}
+
+void bssh_session::cancel_transfer(int id) {
+	transfer_t *transfer = find_transfer(id);
+	if (!transfer) return;
+	const bool running = (transfer->direction == TRANSFER_UP ? m_running_up : m_running_down) == id;
+	if (running) {
+		/* Stopped by the transport, its half-written file removed; the end
+		 * is reported through its own finish, as Stop's always was. */
+		if (transfer->direction == TRANSFER_UP) m_transport->cancel_upload();
+		else m_transport->cancel_download();
+		if (transfer->state == TRANSFER_PAUSED && m_transport) {
+			if (transfer->direction == TRANSFER_UP) m_transport->pause_upload(false);
+			else m_transport->pause_download(false);
+		}
+		return;
+	}
+	const transfer_t taken = *transfer;
+	for (int i = 0; i < m_transfers.size(); ++i)
+		if (m_transfers.at(i).id == id) m_transfers.removeAt(i--);
+	emit transfer_finished(id, false, taken.destination, QStringList(), QString::fromLatin1(BSSH_COPY_STOPPED));
 }
 
 void bssh_session::list_multiplexers(bool asked) {

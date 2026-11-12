@@ -133,6 +133,8 @@ public:
 	void list_directory(const QString &path) override;
 	void download(const QStringList &paths, const QString &directory) override;
 	void cancel_download() override;
+	void pause_upload(bool paused) override;
+	void pause_download(bool paused) override;
 	void change_remote(change_t change, const QString &path, const QString &to = QString()) override;
 	void restart_shell(const QStringList &command) override;
 	bool export_transport(QByteArray &state, QList<int> &fds, QString *why) override;
@@ -160,10 +162,12 @@ private:
 	int m_master;
 	/* The copy under way, asked to stop between pieces. */
 	std::shared_ptr<std::atomic<bool>> m_copy_stop;
+	std::shared_ptr<std::atomic<bool>> m_copy_pause;
 	bool m_copying = false;
 	QPointer<QThread> m_copier;
 	/* The panel's copy back, the same way, apart from the upload's. */
 	std::shared_ptr<std::atomic<bool>> m_download_stop;
+	std::shared_ptr<std::atomic<bool>> m_download_pause;
 	bool m_downloading = false;
 	QPointer<QThread> m_download_copier;
 	QPointer<QThread> m_remover;

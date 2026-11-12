@@ -176,3 +176,28 @@ file = "src/platform/fuse_shelf.cpp"
 find = "\tif (have < want && !(n.finished && n.whole)) {"
 replace = "\tif (false && have < want && !(n.finished && n.whole)) {"
 expect = "a_file_dropped_on_a_plain_file_manager_is_read_as_it_arrives"
+
+# Pause marked and the copy not held: bytes go on moving under a tile
+# that says Paused.
+[[sabotage]]
+name = "a paused copy goes on copying"
+file = "src/ssh/ssh_session_libssh.cpp"
+find = "\tjob.scheduled = false;\n\tif (job.paused) return;\n\n"
+replace = "\tjob.scheduled = false;\n\n"
+expect = "copies_queue_as_tiles_and_pause_between_pieces"
+
+# A copy taken off the queue starts anyway when its turn comes.
+[[sabotage]]
+name = "a queued copy taken off runs anyway"
+file = "src/model/session.cpp"
+find = "\tconst transfer_t taken = *transfer;\n\tfor (int i = 0; i < m_transfers.size(); ++i)\n\t\tif (m_transfers.at(i).id == id) m_transfers.removeAt(i--);\n"
+replace = "\tconst transfer_t taken = *transfer;\n"
+expect = "copies_queue_as_tiles_and_pause_between_pieces"
+
+# A second copy refused, not queued: the tile for it never comes.
+[[sabotage]]
+name = "a second copy waits for no turn"
+file = "src/model/session.cpp"
+find = "\tfor (transfer_t &transfer : m_transfers) {\n\t\tif (transfer.direction != direction || transfer.state != TRANSFER_QUEUED) continue;\n\t\tbegin_transfer(transfer);\n\t\treturn;\n\t}\n"
+replace = ""
+expect = "copies_queue_as_tiles_and_pause_between_pieces"

@@ -22,6 +22,7 @@
 #include <atomic>
 #include <thread>
 
+#include <QFrame>
 #include <QToolButton>
 #include <QTreeWidget>
 
@@ -2263,6 +2264,90 @@ void live_ssh_test::a_file_dropped_on_a_plain_file_manager_is_read_as_it_arrives
 	QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty(), 15000);
 	QTRY_VERIFY_WITH_TIMEOUT(!QFileInfo::exists(gone), 5000);
 	delete abandoned;
+	delete session;
+}
+
+void live_ssh_test::copies_queue_as_tiles_and_pause_between_pieces()
+{
+	if (!server_available()) return;
+	if (!fresh_connection_expected()) {
+		QSKIP("this phase has taken the link down or swapped the key before "
+		       "here; a fresh connection cannot authenticate by design");
+	}
+
+	/*
+	 * The transfer tiles (sec 6.4): copies either way queue, a tile each;
+	 * the second waits its turn; Pause holds the running one between
+	 * pieces -- no byte moves while held -- and letting go finishes it; a
+	 * waiting one taken off the queue never runs; the rest arrive whole,
+	 * and X puts a finished tile away.
+	 */
+	QTemporaryDir there;
+	QTemporaryDir here;
+	QVERIFY(there.isValid() && here.isValid());
+	QByteArray big(30 * 1024 * 1024, '\0');
+	for (int i = 0; i < big.size(); i += 4096) big[i] = char(i / 4096);
+	const auto write = [](const QString &path, const QByteArray &bytes) {
+		QFile file(path);
+		QVERIFY(file.open(QIODevice::WriteOnly));
+		file.write(bytes);
+	};
+	write(there.filePath(QStringLiteral("first.bin")), big);
+	write(there.filePath(QStringLiteral("second.txt")), "second");
+	write(there.filePath(QStringLiteral("never.txt")), "never");
+
+	bssh_session *session = connected_session(QStringLiteral("tiles-test"));
+	QVERIFY2(session, "the test server did not take the connection");
+	bssh_file_panel panel(session);
+	QSignalSpy progress(session, &bssh_session::transfer_progress);
+	QSignalSpy finished(session, &bssh_session::transfer_finished);
+
+	const int first = session->queue_transfer(bssh_session::TRANSFER_DOWN,
+	                                          { there.filePath(QStringLiteral("first.bin")) }, here.path());
+	const int second = session->queue_transfer(bssh_session::TRANSFER_DOWN,
+	                                           { there.filePath(QStringLiteral("second.txt")) }, here.path());
+	const int never = session->queue_transfer(bssh_session::TRANSFER_DOWN,
+	                                          { there.filePath(QStringLiteral("never.txt")) }, here.path());
+	QVERIFY(first && second && never);
+	QTRY_COMPARE_WITH_TIMEOUT(panel.findChildren<QFrame *>(QStringLiteral("transfer-tile")).size(), 3, 5000);
+	QCOMPARE(session->transfers().size(), 3);
+	QCOMPARE(session->transfers().at(1).state, bssh_session::TRANSFER_QUEUED);
+
+	/* Held from its first piece: nothing moves while it is. */
+	QTRY_VERIFY_WITH_TIMEOUT(!progress.isEmpty(), 15000);
+	session->pause_transfer(first, true);
+	QTest::qWait(300);   /* a piece already asked for may land */
+	const QFileInfo partial(here.filePath(QStringLiteral("first.bin")));
+	const qint64 held_at = QFileInfo(partial.filePath()).size();
+	QTest::qWait(500);
+	QCOMPARE(QFileInfo(partial.filePath()).size(), held_at);
+	QVERIFY2(held_at < big.size(), "the copy finished before it could be held; nothing was measured");
+	QCOMPARE(session->transfers().at(0).state, bssh_session::TRANSFER_PAUSED);
+
+	/* Taken off the queue before its turn. */
+	session->cancel_transfer(never);
+	QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty(), 5000);
+	QCOMPARE(finished.first().at(0).toInt(), never);
+	QCOMPARE(finished.first().at(4).toString(), QString::fromLatin1(BSSH_COPY_STOPPED));
+
+	session->pause_transfer(first, false);
+	QTRY_VERIFY_WITH_TIMEOUT(finished.size() == 3, 60000);
+	QFile arrived(here.filePath(QStringLiteral("first.bin")));
+	QVERIFY(arrived.open(QIODevice::ReadOnly));
+	QVERIFY2(arrived.readAll() == big, "the paused copy differs from the host's once let go");
+	QFile second_arrived(here.filePath(QStringLiteral("second.txt")));
+	QVERIFY(second_arrived.open(QIODevice::ReadOnly));
+	QCOMPARE(second_arrived.readAll(), QByteArray("second"));
+	QVERIFY2(!QFileInfo::exists(here.filePath(QStringLiteral("never.txt"))), "a copy taken off the queue ran");
+	QVERIFY(session->transfers().isEmpty());
+
+	/* Over, a tile is put away by its X. */
+	QFrame *tile = panel.findChildren<QFrame *>(QStringLiteral("transfer-tile")).value(0);
+	QVERIFY(tile);
+	QToolButton *x = tile->findChild<QToolButton *>(QStringLiteral("transfer-close"));
+	QVERIFY(x);
+	x->click();
+	QTRY_COMPARE_WITH_TIMEOUT(panel.findChildren<QFrame *>(QStringLiteral("transfer-tile")).size(), 2, 5000);
 	delete session;
 }
 

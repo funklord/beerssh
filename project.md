@@ -4298,8 +4298,24 @@ model on a finger.
   holder asked. The test's line was removed afterwards. Unmeasured: whether
   Nautilus 43 and later (GTK4) still take XDS; Finder's file promises
   are the macOS equivalent and would need native code.
+- **Transfer tiles -- [BUILT 2026-11-12]**, as planned below. Every
+  copy either way has an id in `bssh_session`, the drop's upload and the
+  drag's staging included; `queue_transfer()` waits its turn where
+  `upload()`/`download()` still refuse a second (the staging and the
+  XDS and Ark saves rely on that), the next in a direction starting as
+  the one before ends. Pause holds a running copy between pieces -- a
+  scheduled flag keeps the SSH worker to one step chain however quickly
+  pause and resume follow each other -- and a local copy waits on its
+  own thread; a queued one held is passed over. X stops a running copy,
+  its half-written file removed, takes a queued one off the queue, and
+  puts a finished tile away. The panel's tiles replace its two fixed
+  rows, newest last, rebuilt from the session's list when a layout
+  change makes a new panel. The move to another process is refused
+  while any copy runs or waits. `copies_queue_as_tiles_and_pause_between_pieces`:
+  three queued, the first held with no byte moving for half a second,
+  the third taken off and never run, the rest whole, a tile put away.
 - **Planned 2026-11-11 (the holder): transfers as tiles, and a media
-  player in the same shape -- [PLAN, not built].**
+  player in the same shape -- [PLAN; the tiles built, the media tile not].**
   *Transfer tiles.* The copies move from the two fixed rows to a stack
   of tiles at the bottom of the file panel, one per transfer, several at
   once: name, direction, bytes and a bar, **Pause** and **X** (stop, and

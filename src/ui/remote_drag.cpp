@@ -74,6 +74,10 @@ void remove_own_staging() {
 
 }
 
+QString bssh_drag_staging_path() {
+	return staging_base() + QLatin1Char('/') + QString::number(QCoreApplication::applicationPid());
+}
+
 QString bssh_drag_staging_root() {
 	static QString root;
 	if (!root.isEmpty()) return root;

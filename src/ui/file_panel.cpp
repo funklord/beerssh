@@ -3,6 +3,7 @@
 #include <QApplication>
 #include <QDir>
 #include <QDrag>
+#include <QFrame>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QFileDialog>
@@ -154,8 +155,10 @@ bssh_file_panel::bssh_file_panel(bssh_session *session, QWidget *parent)
 	m_status = new QLabel(this);
 	m_status->setWordWrap(true);
 	column->addWidget(m_status);
-	m_copy_back = make_copy_row(column, tr("Stop copying here"));
-	m_copy_up = make_copy_row(column, tr("Stop copying there"));
+	/* The transfer tiles, one per copy either way, newest last. */
+	m_tile_column = new QVBoxLayout;
+	m_tile_column->setSpacing(2);
+	column->addLayout(m_tile_column);
 
 	connect(m_up, &QToolButton::clicked, this, [this] {
 		if (!m_path.isEmpty()) open_directory(parent_of(m_path));
@@ -171,12 +174,6 @@ bssh_file_panel::bssh_file_panel(bssh_session *session, QWidget *parent)
 	connect(more, &QToolButton::clicked, this, [this, more] {
 		show_menu(more->mapToGlobal(QPoint(0, more->height())));
 	});
-	connect(m_copy_back.stop, &QToolButton::clicked, this, [this] {
-		if (m_session && m_session->download_in_progress()) m_session->cancel_download();
-	});
-	connect(m_copy_up.stop, &QToolButton::clicked, this, [this] {
-		if (m_session && m_session->upload_in_progress()) m_session->cancel_upload();
-	});
 
 	if (!m_session) return;
 	connect(m_session, &bssh_session::directory_listed, this,
@@ -187,9 +184,12 @@ bssh_file_panel::bssh_file_panel(bssh_session *session, QWidget *parent)
 		if (m_listings_asked == 0) show_listing(path, entries, why);
 	});
 	connect(m_session, &bssh_session::remote_changed, this, &bssh_file_panel::changed);
-	connect(m_session, &bssh_session::download_progress, this, [this](qint64 done, qint64 total) {
-		show_copy(m_copy_back, tr("Copying here"), done, total);
-	});
+	connect(m_session, &bssh_session::transfer_changed, this, &bssh_file_panel::transfer_changed);
+	connect(m_session, &bssh_session::transfer_progress, this, &bssh_file_panel::transfer_progress);
+	connect(m_session, &bssh_session::transfer_finished, this, &bssh_file_panel::transfer_finished);
+	/* Copies already under way or waiting when the panel opens -- a
+	 * rebuild makes a new panel -- have their tiles at once. */
+	for (const bssh_session::transfer_t &transfer : m_session->transfers()) transfer_changed(transfer.id);
 	connect(m_session, &bssh_session::download_finished, this,
 	        [this](bool ok, const QString &directory, const QStringList &written, const QString &why) {
 		if (!m_discard_dir.isEmpty() && directory == m_discard_dir) {
@@ -207,7 +207,6 @@ bssh_file_panel::bssh_file_panel(bssh_session *session, QWidget *parent)
 				m_session->download(paths, dir);
 				return;
 			}
-			end_copy(m_copy_back, ok, directory, written, why);
 			return;
 		}
 		if (!m_staging_dir.isEmpty() && directory == m_staging_dir) {
@@ -217,68 +216,143 @@ bssh_file_panel::bssh_file_panel(bssh_session *session, QWidget *parent)
 			if (ok && m_staging_data) m_staging_data->set_staged(staged);
 			m_staging_dir.clear();
 			end_mounted(ok);
-			end_copy(m_copy_back, ok, tr("here, ready to drop"), written, why);
 			return;
 		}
-		end_copy(m_copy_back, ok, directory, written, why);
-	});
-	connect(m_session, &bssh_session::upload_progress, this, [this](qint64 done, qint64 total) {
-		show_copy(m_copy_up, tr("Copying there"), done, total);
+		Q_UNUSED(ok);
+		Q_UNUSED(why);
 	});
 	connect(m_session, &bssh_session::upload_finished, this,
 	        [this](bool ok, const QString &directory, const QStringList &written, const QString &why) {
-		end_copy(m_copy_up, ok, directory, written, why);
+		Q_UNUSED(ok);
+		Q_UNUSED(written);
+		Q_UNUSED(why);
 		/* What arrived in the directory shown is shown. */
 		if (directory == m_path || directory.isEmpty()) open_directory(m_path);
 	});
 }
 
-bssh_file_panel::copy_row bssh_file_panel::make_copy_row(QVBoxLayout *column, const QString &stop_name) {
-	copy_row row;
-	row.row = new QWidget(this);
-	QVBoxLayout *stack = new QVBoxLayout(row.row);
-	stack->setContentsMargins(0, 0, 0, 0);
-	stack->setSpacing(2);
-	row.label = new QLabel(row.row);
-	row.label->setWordWrap(true);
-	stack->addWidget(row.label);
-	QHBoxLayout *line = new QHBoxLayout;
-	row.bar = new QProgressBar(row.row);
-	row.bar->setTextVisible(true);
-	line->addWidget(row.bar, 1);
-	row.stop = new QToolButton(row.row);
-	row.stop->setText(tr("Stop"));
-	row.stop->setAccessibleName(stop_name);
-	line->addWidget(row.stop);
-	stack->addLayout(line);
-	row.row->hide();
-	column->addWidget(row.row);
-	return row;
+/*
+ * A tile for a copy (sec 6.4): what and where, a bar, Pause and X. X
+ * stops a running copy -- its half-written file removed -- or takes a
+ * waiting one off the queue, and once a copy is over it puts the tile
+ * away. Several at once, newest last.
+ */
+QString bssh_file_panel::transfer_label(const bssh_session::transfer_t &transfer) const {
+	QStringList names;
+	for (const QString &path : transfer.paths) names << path.section(QLatin1Char('/'), -1);
+	QString what = names.size() == 1 ? names.first() : tr("%n items", nullptr, int(names.size()));
+	const bool staging = transfer.destination.startsWith(bssh_drag_staging_path() + QLatin1Char('/'));
+	if (staging) return tr("%1, for the drag").arg(what);
+	return transfer.direction == bssh_session::TRANSFER_UP ? tr("%1 to %2").arg(what, transfer.destination)
+	                                                        : tr("%1 here, to %2").arg(what, transfer.destination);
 }
 
-void bssh_file_panel::show_copy(const copy_row &row, const QString &verb, qint64 done, qint64 total) {
+bssh_file_panel::tile_t &bssh_file_panel::tile_for(int id) {
+	auto it = m_tiles.find(id);
+	if (it != m_tiles.end()) return it.value();
+	tile_t tile;
+	tile.frame = new QFrame(this);
+	tile.frame->setObjectName(QStringLiteral("transfer-tile"));
+	tile.frame->setFrameShape(QFrame::StyledPanel);
+	QVBoxLayout *stack = new QVBoxLayout(tile.frame);
+	stack->setContentsMargins(4, 2, 4, 2);
+	stack->setSpacing(1);
+	QHBoxLayout *top = new QHBoxLayout;
+	tile.label = new QLabel(tile.frame);
+	tile.label->setObjectName(QStringLiteral("transfer-label"));
+	tile.label->setMinimumWidth(1);
+	top->addWidget(tile.label, 1);
+	tile.pause = new QToolButton(tile.frame);
+	tile.pause->setObjectName(QStringLiteral("transfer-pause"));
+	tile.pause->setAutoRaise(true);
+	tile.pause->setCheckable(true);
+	top->addWidget(tile.pause);
+	tile.close = new QToolButton(tile.frame);
+	tile.close->setObjectName(QStringLiteral("transfer-close"));
+	tile.close->setAutoRaise(true);
+	tile.close->setIcon(style()->standardIcon(QStyle::SP_TitleBarCloseButton));
+	top->addWidget(tile.close);
+	stack->addLayout(top);
+	tile.bar = new QProgressBar(tile.frame);
+	tile.bar->setObjectName(QStringLiteral("transfer-bar"));
+	tile.bar->setTextVisible(false);
+	tile.bar->setMaximumHeight(fontMetrics().height() / 2 + 2);
+	stack->addWidget(tile.bar);
+	tile.status = new QLabel(tile.frame);
+	tile.status->setObjectName(QStringLiteral("transfer-status"));
+	stack->addWidget(tile.status);
+	m_tile_column->addWidget(tile.frame);
+
+	connect(tile.pause, &QToolButton::toggled, this, [this, id](bool paused) {
+		if (m_session) m_session->pause_transfer(id, paused);
+	});
+	connect(tile.close, &QToolButton::clicked, this, [this, id] {
+		auto found = m_tiles.find(id);
+		if (found == m_tiles.end()) return;
+		if (found->over) {
+			found->frame->deleteLater();
+			m_tiles.erase(found);
+		} else if (m_session) {
+			m_session->cancel_transfer(id);
+		}
+	});
+	return m_tiles.insert(id, tile).value();
+}
+
+void bssh_file_panel::show_tile_state(tile_t &tile, bssh_session::transfer_state_t state) {
+	const bool paused = state == bssh_session::TRANSFER_PAUSED;
+	tile.pause->blockSignals(true);
+	tile.pause->setChecked(paused);
+	tile.pause->blockSignals(false);
+	tile.pause->setIcon(style()->standardIcon(paused ? QStyle::SP_MediaPlay : QStyle::SP_MediaPause));
+	tile.pause->setAccessibleName(paused ? tr("Go on") : tr("Pause"));
+	tile.close->setAccessibleName(tr("Stop"));
+	if (state == bssh_session::TRANSFER_QUEUED) tile.status->setText(tr("Waiting its turn"));
+	else if (paused) tile.status->setText(tr("Paused"));
+}
+
+void bssh_file_panel::transfer_changed(int id) {
+	if (!m_session) return;
+	for (const bssh_session::transfer_t &transfer : m_session->transfers()) {
+		if (transfer.id != id) continue;
+		tile_t &tile = tile_for(id);
+		tile.label->setText(transfer_label(transfer));
+		tile.label->setToolTip(transfer.paths.join(QLatin1Char('\n')));
+		show_tile_state(tile, transfer.state);
+		if (transfer.state == bssh_session::TRANSFER_RUNNING && tile.status->text() == tr("Waiting its turn"))
+			tile.status->setText(tr("Starting"));
+		if (transfer.state == bssh_session::TRANSFER_RUNNING && tile.status->text() == tr("Paused"))
+			tile.status->setText(tr("Going on"));
+		return;
+	}
+}
+
+void bssh_file_panel::transfer_progress(int id, qint64 done, qint64 total) {
+	auto it = m_tiles.find(id);
+	if (it == m_tiles.end()) return;
 	/*
 	 * In kilobytes, so a file past 2 GiB fits the bar's int range. A
 	 * directory copied back is listed as it goes, so its total grows and
-	 * the bar can step back; the label says the bytes either way.
+	 * the bar can step back; the bytes are said either way.
 	 */
-	row.label->setText(tr("%1: %2 of %3").arg(verb, QLocale().formattedDataSize(done),
-	                                          QLocale().formattedDataSize(total)));
-	row.bar->setRange(0, int(qMax<qint64>(1, total / 1024)));
-	row.bar->setValue(int(qMin(done, total) / 1024));
-	row.bar->show();
-	row.stop->show();
-	row.row->show();
+	it->bar->setRange(0, int(qMax<qint64>(1, total / 1024)));
+	it->bar->setValue(int(qMin(done, total) / 1024));
+	if (!it->pause->isChecked())
+		it->status->setText(tr("%1 of %2").arg(QLocale().formattedDataSize(done), QLocale().formattedDataSize(total)));
 }
 
-void bssh_file_panel::end_copy(const copy_row &row, bool ok, const QString &directory,
-                               const QStringList &written, const QString &why) {
-	if (ok) row.label->setText(tr("Copied %1 to %2").arg(written.join(QStringLiteral(", ")), directory));
-	else if (why == QLatin1String(BSSH_COPY_STOPPED)) row.label->setText(tr("Copy stopped"));
-	else row.label->setText(tr("Copy failed: %1").arg(why));
-	row.bar->hide();
-	row.stop->hide();
-	row.row->show();
+void bssh_file_panel::transfer_finished(int id, bool ok, const QString &destination, const QStringList &written,
+                                        const QString &why) {
+	tile_t &tile = tile_for(id);
+	tile.over = true;
+	tile.pause->hide();
+	tile.bar->hide();
+	tile.close->setAccessibleName(tr("Put away"));
+	const bool staging = destination.startsWith(bssh_drag_staging_path() + QLatin1Char('/'));
+	if (ok) tile.status->setText(staging ? tr("Ready to drop") : tr("Copied %1").arg(written.join(QStringLiteral(", "))));
+	else if (why == QLatin1String(BSSH_COPY_STOPPED)) tile.status->setText(tr("Stopped"));
+	else tile.status->setText(tr("Failed: %1").arg(why));
+	if (tile.label->text().isEmpty()) tile.label->setText(destination);
 }
 
 QSize bssh_file_panel::sizeHint() const {
@@ -453,17 +527,14 @@ void bssh_file_panel::copy_selected_elsewhere() {
 
 void bssh_file_panel::copy_selected_to(const QString &directory) {
 	if (!m_session || directory.isEmpty()) return;
-	if (m_session->download_in_progress()) {
-		say(tr("A copy is still running; stop it or let it finish"));
-		return;
-	}
+	/* Queued behind any copy back under way, as a tile of its own. */
 	QStringList paths;
 	for (QTreeWidgetItem *item : m_list->selectedItems()) {
 		const int at = item->data(NAME, Qt::UserRole).toInt();
 		if (at >= 0 && at < m_entries.size()) paths << remote_path_of(m_entries.at(at));
 	}
 	if (paths.isEmpty()) return;
-	m_session->download(paths, directory);
+	m_session->queue_transfer(bssh_session::TRANSFER_DOWN, paths, directory);
 }
 
 void bssh_file_panel::show_menu(const QPoint &at) {
@@ -595,12 +666,8 @@ void bssh_file_panel::dropEvent(QDropEvent *event) {
 
 bool bssh_file_panel::copy_here(const QStringList &paths) {
 	if (!m_session || m_path.isEmpty() || paths.isEmpty()) return false;
-	if (m_session->upload_in_progress()) {
-		say(tr("A copy is still running; stop it or let it finish"));
-		return false;
-	}
-	m_session->upload(paths, m_path);
-	return true;
+	/* Queued behind any copy under way, as a tile of its own. */
+	return m_session->queue_transfer(bssh_session::TRANSFER_UP, paths, m_path) != 0;
 }
 
 bssh_remote_drag *bssh_file_panel::drag_data_for_selection() {

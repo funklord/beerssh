@@ -108,4 +108,8 @@ private:
  */
 QString bssh_drag_staging_root();
 
+/* The same path, named only: nothing made, nothing swept -- for asking
+ * whether a copy is a drag's staging. */
+QString bssh_drag_staging_path();
+
 #endif

@@ -321,6 +321,14 @@ public:
 	virtual void cancel_download() {}
 
 	/*
+	 * Holds the copy under way between two of its pieces, or lets it go
+	 * on (the panel's transfer tiles, sec 6.4). Nothing is half-sent while
+	 * held: each piece is a whole read or write. The default holds nothing.
+	 */
+	virtual void pause_upload(bool paused) { Q_UNUSED(paused); }
+	virtual void pause_download(bool paused) { Q_UNUSED(paused); }
+
+	/*
 	 * The file panel's changes on the other end (sec 6.4): a rename to
 	 * `to`, which never replaces what is there; a new directory; or a
 	 * removal, a directory's contents with it, a piece at a time.

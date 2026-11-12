@@ -2,12 +2,15 @@
 #define BSSH_FILE_PANEL_H
 
 #include <QList>
+#include <QHash>
 #include <QPointer>
 #include <QWidget>
 
+#include "model/session.h"
 #include "ssh/ssh_session.h"
 
 class QLabel;
+class QFrame;
 class QLineEdit;
 class QProgressBar;
 class QVBoxLayout;
@@ -164,19 +167,25 @@ private:
 	QTreeWidget *m_list;
 	QLabel *m_status;
 
-	/* A copy's row: what and how far, its bar, its Stop. */
-	struct copy_row {
-		QWidget *row = nullptr;
+	/* A copy's tile: what and where, its bar, Pause and X (sec 6.4). */
+	struct tile_t {
+		QFrame *frame = nullptr;
 		QLabel *label = nullptr;
+		QLabel *status = nullptr;
 		QProgressBar *bar = nullptr;
-		QToolButton *stop = nullptr;
+		QToolButton *pause = nullptr;
+		QToolButton *close = nullptr;
+		bool over = false;
 	};
-	copy_row make_copy_row(QVBoxLayout *column, const QString &stop_name);
-	void show_copy(const copy_row &row, const QString &verb, qint64 done, qint64 total);
-	void end_copy(const copy_row &row, bool ok, const QString &directory, const QStringList &written,
-	              const QString &why);
-	copy_row m_copy_back;
-	copy_row m_copy_up;
+	QVBoxLayout *m_tile_column = nullptr;
+	QHash<int, tile_t> m_tiles;
+	tile_t &tile_for(int id);
+	QString transfer_label(const bssh_session::transfer_t &transfer) const;
+	void show_tile_state(tile_t &tile, bssh_session::transfer_state_t state);
+	void transfer_changed(int id);
+	void transfer_progress(int id, qint64 done, qint64 total);
+	void transfer_finished(int id, bool ok, const QString &destination, const QStringList &written,
+	                       const QString &why);
 };
 
 #endif /* BSSH_FILE_PANEL_H */

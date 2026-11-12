@@ -349,6 +349,30 @@ public:
 	void change_remote(bssh_ssh_session::change_t change, const QString &path, const QString &to = QString());
 
 	/*
+	 * Every copy either way, as the file panel's transfer tiles show them
+	 * (sec 6.4): an id each, the drop's upload and the drag's staging
+	 * included. upload() and download() still run one at a time and
+	 * refuse a second; queue_transfer() waits its turn instead, the next
+	 * in a direction starting as the one before it ends. A running copy is
+	 * held between pieces by pause_transfer(); a queued one held stays
+	 * queued. cancel_transfer() stops a running one -- its half-written
+	 * file removed -- or takes a queued one off the queue.
+	 */
+	enum transfer_direction_t { TRANSFER_UP, TRANSFER_DOWN };
+	enum transfer_state_t { TRANSFER_QUEUED, TRANSFER_RUNNING, TRANSFER_PAUSED };
+	struct transfer_t {
+		int id = 0;
+		transfer_direction_t direction = TRANSFER_DOWN;
+		QStringList paths;
+		QString destination;
+		transfer_state_t state = TRANSFER_QUEUED;
+	};
+	int queue_transfer(transfer_direction_t direction, const QStringList &paths, const QString &destination);
+	void pause_transfer(int id, bool paused);
+	void cancel_transfer(int id);
+	QList<transfer_t> transfers() const { return m_transfers; }
+
+	/*
 	 * Whether this session's file panel is open, and the directory it
 	 * showed: kept here, as the zoom is, because the pane's widgets are
 	 * rebuilt on every layout change and the panel with them.
@@ -374,6 +398,10 @@ signals:
 	void download_finished(bool ok, const QString &directory, const QStringList &written,
 	                       const QString &why);
 	void remote_changed(bool ok, const QString &path, const QString &why);
+	void transfer_changed(int id);
+	void transfer_progress(int id, qint64 done, qint64 total);
+	void transfer_finished(int id, bool ok, const QString &destination, const QStringList &written,
+	                       const QString &why);
 
 	/* Sessions are running there; the window offers them. Never empty. */
 	void multiplexers_found(const QList<bssh_mux_session_t> &found);
@@ -497,6 +525,15 @@ private:
 	bool m_uploading = false;
 	bool m_downloading = false;
 	bool m_file_panel_open = false;
+	QList<transfer_t> m_transfers;
+	int m_next_transfer = 0;
+	int m_running_up = 0;
+	int m_running_down = 0;
+	transfer_t *find_transfer(int id);
+	void begin_transfer(transfer_t &transfer);
+	void start_next(transfer_direction_t direction);
+	void end_transfer(transfer_direction_t direction, bool ok, const QString &destination,
+	                  const QStringList &written, const QString &why);
 	QString m_file_panel_path;
 	int m_file_panel_width = 0;   /* 0: its own size */
 	QString m_download_directory;
