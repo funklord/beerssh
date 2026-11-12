@@ -1939,6 +1939,7 @@ hooks:
 		echo "hooks: not a git repository, so there is nowhere to install to." >&2; \
 		exit 1; \
 	fi; \
+	set -e; \
 	mkdir -p "$$dir/hooks"; \
 	install -m 0755 tool/hooks/commit-msg "$$dir/hooks/commit-msg"; \
 	for old in pre-push pre-commit; do \
