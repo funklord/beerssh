@@ -94,6 +94,7 @@
 #include <QToolButton>
 #include "ui/long_press.h"
 #include "ui/main_window.h"
+#include "ui/file_panel.h"
 #include "fake_ssh_session.h"
 #include "phone_metrics.h"
 #include "layout_test.h"
@@ -2389,6 +2390,28 @@ void layout_test::every_touch_surface_fits_a_phone()
 	{
 		bssh_font_picker picker;
 		check_fits(QStringLiteral("font picker"), &picker);
+	}
+	{
+		/*
+		 * sec 6.4's file panel, which came after this list: on a phone it
+		 * covers the terminal, so its row of buttons and its tiles have
+		 * the phone's width and height and no more.
+		 */
+		bssh_session_registry registry;
+		bssh_session *session = registry.create(named(QStringLiteral("files")));
+		bssh_file_panel panel(session);
+		panel.set_overlay(true);
+		check_fits(QStringLiteral("file panel"), &panel);
+		/* And wide enough to find: the floor is on height, and an icon
+		 * button left to its hint was a 17dp strip on an emulator. */
+		int buttons = 0;
+		for (QToolButton *button : panel.findChildren<QToolButton *>()) {
+			if (!button->isVisible()) continue;
+			++buttons;
+			QVERIFY2(button->width() >= 36, qPrintable(QStringLiteral("a file panel button is %1dp wide")
+			                                                    .arg(button->width())));
+		}
+		QVERIFY2(buttons >= 5, "the file panel showed no buttons to measure");
 	}
 	{
 		/*

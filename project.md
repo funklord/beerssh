@@ -4467,6 +4467,17 @@ model on a finger.
   only the mounted read can have asked.
   Not covered by a test: the flush before a piece is marked (a 64 KiB
   write passes QFile's buffer anyway).
+  **The panel on a phone, measured by the sweeps it had missed
+  (2026-11-12).** `every_touch_surface_names_its_controls` and
+  `every_touch_surface_fits_a_phone` predate the panel; with it added,
+  the names were all there, but its buttons were 23dp tall against sec
+  6.2's 48dp floor and, on an API 36 emulator, 17dp-wide strips. On touch
+  the panel now takes the floor for every button, the path and the rows
+  (`bssh_apply_touch_heights`), and a 36dp minimum width for its buttons
+  and its tiles' -- the floor is on height, as the keyboard's is, and
+  36dp keeps six buttons in a 360dp row with 144dp for the path. Seen
+  on the emulator after: near-square buttons, the path whole, close
+  answering a tap. Three sabotages.
   (3) **snurra behind `make BSSH_MEDIA=1`**, off by default, through a
   facade BeerSSH designed for snurra at the holder's word and sent it
   (snurra inbox 20261112T1444Z): **`snurra/embed.h`** -- `snurra_media`

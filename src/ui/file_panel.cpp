@@ -35,6 +35,7 @@
 #include "platform/fuse_shelf.h"
 #include "platform/platform.h"
 #include "ui/remote_drag.h"
+#include "ui/touch_metrics.h"
 
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -323,6 +324,12 @@ bssh_file_panel::tile_t &bssh_file_panel::tile_for(int id) {
 	tile.status->setObjectName(QStringLiteral("transfer-status"));
 	stack->addWidget(tile.status);
 	m_tile_column->addWidget(tile.frame);
+	/* A tile's Pause and X are aimed at by a thumb too, on a phone. */
+	if (m_overlay) {
+		bssh_apply_touch_heights(tile.frame, true);
+		tile.pause->setMinimumWidth(36);
+		tile.close->setMinimumWidth(36);
+	}
 
 	connect(tile.pause, &QToolButton::toggled, this, [this, id](bool paused) {
 		if (m_session) m_session->pause_transfer(id, paused);
@@ -428,6 +435,21 @@ void bssh_file_panel::set_overlay(bool overlay) {
 	m_overlay = overlay;
 	m_grip->setVisible(!overlay);
 	setAutoFillBackground(overlay);
+	/*
+	 * sec 6.2's floor for a thumb, on every button, the path and the rows:
+	 * at desktop size the buttons were 23dp, half of it, and the phone
+	 * sweep found it the day the panel was added to it (2026-11-12).
+	 */
+	bssh_apply_touch_heights(this, overlay);
+	/*
+	 * And a width a thumb can find: the floor is on height (sec 6.2, the
+	 * keyboard's reasoning), and an icon button left to its size hint was
+	 * 17dp wide, a tall thin strip, on an API 36 emulator. 36dp, near
+	 * Android's own keys, keeps all six in a phone's row with 144dp of it
+	 * left for the path.
+	 */
+	for (QToolButton *button : findChildren<QToolButton *>())
+		button->setMinimumWidth(overlay ? 36 : 0);
 	if (!overlay || !parentWidget()) return;
 	parentWidget()->installEventFilter(this);
 	setGeometry(parentWidget()->rect());

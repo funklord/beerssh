@@ -95,3 +95,19 @@ file = "src/ui/file_panel.cpp"
 find = "\tm_up->setAccessibleName(tr(\"Up a directory\"));\n"
 replace = ""
 expect = "every_touch_surface_names_its_controls"
+
+# The panel at desktop size on a phone: 23dp buttons a thumb misses.
+[[sabotage]]
+name = "the file panel keeps desktop-sized buttons on a phone"
+file = "src/ui/file_panel.cpp"
+find = "\tbssh_apply_touch_heights(this, overlay);\n"
+replace = ""
+expect = "every_touch_surface_fits_a_phone"
+
+# The panel's buttons left to their icons' width on a phone: thin strips.
+[[sabotage]]
+name = "the file panel's buttons are icon-wide on a phone"
+file = "src/ui/file_panel.cpp"
+find = "\t\tbutton->setMinimumWidth(overlay ? 36 : 0);"
+replace = "\t\tbutton->setMinimumWidth(0);"
+expect = "every_touch_surface_fits_a_phone"
