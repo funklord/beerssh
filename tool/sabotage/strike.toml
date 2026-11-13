@@ -1,0 +1,9 @@
+# SGR 9 drawn (terminal_view.cpp); kept per cell and never drawn until
+# 2026-11-13, so struck text showed as plain.
+
+[[sabotage]]
+name = "struck text is drawn plain"
+file = "src/ui/terminal_view.cpp"
+find = "\t\t\tif (cell.attrs & bssh_cell_t::STRIKE)\n\t\t\t\tpainter.fillRect(x, y + m_strike_y, width, m_strike_width, fg);\n"
+replace = ""
+expect = "struck_text_is_drawn_struck"

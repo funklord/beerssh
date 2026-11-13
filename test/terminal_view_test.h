@@ -54,6 +54,7 @@ private slots:
 	void grid_scales_with_widget_size();
 	void grid_resized_fires_only_on_real_change();
 	void renders_without_a_screen_attached();
+	void struck_text_is_drawn_struck();
 	void renders_cell_colours_from_the_screen();
 	void session_bytes_reach_the_screen_through_the_emulator();
 	void ime_commit_text_becomes_input();

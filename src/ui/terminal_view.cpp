@@ -1021,6 +1021,8 @@ void bssh_terminal_view::update_metrics() {
 	m_cell_width = qMax(1, qRound(metrics.horizontalAdvance(QLatin1Char('W'))));
 	m_cell_height = qMax(1, qRound(metrics.height()));
 	m_baseline = qRound(metrics.ascent());
+	m_strike_width = qMax(1, qRound(metrics.lineWidth()));
+	m_strike_y = m_baseline - qRound(metrics.strikeOutPos()) - m_strike_width / 2;
 
 	/*
 	 * Tall enough for the underscore, which sits lowest of anything a
@@ -2329,7 +2331,7 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 			 * A line or block character drawn as shapes filling the cell
 			 * (term/box_drawing.h): the font's glyph, drawn to the font's
 			 * advance, left a dot at every cell boundary of a line -- the
-			 * holder's Claude Code prompt lines, 2026-11-13.
+			 * rules a TUI drew round its prompt, the holder, 2026-11-13.
 			 */
 			if (!blank_cell && draw_box_characters && bssh_box_drawn(cell.ch)) {
 				flush_run();
@@ -2396,6 +2398,12 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 				painter.drawLine(x, y + m_cell_height - 1, x + width - 1,
 				                  y + m_cell_height - 1);
 			}
+			/* SGR 9, through the middle at the font's own height and
+			 * weight, filled cell edge to cell edge so a struck run is
+			 * one line. Kept per cell since 2026-10-26 and drawn since
+			 * 2026-11-13; until then struck text showed as plain. */
+			if (cell.attrs & bssh_cell_t::STRIKE)
+				painter.fillRect(x, y + m_strike_y, width, m_strike_width, fg);
 		}
 
 		flush_run();

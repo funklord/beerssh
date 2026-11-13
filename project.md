@@ -17955,6 +17955,15 @@ of features; a new sequence is a new row, not a new test.
   is last in its bitfield, so an exported terminal (0008) keeps its
   layout. `faint_text_draws_fainter_than_plain_text` (pixels, floor on),
   a `faint` row in the conformance table, `tool/sabotage/faint.toml`.
+- **Found 2026-11-13: strike (SGR 9) was kept and never drawn.** The
+  table above holds that a struck cell keeps its attribute, and nothing
+  asked whether the view drew it: struck text showed as plain, a finished
+  item in a TUI's list reading as one still open. Drawn now as a fill at
+  the font's own strike-out position and line width, cell edge to cell
+  edge, spaces included as xterm and Konsole do. Blink (SGR 5) is the
+  other attribute kept and not drawn; left so, as several terminals do by
+  default and a blinking screen costs more than it says.
+  `struck_text_is_drawn_struck` (pixels), `tool/sabotage/strike.toml`.
 - **The holder's "no colour on the coloured prompt" was `TERM`, not the
   renderer -- [DECIDED 2026-10-26, the holder: keep xterm-256color].**
   Their `~/.bashrc` coloured the prompt (and set the window title) only

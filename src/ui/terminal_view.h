@@ -1392,6 +1392,10 @@ private:
 	int m_cell_width;
 	int m_cell_height;
 	int m_baseline;
+	/* Where SGR 9's line runs, from the cell's top, and how thick: the
+	 * font's own strike-out position and line width. */
+	int m_strike_y = 0;
+	int m_strike_width = 1;
 	int m_cols;
 	int m_rows;
 };

@@ -137,6 +137,49 @@ void terminal_view_test::renders_without_a_screen_attached() {
 	QCOMPARE(frame.size(), view.size());
 }
 
+void terminal_view_test::struck_text_is_drawn_struck() {
+	/*
+	 * SGR 9 was kept in every cell, through the scrollback and a resize
+	 * (sec 12.3w), and never drawn: struck-out text showed as plain, a
+	 * finished item in a TUI's list reading as one still to do. A line
+	 * through the cells' middle, unbroken from cell to cell, spaces
+	 * included, as xterm and Konsole draw it.
+	 */
+	bssh_terminal_view view;
+	show_and_resize(view, 400, 200);
+
+	bssh_screen screen(20, 5);
+	bssh_cell_t struck;
+	struck.ch = U' ';
+	struck.attrs = bssh_cell_t::STRIKE;
+	for (int col = 0; col < 6; ++col) screen.set_cell(0, col, struck);
+	screen.set_cursor_visible(false);
+	view.attach_screen(&screen);
+	const QImage frame = view.grab().toImage();
+
+	const int span = 6 * view.cell_width();
+	const QColor background = frame.pixelColor(span + 2, 2);
+	int struck_rows = 0;
+	for (int y = 0; y < view.cell_height(); ++y) {
+		/* Lit across a whole run of six cells; the view's content may sit
+		 * a pixel in from its edge, so the run is looked for, not assumed. */
+		int run = 0;
+		int longest = 0;
+		for (int x = 0; x < span + 4; ++x) {
+			run = frame.pixelColor(x, y) != background ? run + 1 : 0;
+			longest = qMax(longest, run);
+		}
+		if (longest < span) continue;
+		++struck_rows;
+		/* In the middle of the cell, not along its foot like an underline. */
+		QVERIFY2(y > view.cell_height() / 4 && y < view.cell_height() * 3 / 4,
+		         qPrintable(QStringLiteral("struck at y=%1 of %2").arg(y).arg(view.cell_height())));
+		/* And only where the attribute is: the next row is clear. */
+		QCOMPARE(frame.pixelColor(span / 2, y + view.cell_height()), background);
+	}
+	QVERIFY2(struck_rows > 0, "no line through the struck cells");
+}
+
 void terminal_view_test::renders_cell_colours_from_the_screen() {
 	bssh_terminal_view view;
 	show_and_resize(view, 400, 200);
