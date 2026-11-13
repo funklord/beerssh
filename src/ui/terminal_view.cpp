@@ -3,6 +3,7 @@
 #include <QScrollPrepareEvent>
 #include "ui/touch_metrics.h"
 #include "ui/terminal_view.h"
+#include "term/box_drawing.h"
 #include "ui/multiplexer_drawer.h"
 #include "ui/pane_corner.h"
 #include "ui/input_selector.h"
@@ -1103,6 +1104,8 @@ bool default_ligatures = false;
  * device settings, read when a DECSCUSR arrives so a change takes hold at
  * once rather than at the next rebuild. */
 bool honour_remote_cursor = true;
+/* Box drawing and block elements drawn as shapes (term/box_drawing.h). */
+bool draw_box_characters = true;
 
 } /* namespace */
 
@@ -1124,6 +1127,14 @@ bool bssh_terminal_view::default_font_ligatures() {
 
 void bssh_terminal_view::set_honour_remote_cursor_shape(bool honour) {
 	honour_remote_cursor = honour;
+}
+
+void bssh_terminal_view::set_draw_box_characters(bool draw) {
+	draw_box_characters = draw;
+}
+
+bool bssh_terminal_view::draws_box_characters() {
+	return draw_box_characters;
 }
 
 bool bssh_terminal_view::honour_remote_cursor_shape() {
@@ -2314,7 +2325,16 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 			const bool blank_cell = cell.ch == U'\0' || cell.ch == U' ';
 			const bool wide = cell.width > 1;
 
-			if (!blank_cell) {
+			/*
+			 * A line or block character drawn as shapes filling the cell
+			 * (term/box_drawing.h): the font's glyph, drawn to the font's
+			 * advance, left a dot at every cell boundary of a line -- the
+			 * holder's Claude Code prompt lines, 2026-11-13.
+			 */
+			if (!blank_cell && draw_box_characters && bssh_box_drawn(cell.ch)) {
+				flush_run();
+				bssh_draw_box(painter, cell.ch, QRect(x, y, width, m_cell_height), fg);
+			} else if (!blank_cell) {
 				/*
 				 * Which family carries THIS character (sec 9.3). Asked
 				 * per cell because that is the granularity the answer

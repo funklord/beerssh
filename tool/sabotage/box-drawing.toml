@@ -1,0 +1,26 @@
+# Line and block characters drawn as shapes (term/box_drawing.h; the
+# holder's dotted Claude Code prompt lines, 2026-11-13).
+
+# A corner turned the wrong way in the table: U+250C drawn as U+2514.
+[[sabotage]]
+name = "a box corner in the table points the wrong way"
+file = "src/term/box_drawing.cpp"
+find = "/* 2508 */ \"x\", \"x\", \"x\", \"x\", \"0011\","
+replace = "/* 2508 */ \"x\", \"x\", \"x\", \"x\", \"0110\","
+expect = "box_drawing_matches_a_font"
+
+# A double line's strokes crossed: the inner corner drawn as the outer.
+[[sabotage]]
+name = "a double line's inner and outer strokes are swapped"
+file = "src/term/box_drawing.cpp"
+find = "\t\tfill(painter, start(U, D), x1, top_stroke.a, top_stroke.b, colour);\n\t\tfill(painter, start(D, U), x1, bottom_stroke.a, bottom_stroke.b, colour);\n"
+replace = "\t\tfill(painter, start(D, U), x1, top_stroke.a, top_stroke.b, colour);\n\t\tfill(painter, start(U, D), x1, bottom_stroke.a, bottom_stroke.b, colour);\n"
+expect = "box_drawing_matches_a_font"
+
+# A line stopping a pixel short of the cell's edge: the seam is back.
+[[sabotage]]
+name = "a line stops short of the cell's edge"
+file = "src/term/box_drawing.cpp"
+find = "\t\telse start = cx - lw / 2;\n\t\tfill(painter, start, x1, y.a, y.b, colour);\n"
+replace = "\t\telse start = cx - lw / 2;\n\t\tfill(painter, start, x1 - 1, y.a, y.b, colour);\n"
+expect = "box_drawing_meets_at_every_cell_edge"

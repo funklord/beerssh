@@ -11922,6 +11922,34 @@ is found:
   a per-cell draw and a clipped per-cell draw all produce an unbroken line at
   the shipped 9px cell. There was no defect. The case that *does* break lines is
   fractional scaling, and §9.5's device-pixel snapping already answers it.
+  **Not so, measured 2026-11-13, and drawn now rather than from the font.**
+  The holder: the two rules a TUI draws round its prompt "have dots in
+  them on beerssh desktop, but not in konsole". Point-sampled in the
+  installed BeerSSH under Xvfb, a dim `─` row read 56 with 59 and 63 at
+  every cell boundary at 100% -- a glyph a little wider than its cell, its antialiased ends painted twice
+  where neighbours overlap -- and at 125% and 150% the boundary pixel fell to
+  about half: dots either way, which an unbroken-line check at one size and
+  full brightness had not seen. The snapping above does not reach it; the
+  glyph's own extent does not match the cell. So box drawing (U+2500-257F)
+  and block elements (U+2580-259F) are drawn as shapes filling the cell
+  (`term/box_drawing.h`), as xterm, Konsole, VTE, kitty, Alacritty, WezTerm
+  and foot do and Windows Terminal has since 2024: whole-pixel rectangles
+  from the centre to each edge, light a sixteenth of the cell's height and
+  heavy twice it, doubles as two light strokes with their inner and outer
+  corners worked out per stroke, arcs and diagonals as antialiased paths,
+  shades as a blend rather than a dither. **On by default; a checkbox on
+  Appearance turns it off** for a font's own style of them, stored only when
+  off. The holder was unsure of the trade (a font's styling against seams
+  at every size), so it was decided from what terminals do. The table of
+  arms was written from the Unicode names and is held against DejaVu Sans
+  Mono's own glyphs (`box_drawing_matches_a_font`: every edge, single or
+  double, light or heavy; the doubles sampled along each stroke; the
+  dashes' count; the arcs' edges; the blocks on a grid), and a row reads
+  one brightness end to end at four cell sizes
+  (`box_drawing_meets_at_every_cell_edge`); three sabotages, one of which
+  -- strokes swapped -- the first version of the font test missed, as it
+  sampled only near the edges. Under Xvfb the dim line reads 127 end to end
+  at 100% and 125%.
 - **Double-width cells:** implement `wcwidth`-equivalent logic so CJK and many
   emoji occupy exactly two cells, matching what the remote program assumed when it
   laid out the screen. Getting this wrong misaligns every TUI. Note that emoji

@@ -280,6 +280,10 @@ public:
 	 * a shape change arrives, so toggling it takes effect at once.
 	 */
 	static void set_honour_remote_cursor_shape(bool honour);
+	/* Line and block characters drawn as shapes, not from the font
+	 * (term/box_drawing.h); the device setting, for every view. */
+	static void set_draw_box_characters(bool draw);
+	static bool draws_box_characters();
 	static bool honour_remote_cursor_shape();
 
 	/*

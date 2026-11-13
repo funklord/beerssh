@@ -554,6 +554,14 @@ public:
 	 * 6.4). On by default -- vim and friends expect it -- but a user who
 	 * wants one fixed cursor from the preset can turn the override off.
 	 */
+	/*
+	 * Line and block characters drawn as shapes filling the cell rather
+	 * than from the font (term/box_drawing.h, sec 9). On by default, as in
+	 * xterm, VTE, Konsole, kitty and Windows Terminal; off keeps a font's
+	 * own style of them. Stored only when turned off.
+	 */
+	bool draw_box_characters() const;
+	void set_draw_box_characters(bool draw);
 	bool honour_remote_cursor_shape() const;
 	void set_honour_remote_cursor_shape(bool honour);
 

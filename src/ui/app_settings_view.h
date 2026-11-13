@@ -202,6 +202,7 @@ private:
 	QCheckBox *m_honour_font_scale;
 	QCheckBox *m_font_ligatures;
 	QCheckBox *m_honour_remote_cursor;
+	QCheckBox *m_draw_box_characters = nullptr;
 	QCheckBox *m_menu_bar_shown = nullptr;
 
 	/*

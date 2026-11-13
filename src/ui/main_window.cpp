@@ -2182,12 +2182,16 @@ void bssh_main_window::apply_device_settings() {
 	 */
 	bssh_terminal_view::set_honour_remote_cursor_shape(
 	        settings.honour_remote_cursor_shape());
+	/* Drawn at the next paint of every view; repainted below. */
+	const bool box_was = bssh_terminal_view::draws_box_characters();
+	bssh_terminal_view::set_draw_box_characters(settings.draw_box_characters());
 
 	if (m_panes) {
 		for (bssh_terminal_view *view : m_panes->views()) {
 			if (!view) continue;
 			view->set_raise_contrast(raise);
 			view->set_text_brightness(brightness);
+			if (box_was != bssh_terminal_view::draws_box_characters()) view->update();
 
 			/*
 			 * Re-read, not re-set: a view already showing "custom"

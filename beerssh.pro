@@ -117,6 +117,7 @@ SOURCES += \
     src/term/image_store.cpp \
     src/term/scrollback.cpp \
     src/term/screen.cpp \
+    src/term/box_drawing.cpp \
     src/ui/font_picker.cpp \
     src/ui/form_wrap.cpp \
     src/ui/password_prompt.cpp \
@@ -198,6 +199,7 @@ HEADERS += \
     src/term/image_store.h \
     src/term/scrollback.h \
     src/term/screen.h \
+    src/term/box_drawing.h \
     src/ui/font_picker.h \
     src/ui/form_wrap.h \
     src/ui/password_prompt.h \

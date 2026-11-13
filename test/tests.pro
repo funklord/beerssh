@@ -126,6 +126,7 @@ SOURCES += \
     ../src/term/image_store.cpp \
     ../src/term/scrollback.cpp \
     ../src/term/screen.cpp \
+    ../src/term/box_drawing.cpp \
     ../src/platform/platform.cpp \
     ../src/platform/secret_store.cpp \
     ../src/platform/secret_store_file.cpp \
@@ -260,6 +261,7 @@ HEADERS += \
     ../src/term/image_store.h \
     ../src/term/scrollback.h \
     ../src/term/screen.h \
+    ../src/term/box_drawing.h \
     ../src/platform/platform.h \
     ../src/platform/secret_store.h \
     ../src/model/profile.h \

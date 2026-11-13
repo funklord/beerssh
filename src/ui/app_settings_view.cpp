@@ -684,6 +684,16 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	if (on_this_page(SECTION_APPEARANCE, m_honour_remote_cursor))
 		form->addRow(m_honour_remote_cursor);
 
+	/* term/box_drawing.h: on by default; off for a font's own style. */
+	m_draw_box_characters = new QCheckBox(QStringLiteral("Draw line and block characters exactly"), this);
+	m_draw_box_characters->setObjectName(QStringLiteral("draw_box_characters"));
+	if (on_this_page(SECTION_APPEARANCE, m_draw_box_characters)) form->addRow(m_draw_box_characters);
+	QLabel *box_note = bssh_wrapped_note(
+	        QStringLiteral("Borders and lines meet with no seam at every size. Off, they "
+	                        "come from the font, in its own style."),
+	        this);
+	if (on_this_page(SECTION_APPEARANCE, box_note)) form->addRow(box_note);
+
 	/*
 	 * TERM, scrollback, the cursor, the bell, keepalive and the rest, for
 	 * every host on this device -- first on the Terminal page, as the font
@@ -1313,6 +1323,7 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	m_font_ligatures->setChecked(settings.font_ligatures());
 	m_menu_bar_shown->setChecked(settings.menu_bar_shown());
 	m_honour_remote_cursor->setChecked(settings.honour_remote_cursor_shape());
+	m_draw_box_characters->setChecked(settings.draw_box_characters());
 	m_raise_contrast->setChecked(settings.raise_contrast());
 	m_text_brightness->setValue(settings.text_brightness());
 	m_text_brightness_value->setText(QStringLiteral("%1%").arg(settings.text_brightness()));
@@ -1568,6 +1579,9 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 		commit([this](bssh_app_settings &s) {
 			s.set_font_ligatures(m_font_ligatures->isChecked());
 		});
+	});
+	connect(m_draw_box_characters, &QCheckBox::toggled, this, [this](bool on) {
+		commit([on](bssh_app_settings &s) { s.set_draw_box_characters(on); });
 	});
 	connect(m_honour_remote_cursor, &QCheckBox::toggled, this, [this] {
 		commit([this](bssh_app_settings &s) {

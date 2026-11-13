@@ -1,4 +1,7 @@
 #include <QHBoxLayout>
+#include <QFontDatabase>
+#include <QPainter>
+#include "term/box_drawing.h"
 #include <QScrollBar>
 #include <QToolButton>
 #include <QUrl>
@@ -344,6 +347,218 @@ void terminal_view_test::a_selection_goes_when_its_text_changes_under_it() {
 	emulator.feed(QByteArrayLiteral("\x1b[S"));
 	QCoreApplication::processEvents();
 	QVERIFY2(!view.has_selection(), "the selection stayed while its text scrolled away");
+}
+
+namespace {
+
+/* Ink in an image painted dark on white: a pixel darker than half. */
+bool inked(const QImage &image, int x, int y) {
+	return qGray(image.pixel(x, y)) < 128;
+}
+
+/* The runs of ink along a line through the image, as (start, length). */
+QList<QPair<int, int>> ink_runs(const QImage &image, bool along_x, int at, int from, int to) {
+	QList<QPair<int, int>> runs;
+	int start = -1;
+	for (int i = from; i < to; ++i) {
+		const bool ink = along_x ? inked(image, i, at) : inked(image, at, i);
+		if (ink && start < 0) start = i;
+		if (!ink && start >= 0) {
+			runs.append({ start, i - start });
+			start = -1;
+		}
+	}
+	if (start >= 0) runs.append({ start, to - start });
+	return runs;
+}
+
+/* An arm as the image shows it, a few pixels in from the cell's edge:
+ * 0 none, 3 two strokes, else the stroke's thickness, negated. */
+int seen_arm(const QImage &image, const QRect &cell, int direction) {
+	const int inset = 3;
+	QList<QPair<int, int>> runs;
+	switch (direction) {
+	case 0: runs = ink_runs(image, false, cell.left() + inset, cell.top(), cell.top() + cell.height()); break;
+	case 1: runs = ink_runs(image, true, cell.top() + inset, cell.left(), cell.left() + cell.width()); break;
+	case 2: runs = ink_runs(image, false, cell.left() + cell.width() - 1 - inset, cell.top(), cell.top() + cell.height()); break;
+	default: runs = ink_runs(image, true, cell.top() + cell.height() - 1 - inset, cell.left(), cell.left() + cell.width()); break;
+	}
+	if (runs.isEmpty()) return 0;
+	if (runs.size() == 2) return 3;
+	return -runs.first().second;
+}
+
+/* 1 light, 2 heavy, from a thickness, against the two references. */
+int weight_of(int thickness, int light, int heavy) {
+	return qAbs(thickness - light) <= qAbs(thickness - heavy) ? 1 : 2;
+}
+
+} /* namespace */
+
+void terminal_view_test::box_drawing_matches_a_font() {
+	/*
+	 * term/box_drawing.h's table, written from the Unicode names, held
+	 * against DejaVu Sans Mono's own glyphs, and the shapes drawn from it
+	 * held against the table: for each of the four edges, whether a line
+	 * reaches it, single or double, light or heavy. A typo in the table
+	 * is a corner drawn the wrong way, and the eye passes over it.
+	 */
+	const QString file = QStringLiteral(BSSH_TEST_FONT_DIR) + QStringLiteral("/DejaVuSansMono.ttf");
+	if (!QFileInfo::exists(file)) QSKIP("the curated fonts have not been fetched here");
+	const int id = QFontDatabase::addApplicationFont(file);
+	QVERIFY(id >= 0);
+	QFont font(QFontDatabase::applicationFontFamilies(id).value(0));
+	font.setPixelSize(64);
+	font.setHintingPreference(QFont::PreferNoHinting);
+	const QFontMetrics metrics(font);
+	const QRect cell(0, 0, metrics.horizontalAdvance(QChar(0x2500)), metrics.ascent() + metrics.descent());
+
+	const auto render = [&](char32_t ch, bool ours) {
+		QImage image(cell.size(), QImage::Format_RGB32);
+		image.fill(Qt::white);
+		QPainter painter(&image);
+		if (ours) {
+			bssh_draw_box(painter, ch, cell, Qt::black);
+		} else {
+			painter.setFont(font);
+			painter.setPen(Qt::black);
+			painter.drawText(QPointF(0, metrics.ascent()), QString::fromUcs4(&ch, 1));
+		}
+		return image;
+	};
+	const auto references = [&](bool ours, int &light, int &heavy) {
+		light = -seen_arm(render(0x2500, ours), cell, 2);
+		heavy = -seen_arm(render(0x2501, ours), cell, 2);
+	};
+	int font_light = 0, font_heavy = 0, our_light = 0, our_heavy = 0;
+	references(false, font_light, font_heavy);
+	references(true, our_light, our_heavy);
+	QVERIFY2(font_heavy > font_light && our_heavy > our_light, "no difference between light and heavy");
+
+	QStringList wrong;
+	for (char32_t ch = 0x2500; ch <= 0x257F; ++ch) {
+		const bssh_box_arms_t arms = bssh_box_arms(ch);
+		const int table[4] = { arms.left, arms.up, arms.right, arms.down };
+		if (!table[0] && !table[1] && !table[2] && !table[3]) continue;
+		const QImage theirs = render(ch, false);
+		const QImage mine = render(ch, true);
+		for (int d = 0; d < 4; ++d) {
+			const auto classify = [&](const QImage &image, int light, int heavy) {
+				const int seen = seen_arm(image, cell, d);
+				return seen <= 0 && seen != 0 ? weight_of(-seen, light, heavy) : seen;
+			};
+			const int in_font = classify(theirs, font_light, font_heavy);
+			const int drawn = classify(mine, our_light, our_heavy);
+			if (in_font != table[d] || drawn != table[d]) {
+				wrong << QStringLiteral("U+%1 %2: table %3, font %4, drawn %5")
+				                 .arg(uint(ch), 4, 16, QLatin1Char('0'))
+				                 .arg(QStringLiteral("LURD").at(d))
+				                 .arg(table[d]).arg(in_font).arg(drawn);
+			}
+		}
+	}
+	/*
+	 * The doubles' middles, where the edges say nothing: whether the
+	 * inner strokes make the inner corner and the outer the outer.
+	 * Sampled along each stroke of the font's double lines and of the
+	 * drawn ones, at the same fractions of the cell.
+	 */
+	{
+		const auto strokes = [&](bool ours, QList<int> &rows, QList<int> &columns) {
+			const QImage across = render(0x2550, ours);
+			const QImage down = render(0x2551, ours);
+			for (const auto &run : ink_runs(across, false, cell.width() / 2, 0, cell.height())) rows << run.first + run.second / 2;
+			for (const auto &run : ink_runs(down, true, cell.height() / 2, 0, cell.width())) columns << run.first + run.second / 2;
+		};
+		QList<int> font_rows, font_columns, our_rows, our_columns;
+		strokes(false, font_rows, font_columns);
+		strokes(true, our_rows, our_columns);
+		QVERIFY2(font_rows.size() == 2 && font_columns.size() == 2 && our_rows.size() == 2 && our_columns.size() == 2,
+		         "a double line is not two strokes");
+		for (char32_t ch = 0x2550; ch <= 0x256C; ++ch) {
+			const QImage theirs = render(ch, false);
+			const QImage mine = render(ch, true);
+			for (int line = 0; line < 4; ++line) {
+				const bool along_x = line < 2;
+				int differ = 0;
+				for (int k = 0; k < 48; ++k) {
+					const int i = line % 2;
+					const int theirs_at = (2 * k + 1) * (along_x ? cell.width() : cell.height()) / 96;
+					const bool a = along_x ? inked(theirs, theirs_at, font_rows.at(i)) : inked(theirs, font_columns.at(i), theirs_at);
+					const bool b = along_x ? inked(mine, theirs_at, our_rows.at(i)) : inked(mine, our_columns.at(i), theirs_at);
+					if (a != b) ++differ;
+				}
+				if (differ > 4) {
+					wrong << QStringLiteral("U+%1: its %2 stroke differs from the font at %3 of 48 points")
+					                 .arg(uint(ch), 4, 16)
+					                 .arg(QStringList({ QStringLiteral("upper"), QStringLiteral("lower"), QStringLiteral("left"), QStringLiteral("right") }).at(line))
+					                 .arg(differ);
+				}
+			}
+		}
+	}
+
+	/* The dashes: as many along the line as the font has. */
+	for (char32_t ch : { char32_t(0x2504), char32_t(0x2508), char32_t(0x254C), char32_t(0x2506), char32_t(0x250A), char32_t(0x254E) }) {
+		const bool vertical = ch == 0x2506 || ch == 0x250A || ch == 0x254E;
+		const auto count = [&](const QImage &image) {
+			return vertical ? ink_runs(image, false, cell.width() / 2, 0, cell.height()).size()
+			                : ink_runs(image, true, cell.height() / 2, 0, cell.width()).size();
+		};
+		const qsizetype in_font = count(render(ch, false));
+		const qsizetype drawn = count(render(ch, true));
+		if (in_font != drawn)
+			wrong << QStringLiteral("U+%1: %2 dashes in the font, %3 drawn").arg(uint(ch), 4, 16).arg(in_font).arg(drawn);
+	}
+	/* The arcs: the same two edges reached. */
+	for (char32_t ch = 0x256D; ch <= 0x2570; ++ch) {
+		const QImage theirs = render(ch, false);
+		const QImage mine = render(ch, true);
+		for (int d = 0; d < 4; ++d) {
+			if ((seen_arm(theirs, cell, d) != 0) != (seen_arm(mine, cell, d) != 0))
+				wrong << QStringLiteral("U+%1 %2: the arc's edge").arg(uint(ch), 4, 16).arg(QStringLiteral("LURD").at(d));
+		}
+	}
+	/* The blocks: ink where the font has it, on a grid inside the cell. */
+	for (char32_t ch = 0x2580; ch <= 0x259F; ++ch) {
+		if (ch >= 0x2591 && ch <= 0x2593) continue; /* shades: a blend here, a dither there */
+		const QImage theirs = render(ch, false);
+		const QImage mine = render(ch, true);
+		int differ = 0;
+		for (int gy = 0; gy < 16; ++gy) {
+			for (int gx = 0; gx < 16; ++gx) {
+				const int x = (2 * gx + 1) * cell.width() / 32;
+				const int y = (2 * gy + 1) * cell.height() / 32;
+				if (inked(theirs, x, y) != inked(mine, x, y)) ++differ;
+			}
+		}
+		if (differ > 16) wrong << QStringLiteral("U+%1: %2 of 256 points differ").arg(uint(ch), 4, 16).arg(differ);
+	}
+	QFontDatabase::removeApplicationFont(id);
+	QVERIFY2(wrong.isEmpty(), qPrintable(wrong.join(QLatin1Char('\n'))));
+}
+
+void terminal_view_test::box_drawing_meets_at_every_cell_edge() {
+	/*
+	 * The reason for drawing them: a row of U+2500 is one unbroken line, the
+	 * same brightness end to end -- no dot where cells meet -- at the
+	 * cell sizes a fractional scale gives as at whole ones.
+	 */
+	for (const QSize size : { QSize(9, 18), QSize(10, 21), QSize(12, 23), QSize(13, 27) }) {
+		QImage image(size.width() * 6, size.height(), QImage::Format_RGB32);
+		image.fill(Qt::black);
+		QPainter painter(&image);
+		for (int i = 0; i < 6; ++i)
+			bssh_draw_box(painter, i % 2 ? 0x2501 : 0x2500, QRect(i * size.width(), 0, size.width(), size.height()), Qt::white);
+		painter.end();
+		/* Along a row inside the light line, every pixel of the light cells
+		 * lit, and lit the same. */
+		const int y = size.height() / 2;
+		for (int x = 0; x < image.width(); ++x) {
+			if (qGray(image.pixel(x, y)) != 255)
+				QFAIL(qPrintable(QStringLiteral("a gap at x=%1 in cells of %2x%3").arg(x).arg(size.width()).arg(size.height())));
+		}
+	}
 }
 
 void terminal_view_test::shrinking_the_scrollback_brings_the_view_back_with_it() {

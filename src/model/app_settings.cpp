@@ -333,6 +333,14 @@ void bssh_app_settings::store_or_forget(const QString &key, const QVariant &chos
 	file.sync();
 }
 
+bool bssh_app_settings::draw_box_characters() const {
+	return value(QStringLiteral("appearance/draw_box_characters"), true).toBool();
+}
+
+void bssh_app_settings::set_draw_box_characters(bool draw) {
+	store_or_forget(QStringLiteral("appearance/draw_box_characters"), draw, draw);
+}
+
 QString bssh_app_settings::player() const {
 	return value(QStringLiteral("player/selected"), QString()).toString().trimmed();
 }
