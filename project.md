@@ -4643,7 +4643,15 @@ model on a finger.
   30% amplitude, media volume 11, and the holder: "heard the tone". The
   mixer at that moment: output thread on `AUDIO_DEVICE_OUT_SPEAKER`,
   `AUDIO_OUTPUT_FLAG_FAST`, out of standby, BeerSSH holding an audio
-  session.
+  session. **And over SSH**, the holder asking for it the same day: the
+  Fold reached a throwaway sshd on this machine's loopback through
+  `adb reverse` -- an sshd on the LAN was refused by the session's
+  permission check, and the tunnel exposes nothing -- with a host and
+  key added to the app's files and put back byte-exact after. The test
+  film played with its subtitle fetched from the host, the copy read
+  "All here", and the 3 s tone played beside it to its end. The film's
+  own soundtrack peaks at -44 dB, so its sound is not to be listened
+  for.
   **Reaching the phone took adb over Wi-Fi**: on this desk its USB goes
   through two hubs (a Microchip USB2734, then a USB 2.0 hub) and dropped
   every transfer of 1 MB or more, 256 KB passing, then came back
