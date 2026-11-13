@@ -1,6 +1,13 @@
 #!/bin/sh
-# Name the FFmpeg headers an Android build compiles snurra against, and
-# fetch them when nothing on the machine matches the Qt kit's FFmpeg.
+# Copied from ~/.claude/tool/ffmpeg-headers.sh -- the source. Keep in sync;
+# fix drift the moment you notice it.
+# Name the FFmpeg headers an Android build compiles against, and fetch
+# them when nothing on the machine matches the Qt kit's FFmpeg.
+#
+# Written in beerssh (its a95b210, 2026-11-13) and spread from
+# claude-guidelines to the trees that carry it, which are those whose
+# Android build compiles FFmpeg code -- snurra's player, linked into
+# beerssh, and fuzzypickles' call audio.
 #
 #   tool/ffmpeg-headers.sh <kit libavformat.so> <given dir> <desktop dir> <cache dir>
 #
