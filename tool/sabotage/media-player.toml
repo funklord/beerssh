@@ -1,0 +1,26 @@
+# The media player Play hands a file to (sec 6.4; the holder, 2026-11-13:
+# "a complete configuration of media player ... sync this with hydra").
+
+# The choice ignored: BeerSSH's own player plays whatever was chosen.
+[[sabotage]]
+name = "Play ignores the chosen player"
+file = "src/ui/file_panel.cpp"
+find = "\tif (!bssh_in_app_player() || bssh_player_in_use() != QLatin1String(\"builtin\")) return bssh_in_app_player_t();\n"
+replace = "\tif (!bssh_in_app_player()) return bssh_in_app_player_t();\n"
+expect = "play_goes_to_the_chosen_player"
+
+# Default stored as a value: a later change of default never reaches it.
+[[sabotage]]
+name = "choosing Default stores a player"
+file = "src/model/app_settings.cpp"
+find = "\tstore_or_forget(QStringLiteral(\"player/selected\"), id.trimmed(), id.trimmed().isEmpty());\n"
+replace = "\tstore(QStringLiteral(\"player/selected\"), id.trimmed());\n"
+expect = "a_media_player_is_stored_only_when_chosen"
+
+# %U left as it is: Custom is handed the placeholder, not the file.
+[[sabotage]]
+name = "a custom command's %U is not filled in"
+file = "src/media/player_choice.cpp"
+find = "\t\t\tpart.replace(QLatin1String(\"%U\"), url);\n"
+replace = ""
+expect = "the_media_player_is_started_as_hydra_starts_it"

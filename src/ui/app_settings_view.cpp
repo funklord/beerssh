@@ -4,6 +4,9 @@
 #include "softkeys/keyboard_layout.h"
 
 #include <QCheckBox>
+#include "media/player_choice.h"
+#include <QSignalBlocker>
+#include <QStandardItemModel>
 #include <QShowEvent>
 #include <QHBoxLayout>
 #include <QSlider>
@@ -74,6 +77,18 @@ static void bssh_fit_items(QComboBox *box) {
  * Found by the same lens that caught it in bssh_font_picker: a null
  * guard is only as good as the value it reads.
  */
+/* Custom's command and its terminal only while Custom is chosen; the
+ * terminal also for mplayer, which is run in one. */
+void bssh_app_settings_view::sync_player_rows() {
+	if (!m_player) return;
+	const QString id = m_player->currentData().toString();
+	const bool custom = id == QLatin1String("custom");
+	const bool in_terminal = custom || id == QLatin1String("mplayer") || id == QLatin1String("mplayer2");
+	m_player_command->setEnabled(custom);
+	m_player_in_terminal->setEnabled(custom);
+	m_player_terminal->setEnabled(in_terminal);
+}
+
 QString bssh_app_settings_view::section_name(section_t section) {
 	switch (section) {
 	case SECTION_KEYBOARD:   return QStringLiteral("Keyboard");
@@ -758,6 +773,54 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	if (on_this_page(SECTION_TERMINAL, close_note)) form->addRow(close_note);
 
 	/*
+	 * The media player Play hands a file to (sec 6.4) -- the holder,
+	 * 2026-11-13, "a complete configuration of media player to use and
+	 * possibly custom command, sync this with hydra". hydra's choices,
+	 * words and keys (player_choice.h): Default first, storing nothing;
+	 * the players not installed shown greyed out, so it is plain what
+	 * could be installed; Custom with its command, %U where the file
+	 * goes; and the terminal for a player controlled from one.
+	 */
+	m_player = new QComboBox(this);
+	m_player->setObjectName(QStringLiteral("player"));
+	{
+		const QList<bssh_player_entry_t> players = bssh_players(bssh_app_settings().player_custom_command());
+		QString fallback;
+		for (const bssh_player_entry_t &each : players) {
+			if (each.id == bssh_player_default()) fallback = each.label;
+		}
+		m_player->addItem(QStringLiteral("Default (%1)").arg(fallback), QString());
+		for (const bssh_player_entry_t &each : players) {
+			m_player->addItem(each.installed || each.id == QLatin1String("custom")
+			                          ? each.label
+			                          : QStringLiteral("%1 (not installed)").arg(each.label),
+			                  each.id);
+			/* Greyed, not hidden: Custom stays choosable, to be filled in. */
+			if (!each.installed && each.id != QLatin1String("custom")) {
+				if (auto *model = qobject_cast<QStandardItemModel *>(m_player->model()))
+					model->item(m_player->count() - 1)->setEnabled(false);
+			}
+		}
+	}
+	bssh_fit_items(m_player);
+	if (on_this_page(SECTION_TERMINAL, m_player)) form->addRow(QStringLiteral("Media player"), m_player);
+	m_player_command = new QLineEdit(this);
+	m_player_command->setObjectName(QStringLiteral("player_command"));
+	m_player_command->setPlaceholderText(QStringLiteral("mpv --fs %U"));
+	if (on_this_page(SECTION_TERMINAL, m_player_command)) form->addRow(QStringLiteral("Custom command"), m_player_command);
+	m_player_in_terminal = new QCheckBox(QStringLiteral("Run the custom command in a terminal"), this);
+	if (on_this_page(SECTION_TERMINAL, m_player_in_terminal)) form->addRow(m_player_in_terminal);
+	m_player_terminal = new QLineEdit(this);
+	m_player_terminal->setObjectName(QStringLiteral("player_terminal"));
+	m_player_terminal->setPlaceholderText(QStringLiteral("The first installed, x-terminal-emulator -e first"));
+	if (on_this_page(SECTION_TERMINAL, m_player_terminal)) form->addRow(QStringLiteral("Terminal for a player"), m_player_terminal);
+	QLabel *player_note = bssh_wrapped_note(
+	        QStringLiteral("%U in the command is where the file goes; with none, it goes last. "
+	                        "mplayer is run in a terminal, which is how it is controlled."),
+	        this);
+	if (on_this_page(SECTION_TERMINAL, player_note)) form->addRow(player_note);
+
+	/*
 	 * sec 5.4: offered only while Android may still pause the app, and
 	 * asked only from this button. Gone the next time the page is built
 	 * once the answer is yes.
@@ -1231,6 +1294,20 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	m_keep_sessions_on_close->setCurrentIndex(
 	        !settings.keep_sessions_on_close_chosen() ? 0
 	                : m_keep_sessions_on_close->findData(settings.keep_sessions_on_close() ? 1 : 0));
+	{
+		const QSignalBlocker quiet(m_player);
+		const int at = m_player->findData(settings.player());
+		m_player->setCurrentIndex(settings.player().isEmpty() || at < 0 ? 0 : at);
+	}
+	{
+		const QSignalBlocker quiet_command(m_player_command);
+		const QSignalBlocker quiet_in(m_player_in_terminal);
+		const QSignalBlocker quiet_terminal(m_player_terminal);
+		m_player_command->setText(settings.player_custom_command());
+		m_player_in_terminal->setChecked(settings.player_custom_in_terminal());
+		m_player_terminal->setText(settings.player_terminal());
+	}
+	sync_player_rows();
 	m_offer_multiplexers->setChecked(settings.offer_multiplexer_sessions());
 	m_honour_font_scale->setChecked(settings.honour_system_font_scale());
 	m_font_ligatures->setChecked(settings.font_ligatures());
@@ -1457,6 +1534,22 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 			if (chosen < 0) s.forget_keep_sessions_on_close();
 			else s.set_keep_sessions_on_close(chosen == 1);
 		});
+	});
+	connect(m_player, &QComboBox::currentIndexChanged, this, [this] {
+		const QString chosen = m_player->currentData().toString();
+		commit([chosen](bssh_app_settings &s) { s.set_player(chosen); });
+		sync_player_rows();
+	});
+	connect(m_player_command, &QLineEdit::editingFinished, this, [this] {
+		const QString command = m_player_command->text();
+		commit([command](bssh_app_settings &s) { s.set_player_custom_command(command); });
+	});
+	connect(m_player_in_terminal, &QCheckBox::toggled, this, [this](bool on) {
+		commit([on](bssh_app_settings &s) { s.set_player_custom_in_terminal(on); });
+	});
+	connect(m_player_terminal, &QLineEdit::editingFinished, this, [this] {
+		const QString command = m_player_terminal->text();
+		commit([command](bssh_app_settings &s) { s.set_player_terminal(command); });
 	});
 	connect(m_offer_multiplexers, &QCheckBox::toggled, this, [this] {
 		commit([this](bssh_app_settings &s) {

@@ -402,6 +402,28 @@ public:
 	 * was built: it surprises anyone who expects click-to-focus, and the
 	 * cost of the surprise is typing into the wrong shell.
 	 */
+	/*
+	 * The media player Play hands a file to (sec 6.4), in hydra's words so
+	 * the two programs read alike: `player/selected` is an id -- builtin
+	 * (BeerSSH's own, snurra), system (the desktop's or the phone's
+	 * choice), mpv, vlc, smplayer, ffplay, mplayer2, mplayer or custom --
+	 * absent for the default, which is builtin where it is built in and
+	 * system where not. `player/custom_command` is Custom's command line,
+	 * %U where the file goes; `player/terminal` the terminal a player
+	 * controlled from one is started in, absent for the first installed;
+	 * `player/custom_in_terminal` whether Custom wants one. Each is
+	 * stored only when somebody chose it; setting the empty value or
+	 * false removes it, so a changed default reaches whoever left it.
+	 */
+	QString player() const;
+	void set_player(const QString &id);
+	QString player_custom_command() const;
+	void set_player_custom_command(const QString &command);
+	QString player_terminal() const;
+	void set_player_terminal(const QString &command);
+	bool player_custom_in_terminal() const;
+	void set_player_custom_in_terminal(bool on);
+
 	bool focus_follows_mouse() const;
 	void set_focus_follows_mouse(bool follows);
 
@@ -586,6 +608,7 @@ private:
 	 */
 	bool store(const QString &key, const QVariant &value);
 	bool contains(const QString &key) const;
+	void store_or_forget(const QString &key, const QVariant &chosen, bool forget);
 
 	QString m_path;
 };

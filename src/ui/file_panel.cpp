@@ -1,4 +1,5 @@
 #include "ui/file_panel.h"
+#include "media/player_choice.h"
 
 #include <QApplication>
 #include <QDesktopServices>
@@ -162,7 +163,14 @@ bssh_file_panel::bssh_file_panel(bssh_session *session, QWidget *parent)
 	m_media_area->hide();
 	column->addWidget(m_media_area);
 	column->addWidget(m_list, 1);
-	m_opener = [](const QUrl &url) { return QDesktopServices::openUrl(url); };
+	/* The player chosen in the settings (player_choice.h), and why not,
+	 * said where the panel says things, when it could not start one. */
+	m_opener = [this](const QUrl &url) {
+		QString why;
+		if (bssh_play_externally(url.toLocalFile(), &why)) return true;
+		say(why);
+		return false;
+	};
 
 	/*
 	 * The listing's own line, then one row per direction of copy with a
@@ -708,6 +716,17 @@ void bssh_file_panel::show_menu(const QPoint &at) {
 	}
 }
 
+/*
+ * BeerSSH's own player when it is the one chosen (player_choice.h) -- the
+ * default where it is built in -- and none otherwise, so a Play goes to
+ * the chosen external one instead. Read at each Play: the settings page
+ * may have changed it since.
+ */
+static bssh_in_app_player_t chosen_in_app_player() {
+	if (!bssh_in_app_player() || bssh_player_in_use() != QLatin1String("builtin")) return bssh_in_app_player_t();
+	return bssh_in_app_player();
+}
+
 bool bssh_file_panel::can_play_selected() const {
 	if (!m_session || m_path.isEmpty()) return false;
 	const QList<QTreeWidgetItem *> selected = m_list->selectedItems();
@@ -719,7 +738,7 @@ bool bssh_file_panel::can_play_selected() const {
 #ifdef Q_OS_ANDROID
 	/* Android opens no app's private file in another app, so the
 	 * desktop's road is closed here: only BeerSSH's own player plays. */
-	if (!bssh_in_app_player()) return false;
+	if (!chosen_in_app_player()) return false;
 #endif
 	return true;
 }
@@ -740,11 +759,11 @@ bool bssh_file_panel::play_selected() {
 		 * Fold, 2026-11-13.
 		 */
 		media.path = path;
-		if (bssh_in_app_player()) media.subtitles = subtitles_beside(entry);
+		if (chosen_in_app_player()) media.subtitles = subtitles_beside(entry);
 		media.bytes = std::make_shared<bssh_media_bytes>(path, entry.size);
 		media.bytes->finished(true);
-		if (bssh_in_app_player()) close_playing();
-		if (bssh_in_app_player() && bssh_in_app_player()(media, m_media_area)) {
+		if (chosen_in_app_player()) close_playing();
+		if (chosen_in_app_player() && chosen_in_app_player()(media, m_media_area)) {
 			m_media_area->show();
 			return true;
 		}
@@ -766,7 +785,7 @@ bool bssh_file_panel::play_selected() {
 	 * them when the film opens (embed.h 2). Small, so the wait is short;
 	 * the desktop's player is handed a single file and gets none.
 	 */
-	const QStringList beside = bssh_in_app_player() ? subtitles_beside(entry) : QStringList();
+	const QStringList beside = chosen_in_app_player() ? subtitles_beside(entry) : QStringList();
 	if (!beside.isEmpty()) {
 		m_play_waiting = entry;
 		m_play_fetching_subtitles = true;
@@ -818,8 +837,8 @@ bool bssh_file_panel::start_play_copy(const bssh_remote_entry_t &entry) {
 		m_play_mounted = bssh_fuse_shelf::add(entry.name, m_play_file, entry.size, pieces);
 	m_session->download_pieces(path, dir, pieces);
 
-	if (bssh_in_app_player()) close_playing();
-	if (bssh_in_app_player() && bssh_in_app_player()(media, m_media_area)) {
+	if (chosen_in_app_player()) close_playing();
+	if (chosen_in_app_player() && chosen_in_app_player()(media, m_media_area)) {
 		m_play_in_app = true;
 		m_media_area->show();
 		return true;

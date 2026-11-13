@@ -114,6 +114,8 @@
 #include "ui/pane_container.h"
 #include "ui/pane_snap.h"
 #include "ui/divider_links.h"
+#include "media/player_choice.h"
+#include "media/media_player.h"
 #include "ui/find_bar.h"
 #include "ui/terminal_view.h"
 
@@ -178,6 +180,116 @@ struct setting_left_as_found_t {
 	QString path;
 	QVariant was;
 };
+
+void layout_test::the_media_player_is_started_as_hydra_starts_it() {
+	/*
+	 * The holder, 2026-11-13: a media player setting "sync[ed] with
+	 * hydra". hydra's arguments, its %U, its terminal rule, and BeerSSH's
+	 * default: its own player where it is built in, the system's where not.
+	 */
+	const setting_left_as_found_t selected(QStringLiteral("player/selected"));
+	const setting_left_as_found_t command(QStringLiteral("player/custom_command"));
+	const setting_left_as_found_t in_terminal(QStringLiteral("player/custom_in_terminal"));
+	const QString file = QStringLiteral("/tmp/a film.mkv");
+	const QString url = QUrl::fromLocalFile(file).toString();
+
+	QCOMPARE(bssh_player_arguments(QStringLiteral("mpv"), QString(), file),
+	         QStringList({ QStringLiteral("--force-window=yes"), file }));
+	QCOMPARE(bssh_player_arguments(QStringLiteral("ffplay"), QString(), file),
+	         QStringList({ QStringLiteral("-autoexit"), file }));
+	QCOMPARE(bssh_player_arguments(QStringLiteral("mplayer"), QString(), file),
+	         QStringList({ QStringLiteral("-cache"), QStringLiteral("8192"), file }));
+	QCOMPARE(bssh_player_arguments(QStringLiteral("vlc"), QString(), file), QStringList({ file }));
+	/* Custom: %U where it says, and last where it says nothing. */
+	QCOMPARE(bssh_player_arguments(QStringLiteral("custom"), QStringLiteral("mpv --fs %U --loop"), file),
+	         QStringList({ QStringLiteral("--fs"), url, QStringLiteral("--loop") }));
+	QCOMPARE(bssh_player_arguments(QStringLiteral("custom"), QStringLiteral("mpv --fs"), file),
+	         QStringList({ QStringLiteral("--fs"), url }));
+
+	/* mplayer in a terminal; Custom only when asked. */
+	QVERIFY(bssh_player_wants_terminal(QStringLiteral("mplayer")));
+	QVERIFY(!bssh_player_wants_terminal(QStringLiteral("mpv")));
+	bssh_app_settings settings;
+	settings.set_player_custom_in_terminal(false);
+	QVERIFY(!bssh_player_wants_terminal(QStringLiteral("custom")));
+	settings.set_player_custom_in_terminal(true);
+	QVERIFY(bssh_player_wants_terminal(QStringLiteral("custom")));
+
+	/* A whole command line: Custom's program found, wrapped in a terminal. */
+	settings.set_player_custom_command(QStringLiteral("/bin/echo %U"));
+	QString why;
+	const QStringList line = bssh_player_command(QStringLiteral("custom"), file, &why);
+	QVERIFY2(!line.isEmpty(), qPrintable(why));
+	QVERIFY(line.contains(QStringLiteral("/bin/echo")));
+	QCOMPARE(line.last(), url);
+	if (!bssh_player_terminal(QString()).isEmpty())
+		QVERIFY2(line.first() != QStringLiteral("/bin/echo"), "Custom asked for a terminal and was not given one");
+	/* And one not installed says so. */
+	settings.set_player_custom_command(QStringLiteral("no-such-player-anywhere %U"));
+	QVERIFY(bssh_player_command(QStringLiteral("custom"), file, &why).isEmpty());
+	QVERIFY(why.contains(QStringLiteral("no-such-player-anywhere")));
+
+	/*
+	 * And started for real: a script chosen as Custom, run detached, is
+	 * handed the file as a URL -- the whole road, not its parts.
+	 */
+	{
+		QTemporaryDir dir;
+		QVERIFY(dir.isValid());
+		const QString script = dir.filePath(QStringLiteral("player.sh"));
+		const QString marker = dir.filePath(QStringLiteral("handed"));
+		QFile out(script);
+		QVERIFY(out.open(QIODevice::WriteOnly));
+		out.write(QStringLiteral("#!/bin/sh\nprintf '%s' \"$1\" > '%1.part' && mv '%1.part' '%1'\n").arg(marker).toUtf8());
+		out.close();
+		QVERIFY(out.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+		settings.set_player_custom_in_terminal(false);
+		settings.set_player_custom_command(script);
+		settings.set_player(QStringLiteral("custom"));
+		QString failed;
+		QVERIFY2(bssh_play_externally(file, &failed), qPrintable(failed));
+		QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(marker), 5000);
+		QFile handed(marker);
+		QVERIFY(handed.open(QIODevice::ReadOnly));
+		QCOMPARE(QString::fromUtf8(handed.readAll()), url);
+	}
+
+	/* The default follows the build, and is what nothing stored means. */
+	settings.set_player(QString());
+	QCOMPARE(bssh_player_in_use(), bssh_in_app_player() ? QStringLiteral("builtin") : QStringLiteral("system"));
+	settings.set_player(QStringLiteral("vlc"));
+	QCOMPARE(bssh_player_in_use(), QStringLiteral("vlc"));
+}
+
+void layout_test::a_media_player_is_stored_only_when_chosen() {
+	/*
+	 * sec 10.6's rule, the settings page's half: an untouched page writes
+	 * nothing, a player picked is kept, and Default picked again removes
+	 * it, so a later change of default reaches whoever left it there.
+	 */
+	const setting_left_as_found_t selected(QStringLiteral("player/selected"));
+	bssh_app_settings().set_player(QString());
+	const QString path = bssh_app_settings().path();
+	bssh_app_settings_view page(bssh_app_settings_view::SECTION_TERMINAL, nullptr);
+	QComboBox *player = page.findChild<QComboBox *>(QStringLiteral("player"));
+	QVERIFY(player);
+	QCOMPARE(player->currentIndex(), 0);
+	QVERIFY(!QSettings(path, QSettings::IniFormat).contains(QStringLiteral("player/selected")));
+	/* Every entry there: Default, the system's, hydra's six, Custom. */
+	QStringList ids;
+	for (int i = 0; i < player->count(); ++i) ids << player->itemData(i).toString();
+	for (const QString &id : { QString(), QStringLiteral("system"), QStringLiteral("mpv"), QStringLiteral("vlc"),
+	                           QStringLiteral("smplayer"), QStringLiteral("ffplay"), QStringLiteral("mplayer2"),
+	                           QStringLiteral("mplayer"), QStringLiteral("custom") })
+		QVERIFY2(ids.contains(id), qPrintable(QStringLiteral("no entry for '%1'").arg(id)));
+
+	player->setCurrentIndex(player->findData(QStringLiteral("custom")));
+	QCOMPARE(QSettings(path, QSettings::IniFormat).value(QStringLiteral("player/selected")).toString(),
+	         QStringLiteral("custom"));
+	player->setCurrentIndex(0);
+	QVERIFY2(!QSettings(path, QSettings::IniFormat).contains(QStringLiteral("player/selected")),
+	         "Default chosen again left a player stored");
+}
 
 void layout_test::a_measured_default_has_a_way_back() {
 	/*

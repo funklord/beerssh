@@ -191,6 +191,13 @@ private:
 	QPushButton *m_keyboard_reset;
 	QCheckBox *m_warn_multiline_paste;
 	QComboBox *m_keep_sessions_on_close;
+	/* The media player (player_choice.h), with Custom's command, its
+	 * terminal, and the terminal a player run in one is started in. */
+	QComboBox *m_player = nullptr;
+	QLineEdit *m_player_command = nullptr;
+	QCheckBox *m_player_in_terminal = nullptr;
+	QLineEdit *m_player_terminal = nullptr;
+	void sync_player_rows();
 	QCheckBox *m_offer_multiplexers;
 	QCheckBox *m_honour_font_scale;
 	QCheckBox *m_font_ligatures;

@@ -135,6 +135,7 @@ SOURCES += \
     src/media/media_bytes.cpp \
     src/model/piece_map.cpp \
     src/media/media_player.cpp \
+    src/media/player_choice.cpp \
     src/ui/find_bar.cpp \
     src/ui/input_selector.cpp \
     src/ui/pane_corner.cpp \
@@ -215,6 +216,7 @@ HEADERS += \
     src/media/media_bytes.h \
     src/model/piece_map.h \
     src/media/media_player.h \
+    src/media/player_choice.h \
     src/ui/find_bar.h \
     src/ui/input_selector.h \
     src/ui/pane_corner.h \

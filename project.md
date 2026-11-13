@@ -4500,6 +4500,34 @@ model on a finger.
   emulator with snurra's own player, the film played while the tone was
   still going took its place -- one tile, its subtitle shown, nothing
   crashed.
+  **Which player: a setting, in hydra's words -- 2026-11-13.** The holder:
+  "We should have a complete configuration of media player to use and
+  possibly custom command, sync this with hydra which has a similar
+  thing". hydra's `player_launcher` is the model, read rather than copied
+  (`src/media/player_choice.h`): the same settings keys
+  (`player/selected`, `player/custom_command`, `player/terminal`,
+  `player/custom_in_terminal`), the same ids and labels (mpv, VLC,
+  SMPlayer, ffplay, mplayer2, mplayer, Custom...) found on PATH with the
+  missing ones greyed out, the same arguments (mpv `--force-window=yes`,
+  ffplay `-autoexit`, mplayer `-cache 8192`), Custom's `%U` -- the file
+  as a URL, appended when the command names none -- and the same rule
+  that mplayer, controlled from its terminal, is started in one (the
+  first known terminal installed, `x-terminal-emulator -e` first, unless
+  `player/terminal` names one). Two ids are BeerSSH's: **builtin**, its
+  own player, and **system**, the desktop's or the phone's choice, which
+  hydra has on Android only. The default is builtin where it is built in
+  and system where not, and nothing is stored until somebody chooses:
+  Default on the Terminal page removes the key again (sec 10.6). Play
+  reads it each time: builtin plays in the panel, anything else goes to
+  the panel's opener, which starts the chosen player detached and says
+  why on the status line when it cannot. A phone offers builtin and
+  system only, and a file in the app's own storage reaches no other app
+  there, so builtin is what plays.
+  `the_media_player_is_started_as_hydra_starts_it` (arguments, %U, the
+  terminal, the default, and a script chosen as Custom started for real
+  and handed the film's URL), `a_media_player_is_stored_only_when_chosen`,
+  `play_goes_to_the_chosen_player`; three sabotages. Told to hydra, whose
+  vocabulary this is (its inbox).
   **The panel on a phone, measured by the sweeps it had missed
   (2026-11-12).** `every_touch_surface_names_its_controls` and
   `every_touch_surface_fits_a_phone` predate the panel; with it added,

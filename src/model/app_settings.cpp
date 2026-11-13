@@ -321,6 +321,52 @@ void bssh_app_settings::set_hide_from_screenshots(bool hide) {
 	store(QStringLiteral("security/hide_from_screenshots"), hide);
 }
 
+/* A chosen value stored, the default removed (sec 10.6's rule). */
+void bssh_app_settings::store_or_forget(const QString &key, const QVariant &chosen, bool forget) {
+	if (!forget) {
+		store(key, chosen);
+		return;
+	}
+	if (m_path.isEmpty()) return;
+	QSettings file(m_path, QSettings::IniFormat);
+	file.remove(key);
+	file.sync();
+}
+
+QString bssh_app_settings::player() const {
+	return value(QStringLiteral("player/selected"), QString()).toString().trimmed();
+}
+
+void bssh_app_settings::set_player(const QString &id) {
+	store_or_forget(QStringLiteral("player/selected"), id.trimmed(), id.trimmed().isEmpty());
+}
+
+QString bssh_app_settings::player_custom_command() const {
+	return value(QStringLiteral("player/custom_command"), QString()).toString().trimmed();
+}
+
+void bssh_app_settings::set_player_custom_command(const QString &command) {
+	store_or_forget(QStringLiteral("player/custom_command"), command.trimmed(),
+	                command.trimmed().isEmpty());
+}
+
+QString bssh_app_settings::player_terminal() const {
+	return value(QStringLiteral("player/terminal"), QString()).toString().trimmed();
+}
+
+void bssh_app_settings::set_player_terminal(const QString &command) {
+	store_or_forget(QStringLiteral("player/terminal"), command.trimmed(),
+	                command.trimmed().isEmpty());
+}
+
+bool bssh_app_settings::player_custom_in_terminal() const {
+	return value(QStringLiteral("player/custom_in_terminal"), false).toBool();
+}
+
+void bssh_app_settings::set_player_custom_in_terminal(bool on) {
+	store_or_forget(QStringLiteral("player/custom_in_terminal"), on, !on);
+}
+
 bool bssh_app_settings::focus_follows_mouse() const {
 	return value(QStringLiteral("input/focus_follows_mouse"), true).toBool();
 }

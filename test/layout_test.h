@@ -17,6 +17,8 @@ private slots:
 	void size_classes_follow_the_window_not_the_platform();
 	void a_custom_palette_keeps_only_the_colours_chosen();
 	void a_measured_default_has_a_way_back();
+	void the_media_player_is_started_as_hydra_starts_it();
+	void a_media_player_is_stored_only_when_chosen();
 	void pane_limits_match_the_size_class();
 	void shrinking_collapses_panes_to_tabs_without_closing_them();
 	void widening_restores_the_arrangement();

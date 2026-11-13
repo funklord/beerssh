@@ -16,6 +16,7 @@
 #include "live_ssh_test.h"
 #include "ssh/ssh_session.h"
 #include "model/session.h"
+#include "model/app_settings.h"
 #include "model/conn_manager.h"
 #include "input/input_router.h"
 #include "term/emulator.h"
@@ -3400,6 +3401,65 @@ void live_ssh_test::a_local_film_played_brings_the_subtitles_beside_it()
 	}
 	names.sort();
 	QCOMPARE(names, QStringList({ QStringLiteral("film.en.srt"), QStringLiteral("film.srt") }));
+}
+
+void live_ssh_test::play_goes_to_the_chosen_player()
+{
+	/*
+	 * The media player setting (sec 6.4, the holder, 2026-11-13): BeerSSH's
+	 * own player by default, and with another chosen, Play hands the file
+	 * to that one instead. A local session, so no server is needed.
+	 */
+	struct player_left_as_found_t {
+		QString was = bssh_app_settings().player();
+		~player_left_as_found_t() { bssh_app_settings().set_player(was); }
+	} left;
+	QTemporaryDir there;
+	QVERIFY(there.isValid());
+	{
+		QFile file(there.filePath(QStringLiteral("film.mkv")));
+		QVERIFY(file.open(QIODevice::WriteOnly));
+		file.write("mkv");
+	}
+	bssh_profile_t profile;
+	profile.name = QStringLiteral("chosen-player");
+	profile.local = true;
+	bssh_session session(profile);
+	session.connect_to_host();
+	bssh_file_panel panel(&session);
+	QSignalSpy listed(&panel, &bssh_file_panel::listed);
+	panel.open_directory(there.path());
+	QTRY_VERIFY_WITH_TIMEOUT(listed.size() == 1, 15000);
+	QTreeWidget *list = panel.findChild<QTreeWidget *>(QStringLiteral("file-panel-list"));
+	QVERIFY(list && list->topLevelItemCount() == 1);
+	list->topLevelItem(0)->setSelected(true);
+
+	const bssh_in_app_player_t built = bssh_in_app_player();
+	struct restore_t {
+		bssh_in_app_player_t was;
+		~restore_t() { bssh_in_app_player() = was; }
+	} restore{ built };
+	int in_app = 0;
+	bssh_in_app_player() = [&in_app](const bssh_media_t &, QWidget *area) {
+		++in_app;
+		return area != nullptr;
+	};
+	QList<QUrl> handed;
+	panel.set_opener([&handed](const QUrl &url) {
+		handed << url;
+		return true;
+	});
+
+	bssh_app_settings().set_player(QString());
+	QVERIFY(panel.play_selected());
+	QCOMPARE(in_app, 1);
+	QVERIFY(handed.isEmpty());
+
+	bssh_app_settings().set_player(QStringLiteral("mpv"));
+	QVERIFY(panel.play_selected());
+	QCOMPARE(in_app, 1);
+	QCOMPARE(handed.size(), 1);
+	QCOMPARE(handed.first().toLocalFile(), QFileInfo(there.filePath(QStringLiteral("film.mkv"))).absoluteFilePath());
 }
 
 void live_ssh_test::a_second_file_played_closes_the_first()

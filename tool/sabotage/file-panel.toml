@@ -275,8 +275,8 @@ expect = "a_file_played_is_opened_as_it_arrives"
 [[sabotage]]
 name = "the in-app player is never asked"
 file = "src/ui/file_panel.cpp"
-find = "\tif (bssh_in_app_player()) close_playing();\n\tif (bssh_in_app_player() && bssh_in_app_player()(media, m_media_area)) {\n\t\tm_play_in_app = true;"
-replace = "\tif (bssh_in_app_player()) close_playing();\n\tif (false) {\n\t\tm_play_in_app = true;"
+find = "\tif (chosen_in_app_player()) close_playing();\n\tif (chosen_in_app_player() && chosen_in_app_player()(media, m_media_area)) {\n\t\tm_play_in_app = true;"
+replace = "\tif (chosen_in_app_player()) close_playing();\n\tif (false) {\n\t\tm_play_in_app = true;"
 expect = "a_file_played_is_opened_as_it_arrives"
 
 # A playable file opened copies it: on a phone a tap puts up a folder
@@ -292,7 +292,7 @@ expect = "a_file_played_is_opened_as_it_arrives"
 [[sabotage]]
 name = "the subtitles beside a played film are not fetched"
 file = "src/ui/file_panel.cpp"
-find = "\tconst QStringList beside = bssh_in_app_player() ? subtitles_beside(entry) : QStringList();"
+find = "\tconst QStringList beside = chosen_in_app_player() ? subtitles_beside(entry) : QStringList();"
 replace = "\tconst QStringList beside;"
 expect = "a_film_played_brings_the_subtitles_beside_it"
 
@@ -317,7 +317,7 @@ expect = "a_film_played_brings_the_subtitles_beside_it"
 [[sabotage]]
 name = "a local film is played without the subtitles beside it"
 file = "src/ui/file_panel.cpp"
-find = "\t\tif (bssh_in_app_player()) media.subtitles = subtitles_beside(entry);\n"
+find = "\t\tif (chosen_in_app_player()) media.subtitles = subtitles_beside(entry);\n"
 replace = ""
 expect = "a_local_film_played_brings_the_subtitles_beside_it"
 
