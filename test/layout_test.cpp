@@ -7642,6 +7642,65 @@ void layout_test::a_grid_opens_rows_of_terminals_of_one_host() {
 
 }
 
+void layout_test::a_grid_opened_before_its_window_shows_is_even() {
+	/*
+	 * `beerssh --grid 3x3` opens the grid before the window is shown or
+	 * sized, as main() does. The holder, 2026-11-13, after a rebuild was
+	 * made to remember dividers before turning the root: "now the grids
+	 * don't come out equally spaced" -- the top row short, remembered from
+	 * splitters laid out in a window not yet its size.
+	 */
+	const forced_touch_t desktop(0);
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+	const setting_left_as_found_t keyboard_left(QStringLiteral("input/keyboard"));
+	bssh_app_settings().set_keyboard(bssh_app_settings::KEYBOARD_SYSTEM);
+	bssh_ssh_session::set_factory([](QObject *parent) -> bssh_ssh_session * {
+		return new bssh_fake_ssh_session(parent);
+	});
+	struct factory_reset_t { ~factory_reset_t() { bssh_ssh_session::set_factory(nullptr); } } reset;
+	{
+		bssh_main_window window(named(QStringLiteral("grid")));
+		const registry_left_as_found_t tidy(window.registry());
+		/*
+		 * As main() does it: the grid opened in the window as constructed,
+		 * not yet sized -- where it comes up folded to fit -- then the
+		 * window sized and shown, and the grid unfolds.
+		 */
+		window.open_grid(3, 3);
+		QVERIFY2(window.layout_manager()->is_collapsed(), "the grid fitted the unsized window whole");
+		window.resize(1600, 1100);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		QCoreApplication::processEvents();
+		/* And one rebuild more, as a tab or a title change brings. */
+		window.panes()->rebuild();
+		QCoreApplication::processEvents();
+
+		bssh_layout_manager *layout = window.layout_manager();
+		const QList<bssh_session *> shown = layout->visible_panes();
+		QCOMPARE(shown.size(), 9);
+		bssh_pane_container *panes = window.panes();
+		const int cell_w = panes->view_for(shown.first())->cell_width();
+		const int cell_h = panes->view_for(shown.first())->cell_height();
+		QList<int> widths;
+		QList<int> heights;
+		for (bssh_session *each : shown) {
+			QWidget *frame = panes->frame_for(each);
+			QVERIFY(frame);
+			widths << frame->width();
+			heights << frame->height();
+		}
+		const auto spread = [](const QList<int> &values) {
+			return *std::max_element(values.cbegin(), values.cend()) - *std::min_element(values.cbegin(), values.cend());
+		};
+		QStringList seen;
+		for (int i = 0; i < widths.size(); ++i) seen << QStringLiteral("%1x%2").arg(widths.at(i)).arg(heights.at(i));
+		QVERIFY2(spread(widths) <= cell_w * 2 && spread(heights) <= cell_h * 2,
+		         qPrintable(QStringLiteral("the grid is uneven: ") + seen.join(QStringLiteral(", "))));
+	}
+}
+
 void layout_test::a_host_with_no_preset_uses_its_own_size_and_the_device_default() {
 	/*
 	 * The holder, 2026-11-02: "setting certain options like font size in

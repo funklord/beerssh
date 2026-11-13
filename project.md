@@ -8097,7 +8097,22 @@ a tab dragged to the end of a two-tab bar would tear itself out mid-reorder.
   that moment and were remembered so -- every pane a ninth of the width
   and the whole height. A grid came back from any rebuild (a tab opened,
   a pane moved) with its dividers moved; they are remembered before the
-  turn now (`a_grid_keeps_its_dividers_through_a_rebuild`). **CI's macOS
+  turn now (`a_grid_keeps_its_dividers_through_a_rebuild`). **And that fix
+  uncovered the next, the same day** -- the holder: "now the grids don't
+  come out equally spaced". `beerssh --grid 3x3` opens the grid in the
+  window as constructed, before it is sized, where it comes up folded to
+  fit (sec 8.2) -- a row of three over one pane. That build, laid out and
+  then remembered, gave the unfolded grid rows of 358, 512 and 512 under
+  Xvfb (logged), the new rows taking the one pane's height. The old order
+  had remembered sideways sizes that happened to be even. A build folded
+  to fit is not remembered now -- its sizes are a squeeze, not a choice --
+  and the next build is taken as a new shape, sized from what is known of
+  each pane and shared evenly where nothing is; kept as the same shape, a
+  build that stayed folded looked up dividers of an earlier shape and was
+  left to QSplitter's first-narrowest default. Under Xvfb a fresh 3x3 is
+  285, 289, 288 high and 459, 463, 462 wide
+  (`a_grid_opened_before_its_window_shows_is_even`, reproduced in the test
+  as main() orders it; a sabotage). **CI's macOS
   job found the next:** its panes are wider at their least, and a column
   dragged far enough left one row's middle pane at its least while the
   other rows went on -- out of line, and so no longer linked, and a

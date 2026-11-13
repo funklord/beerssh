@@ -404,6 +404,8 @@ private:
 	QTimer *m_settle = nullptr;
 	Qt::Edge m_built_edge = Qt::TopEdge;
 	bool m_built_column = false;
+	/* Whether that build had panes folded into tabs to fit (sec 8.2). */
+	bool m_built_collapsed = false;
 
 	QList<bssh_terminal_view *> m_views;
 	QList<bssh_session *> m_sessions;

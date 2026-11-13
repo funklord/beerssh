@@ -852,7 +852,19 @@ void bssh_pane_container::rebuild() {
 	 * was found when breaking a row divider lost the columns' widths
 	 * (2026-11-13).
 	 */
-	if (!column) remember_divisions();
+	/*
+	 * Not from a build folded to fit (sec 8.2): its sizes are the squeeze
+	 * of a window not yet its size, not anybody's choice. `--grid 3x3`
+	 * comes up folded in the window before it is sized -- a row of three
+	 * over one pane -- and that build, remembered, gave the unfolded grid
+	 * a short top row and two tall ones (the holder, 2026-11-13). With
+	 * nothing remembered the unfolded grid shares evenly -- and so does a
+	 * build that stays folded, as a new shape: kept as the same shape, it
+	 * looked up dividers remembered for an earlier one, found none that
+	 * fitted, and was left to QSplitter's first-narrowest default.
+	 */
+	if (!column && !m_built_collapsed) remember_divisions();
+	else if (!column) m_division_shape.clear();
 	m_splitter->setOrientation(column ? Qt::Vertical : Qt::Horizontal);
 
 	/*
@@ -927,6 +939,7 @@ void bssh_pane_container::rebuild() {
 	m_built_shape = visible_shape(panes);
 	m_built_edge = m_bar_edge;
 	m_built_column = column;
+	m_built_collapsed = m_layout->is_collapsed();
 
 	/*
 	 * The handles are QSplitter's own and are made and unmade with the
