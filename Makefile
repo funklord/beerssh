@@ -708,6 +708,22 @@ bssh_qmake_orphaned = $(shell \
 
 FORCE:
 
+# The switches that change qmake's command line, recorded per tree and
+# rewritten only when they move. Without it `make SANITIZE=1 test` on a
+# tree already built reran nothing: the generated Makefile was newer than
+# the .pro, so qmake never saw the flag and the suite ran unsanitized while
+# reading as a sanitizer run (2026-11-14). A moved record reruns qmake, and
+# bssh_qmake below then cleans the tree, since the compile lines changed.
+# The text is spelled out rather than taken from QMAKE_CONFIG, which the
+# app tree extends per target.
+bssh_qmake_args = DEBUG=$(DEBUG) SANITIZE=$(SANITIZE) CXX=$(CXX)
+define bssh_qmake_record
+	@mkdir -p $(@D); printf '%s\n' '$(bssh_qmake_args)' > $@.new; \
+	if cmp -s $@.new $@; then rm -f $@.new; else mv $@.new $@; fi
+endef
+$(BUILD_DIR)/qmake.args: FORCE
+	$(bssh_qmake_record)
+
 # qmake's object rules depend on sources, not on flags, so a flag changed in
 # a .pro regenerated the Makefile and recompiled nothing: every existing
 # build kept objects built the old way. That is how -fno-strict-aliasing,
@@ -758,7 +774,7 @@ $(BUILD_DIR)/Makefile: QMAKE_CONFIG += BSSH_MEDIA=1
 $(BUILD_DIR)/Makefile: $(SNURRA_DIR)/snurra.pri | media-check
 endif
 
-$(BUILD_DIR)/Makefile: beerssh.pro $(DESKTOP_MEDIA_SOURCE)
+$(BUILD_DIR)/Makefile: beerssh.pro $(DESKTOP_MEDIA_SOURCE) $(BUILD_DIR)/qmake.args
 	$(call bssh_qmake,$(BUILD_DIR),beerssh.pro)
 
 $(TARGET): $(VTERM_LIB) $(LIBSSH_LIB) $(BUILD_DIR)/Makefile $(SOURCES) $(HEADERS)
@@ -828,7 +844,10 @@ TEST_BIN       = $(TEST_BUILD_DIR)/beerssh_test
 # FORCE only when the tree was generated from somewhere else: re-running
 # qmake is the one thing that repairs it, and the stale Makefile is always
 # newer than test/tests.pro, so the timestamp alone never would.
-$(TEST_BUILD_DIR)/Makefile: test/tests.pro \
+$(TEST_BUILD_DIR)/qmake.args: FORCE
+	$(bssh_qmake_record)
+
+$(TEST_BUILD_DIR)/Makefile: test/tests.pro $(TEST_BUILD_DIR)/qmake.args \
                             $(if $(call bssh_qmake_orphaned,$(TEST_BUILD_DIR)),FORCE)
 	$(call bssh_qmake,$(TEST_BUILD_DIR),test/tests.pro)
 
