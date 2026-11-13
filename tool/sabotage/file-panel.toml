@@ -312,6 +312,15 @@ find = "\t\t\t/* Their copy's tile and word go: the film's own tile follows. */\
 replace = "\t\t\tfor (auto it = m_tiles.begin(); false && it != m_tiles.end();) {"
 expect = "a_film_played_brings_the_subtitles_beside_it"
 
+# A local film handed over with its bytes and no subtitles: snurra looks
+# beside nothing, and the .srt next to it is never shown (the Fold).
+[[sabotage]]
+name = "a local film is played without the subtitles beside it"
+file = "src/ui/file_panel.cpp"
+find = "\t\tif (bssh_in_app_player()) media.subtitles = subtitles_beside(entry);\n"
+replace = ""
+expect = "a_local_film_played_brings_the_subtitles_beside_it"
+
 # The file played before kept on disk and on the mount, one per Play.
 [[sabotage]]
 name = "a file played before is never put away"

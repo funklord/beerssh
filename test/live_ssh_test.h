@@ -111,6 +111,7 @@ private slots:
 	void a_seek_in_a_played_file_fetches_its_range_first();
 	void a_second_file_played_leaves_the_first_playing();
 	void a_film_played_brings_the_subtitles_beside_it();
+	void a_local_film_played_brings_the_subtitles_beside_it();
 	void copies_queue_as_tiles_and_pause_between_pieces();
 	void a_restarted_shell_runs_its_command_on_the_same_connection();
 

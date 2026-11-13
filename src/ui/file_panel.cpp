@@ -732,8 +732,15 @@ bool bssh_file_panel::play_selected() {
 	media.name = entry.name;
 
 	if (!m_session->is_remote()) {
-		/* Here already: played where it is, nothing staged. */
+		/*
+		 * Here already: played where it is, nothing staged. Its .srt files
+		 * are named to the player as a remote film's copies are: snurra
+		 * looks beside the file only when it has no bytes to read, and
+		 * these come with bytes, so a local film showed none -- seen on the
+		 * Fold, 2026-11-13.
+		 */
 		media.path = path;
+		if (bssh_in_app_player()) media.subtitles = subtitles_beside(entry);
 		media.bytes = std::make_shared<bssh_media_bytes>(path, entry.size);
 		media.bytes->finished(true);
 		if (bssh_in_app_player() && bssh_in_app_player()(media, m_media_area)) {

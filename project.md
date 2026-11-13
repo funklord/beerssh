@@ -4576,6 +4576,13 @@ model on a finger.
   emulator: a test film from the loopback host with "SUBTITLE FROM THE
   HOST" beside it, shown over the picture
   (`a_film_played_brings_the_subtitles_beside_it`, three sabotages).
+  **A local film's were missing all along**, found on the Fold
+  (2026-11-13): the file panel hands a local file over with its bytes as
+  well as its path, and snurra names a source with bytes by its title,
+  so its own look beside the file found nothing. A local film's `.srt`
+  files now go over the same way as a remote one's, where they lie,
+  nothing copied (`a_local_film_played_brings_the_subtitles_beside_it`,
+  which needs no server, and a sabotage that removes the line).
   The pin also brings `#` through a film's sound tracks and non-square
   pixels and rotated phone video shown right.
   **On Android, 2026-11-13 -- the holder: "ship snurra in the android
@@ -4622,8 +4629,24 @@ model on a finger.
   **Played against both**: 7.1 in the emulator run below, and 9.0 the
   same day from the released kit -- the x86_64 APK, 61 MB, ran the 8 s
   tone to its end through AAudio and played the test film with
-  "SUBTITLE FROM THE HOST" over it on the API 36 emulator. The arm64
-  APK builds; the Fold has played neither yet. Told to
+  "SUBTITLE FROM THE HOST" over it on the API 36 emulator.
+  **Played on the Fold** (SM-F926B, One UI, Android 15, arm64; the
+  release kit's build), the same day, from files in the app's own
+  storage through Local shell's file panel: AAudio opened shared at
+  48 kHz with a 192-frame burst and **low latency** -- the emulator's is
+  960 and not -- the tone ran to its end, the film's picture played,
+  and once the fix above was in its subtitle showed over it. **Nobody
+  heard it**: the stream opened, was registered as media and played to
+  its end, but the test tone is 440 Hz at 5% amplitude and the phone's
+  media volume was 5 of 15, and the holder, beside the phone, heard
+  nothing. A started stream is not sound; an audible play is still to
+  come.
+  **Reaching the phone took adb over Wi-Fi**: on this desk its USB goes
+  through two hubs (a Microchip USB2734, then a USB 2.0 hub) and dropped
+  every transfer of 1 MB or more, 256 KB passing, then came back
+  "offline". `adb tcpip 5555` over the brief USB link, the install and
+  the play over Wi-Fi, and `adb usb` after, the port confirmed closed.
+  Told to
   snurra, whose own Android build copies the desktop's headers with no
   such check (its inbox, 20261113T0126Z).
   **The deploy list had to learn them.** `beerssh.pro` names exactly

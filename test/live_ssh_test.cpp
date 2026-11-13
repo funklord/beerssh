@@ -3337,6 +3337,71 @@ void live_ssh_test::a_film_played_brings_the_subtitles_beside_it()
 	delete session;
 }
 
+void live_ssh_test::a_local_film_played_brings_the_subtitles_beside_it()
+{
+	/*
+	 * The same for a film on this device (sec 6.4): played where it is,
+	 * with the .srt files beside it named to BeerSSH's own player -- which
+	 * otherwise sees only the bytes and looks beside nothing. No server:
+	 * a local session lists and plays without one.
+	 */
+	QTemporaryDir there;
+	QVERIFY(there.isValid());
+	const auto write = [&there](const QString &name, const QByteArray &bytes) {
+		QFile file(there.filePath(name));
+		return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
+	};
+	QVERIFY(write(QStringLiteral("film.mkv"), QByteArray(64 * 1024, 'f')));
+	QVERIFY(write(QStringLiteral("film.srt"), QByteArray("1\n00:00:01,000 --> 00:00:02,000\nHello\n")));
+	QVERIFY(write(QStringLiteral("film.en.srt"), QByteArray("1\n00:00:01,000 --> 00:00:02,000\nHi\n")));
+	QVERIFY(write(QStringLiteral("other.srt"), QByteArray("1\n00:00:01,000 --> 00:00:02,000\nNo\n")));
+
+	bssh_profile_t profile;
+	profile.name = QStringLiteral("local-subtitles");
+	profile.local = true;
+	bssh_session session(profile);
+	QVERIFY(!session.is_remote());
+	/* A local shell, whose transport is what lists this device's files. */
+	session.connect_to_host();
+	bssh_file_panel panel(&session);
+	QSignalSpy listed(&panel, &bssh_file_panel::listed);
+	panel.open_directory(there.path());
+	QTRY_VERIFY_WITH_TIMEOUT(listed.size() == 1, 15000);
+	QTreeWidget *list = panel.findChild<QTreeWidget *>(QStringLiteral("file-panel-list"));
+	QVERIFY(list);
+	QStringList shown;
+	for (int i = 0; i < list->topLevelItemCount(); ++i) shown << list->topLevelItem(i)->text(0);
+	QVERIFY2(shown.contains(QStringLiteral("film.mkv")) && shown.contains(QStringLiteral("other.srt")),
+	         qPrintable(shown.join(QLatin1Char(','))));
+	for (int i = 0; i < list->topLevelItemCount(); ++i)
+		list->topLevelItem(i)->setSelected(list->topLevelItem(i)->text(0) == QStringLiteral("film.mkv"));
+
+	const bssh_in_app_player_t built = bssh_in_app_player();
+	struct restore_t {
+		bssh_in_app_player_t was;
+		~restore_t() { bssh_in_app_player() = was; }
+	} restore{ built };
+	bool asked = false;
+	bssh_media_t played;
+	bssh_in_app_player() = [&asked, &played](const bssh_media_t &media, QWidget *area) {
+		if (!area) return false;
+		asked = true;
+		played = media;
+		return true;
+	};
+	QVERIFY(panel.play_selected());
+	QVERIFY(asked);
+	QCOMPARE(QFileInfo(played.path).canonicalFilePath(), QFileInfo(there.filePath(QStringLiteral("film.mkv"))).canonicalFilePath());
+	QStringList names;
+	for (const QString &path : played.subtitles) {
+		/* The files themselves, where they lie: nothing was copied. */
+		QCOMPARE(QFileInfo(path).canonicalPath(), QFileInfo(there.path()).canonicalFilePath());
+		names << QFileInfo(path).fileName();
+	}
+	names.sort();
+	QCOMPARE(names, QStringList({ QStringLiteral("film.en.srt"), QStringLiteral("film.srt") }));
+}
+
 void live_ssh_test::a_second_file_played_leaves_the_first_playing()
 {
 	if (!server_available()) return;
