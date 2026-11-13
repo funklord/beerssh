@@ -109,6 +109,7 @@ private slots:
 	void a_file_dropped_on_a_plain_file_manager_is_read_as_it_arrives();
 	void a_file_played_is_opened_as_it_arrives();
 	void a_seek_in_a_played_file_fetches_its_range_first();
+	void a_second_file_played_closes_the_first();
 	void a_second_file_played_leaves_the_first_playing();
 	void a_film_played_brings_the_subtitles_beside_it();
 	void a_local_film_played_brings_the_subtitles_beside_it();

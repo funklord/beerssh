@@ -4486,6 +4486,20 @@ model on a finger.
   bytes (a weak reference, swept as each Play begins); the desktop's
   file is put away as before.
   `a_second_file_played_leaves_the_first_playing`.
+  **One file at a time -- 2026-11-13.** The side-by-side tiles above were
+  a session's reading of snurra's layout, never asked of the holder, who
+  on seeing a film and a tone play together on the Fold said "we only want
+  to play one file at any time" -- on Android and the desktop alike. A Play
+  now closes what is playing before the next is handed over
+  (`close_playing()`: the media area holds only the player, which may be
+  deleted at any moment with its readers stopped first, embed.h), and the
+  sweep straight after takes the old file, held by nothing. The guarantee
+  above stays, as what the closing rests on. snurra's own app keeps its
+  row of tiles; this is BeerSSH's use of it.
+  `a_second_file_played_closes_the_first`, a sabotage; and on the API 36
+  emulator with snurra's own player, the film played while the tone was
+  still going took its place -- one tile, its subtitle shown, nothing
+  crashed.
   **The panel on a phone, measured by the sweeps it had missed
   (2026-11-12).** `every_touch_surface_names_its_controls` and
   `every_touch_surface_fits_a_phone` predate the panel; with it added,

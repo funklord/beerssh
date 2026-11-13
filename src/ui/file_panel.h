@@ -214,6 +214,7 @@ private:
 	};
 	QList<kept_play_t> m_kept_plays;
 	void sweep_kept_plays();
+	void close_playing();
 	QPoint m_drag_press;
 	void start_drag();
 

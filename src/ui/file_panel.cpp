@@ -743,6 +743,7 @@ bool bssh_file_panel::play_selected() {
 		if (bssh_in_app_player()) media.subtitles = subtitles_beside(entry);
 		media.bytes = std::make_shared<bssh_media_bytes>(path, entry.size);
 		media.bytes->finished(true);
+		if (bssh_in_app_player()) close_playing();
 		if (bssh_in_app_player() && bssh_in_app_player()(media, m_media_area)) {
 			m_media_area->show();
 			return true;
@@ -817,6 +818,7 @@ bool bssh_file_panel::start_play_copy(const bssh_remote_entry_t &entry) {
 		m_play_mounted = bssh_fuse_shelf::add(entry.name, m_play_file, entry.size, pieces);
 	m_session->download_pieces(path, dir, pieces);
 
+	if (bssh_in_app_player()) close_playing();
 	if (bssh_in_app_player() && bssh_in_app_player()(media, m_media_area)) {
 		m_play_in_app = true;
 		m_media_area->show();
@@ -850,9 +852,11 @@ void bssh_file_panel::end_play(bool whole) {
  * The last file played goes when another is: its place on the mount and
  * its staging removed. Kept until then, since a player may be reading it
  * long after the copy is whole -- and kept past it where BeerSSH's own
- * player has it, whose tiles play side by side: a second Play cut the
- * first tile's bytes off mid-play when it went too (2026-11-12). The
- * desktop's player cannot be asked when it is done, so its file goes.
+ * player has it, until the player lets the bytes go: a second Play cut
+ * the first tile's bytes off mid-play when it went too (2026-11-12). That
+ * tile is closed by close_playing() now, one file at a time, and the
+ * sweep after it takes the file. The desktop's player cannot be asked
+ * when it is done, so its file goes.
  */
 void bssh_file_panel::put_away_play() {
 	sweep_kept_plays();
@@ -884,6 +888,19 @@ void bssh_file_panel::put_away_play() {
 	m_play_bytes.reset();
 	m_play_fetching_subtitles = false;
 	m_play_subtitles.clear();
+}
+
+/*
+ * One file playing at a time (the holder, 2026-11-13: "we only want to
+ * play one file at any time", on Android and the desktop alike): what is
+ * playing goes before the next is handed over. The player is all the
+ * area holds, and may be deleted at any moment, its readers of the bytes
+ * stopped first (embed.h) -- so its files are swept straight after, held
+ * by nothing.
+ */
+void bssh_file_panel::close_playing() {
+	qDeleteAll(m_media_area->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly));
+	sweep_kept_plays();
 }
 
 /* Kept files nothing reads any more: off the mount and off the disk. */

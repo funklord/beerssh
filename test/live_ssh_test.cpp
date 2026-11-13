@@ -3402,6 +3402,62 @@ void live_ssh_test::a_local_film_played_brings_the_subtitles_beside_it()
 	QCOMPARE(names, QStringList({ QStringLiteral("film.en.srt"), QStringLiteral("film.srt") }));
 }
 
+void live_ssh_test::a_second_file_played_closes_the_first()
+{
+	/*
+	 * One file playing at a time (the holder, 2026-11-13, on Android and
+	 * the desktop alike): a second Play closes what is playing before the
+	 * next is handed over, and the area holds the one player. A local
+	 * session, so no server is needed.
+	 */
+	QTemporaryDir there;
+	QVERIFY(there.isValid());
+	for (const QString &name : { QStringLiteral("a.ogg"), QStringLiteral("b.ogg") }) {
+		QFile file(there.filePath(name));
+		QVERIFY(file.open(QIODevice::WriteOnly));
+		file.write("ogg");
+	}
+	bssh_profile_t profile;
+	profile.name = QStringLiteral("one-at-a-time");
+	profile.local = true;
+	bssh_session session(profile);
+	session.connect_to_host();
+	bssh_file_panel panel(&session);
+	QSignalSpy listed(&panel, &bssh_file_panel::listed);
+	panel.open_directory(there.path());
+	QTRY_VERIFY_WITH_TIMEOUT(listed.size() == 1, 15000);
+	QTreeWidget *list = panel.findChild<QTreeWidget *>(QStringLiteral("file-panel-list"));
+	QVERIFY(list);
+	const auto select = [list](const QString &name) {
+		list->clearSelection();
+		for (int i = 0; i < list->topLevelItemCount(); ++i)
+			if (list->topLevelItem(i)->text(0) == name) list->topLevelItem(i)->setSelected(true);
+	};
+
+	const bssh_in_app_player_t built = bssh_in_app_player();
+	struct restore_t {
+		bssh_in_app_player_t was;
+		~restore_t() { bssh_in_app_player() = was; }
+	} restore{ built };
+	QList<QPointer<QLabel>> players;
+	bssh_in_app_player() = [&players](const bssh_media_t &media, QWidget *area) {
+		if (!area) return false;
+		players << new QLabel(media.name, area);
+		return true;
+	};
+	QWidget *area = panel.findChild<QWidget *>(QStringLiteral("media-area"));
+	QVERIFY(area);
+
+	select(QStringLiteral("a.ogg"));
+	QVERIFY(panel.play_selected());
+	select(QStringLiteral("b.ogg"));
+	QVERIFY(panel.play_selected());
+	QCOMPARE(players.size(), 2);
+	QVERIFY2(!players.first(), "the first file is still playing beside the second");
+	QVERIFY(players.last());
+	QCOMPARE(area->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly).size(), 1);
+}
+
 void live_ssh_test::a_second_file_played_leaves_the_first_playing()
 {
 	if (!server_available()) return;
@@ -3414,10 +3470,11 @@ void live_ssh_test::a_second_file_played_leaves_the_first_playing()
 	}
 
 	/*
-	 * BeerSSH's own player plays its files side by side, a tile each
-	 * (sec 6.4): a second Play leaves the first file's bytes whole and
-	 * readable for the tile still playing it, and the file goes only
-	 * once nothing holds its bytes -- at the next Play after that.
+	 * A second Play leaves the first file's bytes whole and readable for
+	 * as long as a player still holds them (sec 6.4), and the file goes
+	 * once nothing does. BeerSSH closes the first tile itself now, one
+	 * file at a time (a_second_file_played_closes_the_first); this is the
+	 * guarantee that closing rests on, with a player that keeps them.
 	 */
 	QTemporaryDir there;
 	QVERIFY(there.isValid());

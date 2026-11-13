@@ -275,8 +275,8 @@ expect = "a_file_played_is_opened_as_it_arrives"
 [[sabotage]]
 name = "the in-app player is never asked"
 file = "src/ui/file_panel.cpp"
-find = "\tm_session->download_pieces(path, dir, pieces);\n\n\tif (bssh_in_app_player() && bssh_in_app_player()(media, m_media_area)) {"
-replace = "\tm_session->download_pieces(path, dir, pieces);\n\n\tif (false) {"
+find = "\tif (bssh_in_app_player()) close_playing();\n\tif (bssh_in_app_player() && bssh_in_app_player()(media, m_media_area)) {\n\t\tm_play_in_app = true;"
+replace = "\tif (bssh_in_app_player()) close_playing();\n\tif (false) {\n\t\tm_play_in_app = true;"
 expect = "a_file_played_is_opened_as_it_arrives"
 
 # A playable file opened copies it: on a phone a tap puts up a folder
@@ -370,3 +370,12 @@ file = "src/ui/file_panel.cpp"
 find = "void bssh_file_panel::put_away_play() {\n\tsweep_kept_plays();\n"
 replace = "void bssh_file_panel::put_away_play() {\n"
 expect = "a_second_file_played_leaves_the_first_playing"
+
+# What is playing left playing when the next file is played: two at once
+# (the holder, 2026-11-13: one file at any time).
+[[sabotage]]
+name = "a second Play leaves the first playing beside it"
+file = "src/ui/file_panel.cpp"
+find = "\tqDeleteAll(m_media_area->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly));\n"
+replace = ""
+expect = "a_second_file_played_closes_the_first"
