@@ -2,6 +2,7 @@
 #define BSSH_PANE_CONTAINER_H
 
 #include <QList>
+#include <QPair>
 #include <QString>
 #include <QSet>
 #include <QHash>
@@ -330,6 +331,7 @@ private:
 	QList<divider_ref_t> all_dividers() const;
 	static int divider_at(QSplitter *splitter, int index, const QWidget *in);
 	void move_divider_to(const divider_ref_t &divider, int at);
+	QPair<int, int> divider_reach(const divider_ref_t &divider) const;
 	void begin_divider_drag(QSplitterHandle *handle, bool alone);
 	void follow_divider(QSplitter *splitter, int index);
 	/*

@@ -19,6 +19,8 @@
 #include <QBoxLayout>
 #include <QVBoxLayout>
 
+#include <algorithm>
+#include <climits>
 #include <cstdlib>
 #include <functional>
 #include <utility>
@@ -1243,7 +1245,7 @@ void bssh_pane_container::move_divider_to(const divider_ref_t &divider, int at) 
 	const int after = divider.index;
 	const bool across = splitter->orientation() == Qt::Horizontal;
 	const auto least = [splitter, across](int i) {
-		const QSize hint = splitter->widget(i)->minimumSizeHint();
+		const QSize hint = splitter->widget(i)->minimumSizeHint().expandedTo(splitter->widget(i)->minimumSize());
 		return across ? hint.width() : hint.height();
 	};
 	/* No part below its least: the line stops where a pane would. */
@@ -1308,7 +1310,42 @@ void bssh_pane_container::follow_divider(QSplitter *splitter, int index) {
 		at = divider_at(splitter, index, this);
 	}
 
+	/*
+	 * No further than the most hemmed-in of them can go: one row whose
+	 * pane reached its least stopped while the rest went on, and the
+	 * grid came out of line -- and no longer linked. Seen on macOS, whose
+	 * panes are wider at their least (2026-11-13).
+	 */
+	if (!m_drag_linked.isEmpty()) {
+		QPair<int, int> reach = divider_reach(m_drag);
+		for (const divider_ref_t &link : m_drag_linked) {
+			const QPair<int, int> each = divider_reach(link);
+			reach.first = std::max(reach.first, each.first);
+			reach.second = std::min(reach.second, each.second);
+		}
+		const int held = std::clamp(at, reach.first, std::max(reach.first, reach.second));
+		if (held != at) {
+			move_divider_to(m_drag, held);
+			at = divider_at(splitter, index, this);
+		}
+	}
 	for (const divider_ref_t &link : m_drag_linked) move_divider_to(link, at);
+}
+
+/* How far a divider can go either way before a pane beside it is at its
+ * least, in this container's coordinates. */
+QPair<int, int> bssh_pane_container::divider_reach(const divider_ref_t &divider) const {
+	QSplitter *splitter = divider.splitter;
+	if (!splitter || divider.index < 1 || divider.index >= splitter->count()) return { INT_MIN, INT_MAX };
+	const bool across = splitter->orientation() == Qt::Horizontal;
+	const auto least = [splitter, across](int i) {
+		const QSize hint = splitter->widget(i)->minimumSizeHint().expandedTo(splitter->widget(i)->minimumSize());
+		return across ? hint.width() : hint.height();
+	};
+	const QList<int> sizes = splitter->sizes();
+	const int at = divider_at(splitter, divider.index, this);
+	return { at - (sizes.at(divider.index - 1) - least(divider.index - 1)),
+	         at + (sizes.at(divider.index) - least(divider.index)) };
 }
 
 bool bssh_pane_container::renest_for(QSplitterHandle *handle, const QPoint &global) {

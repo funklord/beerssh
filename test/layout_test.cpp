@@ -11157,6 +11157,39 @@ void layout_test::a_grid_keeps_its_dividers_through_a_rebuild() {
 	}
 }
 
+void layout_test::a_hemmed_in_row_holds_the_grid_in_line() {
+	/*
+	 * One row's middle pane cannot shrink as far as the others' -- as on
+	 * macOS, whose panes are wider at their least -- and a column dragged
+	 * across it stops where that row must, every row with it, rather than
+	 * the rest going on and the grid coming out of line (CI, 2026-11-13).
+	 */
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(1200, 900);
+	layout.set_room(QSize(1200, 900), QSize(120, 80), 8);
+	layout.set_tree(grid_tree(registry, { 3, 3, 3 }));
+	QCoreApplication::processEvents();
+	const QList<QSplitter *> rows = row_splitters(container);
+	QCOMPARE(rows.size(), 3);
+	const int before = handle_x(rows.at(0), 1, &container);
+	rows.at(1)->widget(1)->setMinimumWidth(rows.at(1)->sizes().at(1) - 50);
+	QCoreApplication::processEvents();
+
+	drag_handle(rows.at(0)->handle(1), 200, Qt::NoModifier);
+	const int moved = handle_x(rows.at(0), 1, &container);
+	QVERIFY2(moved > before + 20 && moved < before + 120,
+	         qPrintable(QStringLiteral("the divider went %1 -> %2").arg(before).arg(moved)));
+	for (QSplitter *row : rows) {
+		QVERIFY2(qAbs(handle_x(row, 1, &container) - moved) <= 1,
+		         qPrintable(QStringLiteral("a row's divider at %1, the dragged one at %2")
+		                            .arg(handle_x(row, 1, &container)).arg(moved)));
+	}
+}
+
 void layout_test::a_divider_is_thumb_sized_only_where_a_thumb_uses_it() {
 	/*
 	 * sec 8.3 wants a 48dp effective target on touch and allows the

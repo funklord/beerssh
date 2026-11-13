@@ -117,3 +117,11 @@ file = "src/ui/pane_container.cpp"
 find = "\tif (!column) remember_divisions();\n\tm_splitter->setOrientation(column ? Qt::Vertical : Qt::Horizontal);\n"
 replace = "\tm_splitter->setOrientation(column ? Qt::Vertical : Qt::Horizontal);\n\tif (!column) remember_divisions();\n"
 expect = "a_grid_keeps_its_dividers_through_a_rebuild"
+
+# The rest go on where one row has to stop: the grid out of line.
+[[sabotage]]
+name = "a hemmed-in row does not hold the others back"
+file = "src/ui/pane_container.cpp"
+find = "\tif (!m_drag_linked.isEmpty()) {\n\t\tQPair<int, int> reach = divider_reach(m_drag);\n"
+replace = "\tif (false) {\n\t\tQPair<int, int> reach = divider_reach(m_drag);\n"
+expect = "a_hemmed_in_row_holds_the_grid_in_line"

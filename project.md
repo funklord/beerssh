@@ -8066,7 +8066,14 @@ a tab dragged to the end of a two-tab bar would tear itself out mid-reorder.
   that moment and were remembered so -- every pane a ninth of the width
   and the whole height. A grid came back from any rebuild (a tab opened,
   a pane moved) with its dividers moved; they are remembered before the
-  turn now (`a_grid_keeps_its_dividers_through_a_rebuild`). The layout's pane order
+  turn now (`a_grid_keeps_its_dividers_through_a_rebuild`). **CI's macOS
+  job found the next:** its panes are wider at their least, and a column
+  dragged far enough left one row's middle pane at its least while the
+  other rows went on -- out of line, and so no longer linked, and a
+  double click then evened out only part of the grid. A linked drag now
+  stops where the most hemmed-in row must, every row with it
+  (`a_hemmed_in_row_holds_the_grid_in_line`, reproduced here by giving
+  one pane a larger least). The layout's pane order
   follows the new nesting (columns first after such a break), which moves
   focus-next and the order panes fold into tabs. The design, limit
   included, was agreed with the holder before it was built.
