@@ -7,6 +7,7 @@
 #include <QGraphicsOpacityEffect>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QTimer>
 #include <QToolButton>
 
 #include "platform/platform.h"
@@ -204,15 +205,32 @@ void bssh_pane_corner::sync_opacity() {
 }
 
 void bssh_pane_corner::enterEvent(QEnterEvent *event) {
-	m_hovered = true;
-	sync_opacity();
+	set_hovered(true);
 	QWidget::enterEvent(event);
 }
 
 void bssh_pane_corner::leaveEvent(QEvent *event) {
-	m_hovered = false;
-	sync_opacity();
+	set_hovered(false);
 	QWidget::leaveEvent(event);
+}
+
+void bssh_pane_corner::set_hovered(bool hovered) {
+	m_hovered = hovered;
+	sync_opacity();
+	if (!hovered) {
+		if (m_hover_check) m_hover_check->stop();
+		return;
+	}
+	/* Four times a second, only while pointed at: the pointer off it is
+	 * the corner faint again, whatever Qt did or did not send. */
+	if (!m_hover_check) {
+		m_hover_check = new QTimer(this);
+		m_hover_check->setInterval(250);
+		connect(m_hover_check, &QTimer::timeout, this, [this] {
+			if (!isVisible() || !rect().contains(mapFromGlobal(QCursor::pos()))) set_hovered(false);
+		});
+	}
+	m_hover_check->start();
 }
 
 /*
@@ -224,14 +242,12 @@ void bssh_pane_corner::leaveEvent(QEvent *event) {
  * remember some state" (the holder, 2026-11-13).
  */
 void bssh_pane_corner::showEvent(QShowEvent *event) {
-	m_hovered = rect().contains(mapFromGlobal(QCursor::pos()));
-	sync_opacity();
+	set_hovered(rect().contains(mapFromGlobal(QCursor::pos())));
 	QWidget::showEvent(event);
 }
 
 void bssh_pane_corner::hideEvent(QHideEvent *event) {
-	m_hovered = false;
-	sync_opacity();
+	set_hovered(false);
 	QWidget::hideEvent(event);
 }
 

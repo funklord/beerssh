@@ -92,6 +92,14 @@ private:
 	int m_grip_side = 18;
 	bool m_faint_when_idle = false;
 	bool m_hovered = false;
+	/*
+	 * Asked while it believes it is pointed at: shown under a pointer
+	 * standing still -- focus following the mouse onto its pane -- it got
+	 * no enter from Qt, and so no leave when the pointer moved off, and
+	 * stayed solid (seen under Xvfb, 2026-11-13).
+	 */
+	QTimer *m_hover_check = nullptr;
+	void set_hovered(bool hovered);
 	class QGraphicsOpacityEffect *m_opacity;
 };
 

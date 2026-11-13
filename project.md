@@ -11414,7 +11414,16 @@ used is the missing fact.
     shows on the focused pane only, so it is hidden and shown all the
     time, and one hidden under the pointer got no leave and stayed
     "pointed at" for good. Shown, it asks where the pointer is; hidden,
-    it is not pointed at;
+    it is not pointed at. **And then, the same day, still sometimes**: a
+    corner shown under a pointer standing still -- focus following the
+    mouse onto its pane -- gets no enter from Qt, so no leave when the
+    pointer moves off. While it believes it is pointed at it now asks
+    where the pointer is four times a second. Reproduced under Xvfb with
+    xdotool on a 2x1 grid: the pointer warped onto the second pane's
+    corner and then off left it solid (mean 46.8 against 14.5 faint);
+    with the check it is 14.5 within a second. The offscreen test
+    platform sends enter and leave itself, so no unit test can show it;
+    the Xvfb run is the evidence;
   - the drawer's **x closes the panel and nothing more**. It used to
     decline the offer and take the handle with it, which suited a handle
     on the text's edge; the session's decline and the terminal menu's
