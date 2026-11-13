@@ -1348,14 +1348,17 @@ ANDROID_MEDIA ?= 1
 
 # FFmpeg on Android is the kit's: the libraries Qt ships for its own
 # multimedia, without headers (snurra's snurra.pri says so too). They are
-# compiled against the same release's headers, taken from FFMPEG_HEADERS
-# -- the desktop's, by default, which live in the multiarch directory
-# beside glibc's and so must not go on an NDK compile's path whole: the
-# four FFmpeg directories alone are copied, by name, into this build's
-# tree. The majors are compared before anything is compiled, because a
-# header from one release against a library from another compiles,
-# links and then reads the wrong field of a struct at run time.
-FFMPEG_HEADERS ?= $(shell pkg-config --variable=includedir libavformat 2>/dev/null)
+# compiled against the same release's headers, which
+# tool/ffmpeg-headers.sh chooses: FFMPEG_HEADERS when given, else the
+# desktop's when their libavformat major is the kit's, else the release's
+# own, fetched once into build-ffmpeg/ against a pinned sum -- which is
+# what the released 6.12.0 kit (FFmpeg 9.0) needs beside Debian's 7.1.
+# The desktop's live in the multiarch directory beside glibc's and so
+# must not go on an NDK compile's path whole: the four FFmpeg
+# directories alone are copied, by name, into this build's tree.
+FFMPEG_HEADERS ?=
+FFMPEG_DESKTOP_HEADERS = $(shell pkg-config --variable=includedir libavformat 2>/dev/null)
+FFMPEG_HEADER_CACHE = build-ffmpeg
 ANDROID_FFMPEG_DIRS = libavformat libavcodec libavutil libswresample
 ANDROID_FFMPEG_INCLUDE = $(ANDROID_BUILD_DIR)/ffmpeg-include
 
@@ -1370,33 +1373,16 @@ ANDROID_FFMPEG_SOURCE = $(ANDROID_BUILD_DIR)/ffmpeg-include.source
 
 $(ANDROID_FFMPEG_SOURCE): FORCE
 	@mkdir -p $(ANDROID_BUILD_DIR); \
-	want='$(QT_ANDROID_ROOT) $(FFMPEG_HEADERS)'; \
+	want='$(QT_ANDROID_ROOT) $(FFMPEG_HEADERS) $(FFMPEG_DESKTOP_HEADERS)'; \
 	[ "$$(cat $@ 2>/dev/null)" = "$$want" ] || echo "$$want" > $@
 
-$(ANDROID_FFMPEG_INCLUDE)/.copied: $(ANDROID_FFMPEG_SOURCE) | android-check
-	@for d in $(ANDROID_FFMPEG_DIRS); do \
-		[ -d "$(FFMPEG_HEADERS)/$$d" ] || { \
-			echo "android: no FFmpeg headers for $$d under '$(FFMPEG_HEADERS)'" >&2; \
-			echo "android:   snurra compiles against the Qt kit's FFmpeg, which ships none;" >&2; \
-			echo "android:   install the same release's (Debian: libavformat-dev libavcodec-dev" >&2; \
-			echo "android:   libswresample-dev) or point FFMPEG_HEADERS at a copy" >&2; \
-			exit 1; }; \
-	done
-	@have=$$(sed -n 's/^#define LIBAVFORMAT_VERSION_MAJOR *\([0-9]*\).*/\1/p' $(FFMPEG_HEADERS)/libavformat/version_major.h); \
-	kit=$$(strings $(QT_ANDROID_ROOT)/lib/libavformat.so 2>/dev/null | sed -n 's|^Lavf/\{0,1\}\([0-9][0-9]*\)\..*|\1|p' | head -1); \
-	if [ -z "$$kit" ]; then \
-		echo "android: the Qt kit has no FFmpeg ($(QT_ANDROID_ROOT)/lib/libavformat.so);" >&2; \
-		echo "android:   it comes with Qt Multimedia -- install that module for this kit" >&2; \
-		exit 1; \
-	fi; \
-	if [ "$$have" != "$$kit" ]; then \
-		echo "android: FFmpeg headers are libavformat $$have, the kit's library $$kit" >&2; \
-		echo "android:   point FFMPEG_HEADERS at the kit's release's headers" >&2; \
-		exit 1; \
-	fi
-	mkdir -p $(ANDROID_FFMPEG_INCLUDE)
-	for d in $(ANDROID_FFMPEG_DIRS); do rm -rf $(ANDROID_FFMPEG_INCLUDE)/$$d; done
-	for d in $(ANDROID_FFMPEG_DIRS); do cp -r $(FFMPEG_HEADERS)/$$d $(ANDROID_FFMPEG_INCLUDE)/; done
+$(ANDROID_FFMPEG_INCLUDE)/.copied: $(ANDROID_FFMPEG_SOURCE) tool/ffmpeg-headers.sh | android-check
+	@from=$$(tool/ffmpeg-headers.sh $(QT_ANDROID_ROOT)/lib/libavformat.so \
+	        '$(FFMPEG_HEADERS)' '$(FFMPEG_DESKTOP_HEADERS)' $(FFMPEG_HEADER_CACHE)) || exit 1; \
+	echo "android: FFmpeg headers from $$from"; \
+	mkdir -p $(ANDROID_FFMPEG_INCLUDE) || exit 1; \
+	for d in $(ANDROID_FFMPEG_DIRS); do rm -rf $(ANDROID_FFMPEG_INCLUDE)/$$d; done; \
+	for d in $(ANDROID_FFMPEG_DIRS); do cp -r $$from/$$d $(ANDROID_FFMPEG_INCLUDE)/ || exit 1; done
 	touch $@
 
 ifeq ($(ANDROID_MEDIA),1)
@@ -1404,7 +1390,40 @@ ANDROID_MEDIA_DEPS  = $(SNURRA_DIR)/snurra.pri $(ANDROID_FFMPEG_INCLUDE)/.copied
 ANDROID_MEDIA_QMAKE = BSSH_MEDIA=1 SNURRA_FFMPEG_INCLUDE=$(abspath $(ANDROID_FFMPEG_INCLUDE))
 endif
 
-$(ANDROID_BUILD_DIR)/Makefile: android-check $(VTERM_ANDROID_LIB) $(ANDROID_PRO) $(ANDROID_MEDIA_DEPS)
+# Which Qt kit this build directory's objects were compiled against: its
+# path and its QtCore's size and date. Qt's headers carry the dates of
+# the kit's archives, older than any object here, so updating a kit in
+# place -- the July 6.12.0 pre-release to the release, 2026-11-13 --
+# rebuilt nothing and linked objects made from the old headers against
+# the new libraries (an undefined QSaveFile::setPermissions). When the
+# kit moves, or a directory built before this record has none, its
+# objects are cleaned by qmake's own clean, which removes the files it
+# names. So is android-build/libs, the staging tree androiddeployqt
+# fills from the kit: it skips a library whose staged copy is newer, so
+# the APK went on carrying the pre-release's QtCore and FFmpeg 7.1 and
+# died at start on "cannot locate symbol av_freep". `make` rather than
+# $(MAKE), so a dry run prints it and runs nothing; the record is
+# written only when it changes.
+ANDROID_KIT_SOURCE = $(ANDROID_BUILD_DIR)/kit.source
+
+$(ANDROID_KIT_SOURCE): FORCE
+	@mkdir -p $(ANDROID_BUILD_DIR); \
+	want="$(QT_ANDROID_ROOT) $$(stat -c '%s %Y' $(QT_ANDROID_ROOT)/lib/libQt6Core_$(ANDROID_ABI).so 2>/dev/null)"; \
+	have=$$(cat $@ 2>/dev/null); \
+	[ "$$have" = "$$want" ] && exit 0; \
+	if [ -f $(ANDROID_BUILD_DIR)/Makefile ]; then \
+		echo "android: the Qt kit is not the one $(ANDROID_BUILD_DIR) was built with; cleaning its objects"; \
+		make -C $(ANDROID_BUILD_DIR) clean >/dev/null || exit 1; \
+	fi; \
+	case "$(ANDROID_BUILD_DIR)" in ''|/*|*..*) ;; *) \
+		if [ -d "$(ANDROID_BUILD_DIR)/android-build/libs" ]; then \
+			echo "android: and the libraries staged from the old kit"; \
+			rm -rf "$(ANDROID_BUILD_DIR)/android-build/libs" || exit 1; \
+		fi ;; \
+	esac; \
+	echo "$$want" > $@
+
+$(ANDROID_BUILD_DIR)/Makefile: android-check $(ANDROID_KIT_SOURCE) $(VTERM_ANDROID_LIB) $(ANDROID_PRO) $(ANDROID_MEDIA_DEPS)
 	mkdir -p $(ANDROID_BUILD_DIR)
 	cd $(ANDROID_BUILD_DIR) && $(QT_ANDROID_ROOT)/bin/qmake ../$(ANDROID_PRO) $(QMAKE_CONFIG) \
 	        BSSH_VERSION=$(VERSION) BSSH_VERSION_CODE=$(ANDROID_VERSION_CODE) $(ANDROID_MEDIA_QMAKE)

@@ -245,27 +245,11 @@ jobs:
           path: ~/.gradle/wrapper/dists
           key: gradle-dists-qt6.12.0
 
-      # snurra compiles against the kit's FFmpeg, which ships no headers.
-      # The released 6.12.0 kit's is FFmpeg 9.0 (libavformat 63, read by
-      # the Makefile's guard on this job's first run, 2026-11-13), and
-      # the runner's own headers are 6.1 -- a mismatch the Makefile
-      # refuses. So 9.0's public headers come from the release tarball,
-      # checked against a pinned sum, copied rather than configured:
-      # nothing of the download runs. The one header configure writes,
-      # avconfig.h, says little-endian with fast unaligned loads, as it
-      # does for arm64. A new kit with another FFmpeg fails the guard by
-      # name; move the version and the sum together.
-      - name: FFmpeg headers for the kit
-        run: |
-          set -e
-          curl -sSfL -o ffmpeg-9.0.tar.xz https://ffmpeg.org/releases/ffmpeg-9.0.tar.xz
-          echo "7f607a00dd0d28a729d5a4811205812eef01cf6ef6155025febb6f36a9062d52  ffmpeg-9.0.tar.xz" | sha256sum -c -
-          tar xf ffmpeg-9.0.tar.xz --wildcards 'ffmpeg-9.0/libavformat/*.h' 'ffmpeg-9.0/libavcodec/*.h' \
-              'ffmpeg-9.0/libavutil/*.h' 'ffmpeg-9.0/libswresample/*.h'
-          printf '%s\n' '#ifndef AVUTIL_AVCONFIG_H' '#define AVUTIL_AVCONFIG_H' \
-              '#define AV_HAVE_BIGENDIAN 0' '#define AV_HAVE_FAST_UNALIGNED 1' '#endif' \
-              > ffmpeg-9.0/libavutil/avconfig.h
-          echo "FFMPEG_HEADERS=$PWD/ffmpeg-9.0" >> "$GITHUB_ENV"
+      # snurra compiles against the kit's FFmpeg, which ships no headers;
+      # the released 6.12.0 kit's is 9.0 and the runner's own are 6.1.
+      # The build fetches the kit's release's headers itself, against the
+      # pinned sum in tool/ffmpeg-headers.sh, so this job needs no step
+      # of its own and the version and sum live in one place.
 
       # Compiles and links libbeerssh_arm64-v8a.so. Packaging into an AAB
       # additionally needs the SDK, which the runner image provides.

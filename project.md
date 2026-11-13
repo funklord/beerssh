@@ -4581,43 +4581,49 @@ model on a finger.
   **On Android, 2026-11-13 -- the holder: "ship snurra in the android
   apk too".** `make android` compiles snurra in (`ANDROID_MEDIA ?= 1`;
   beersshd's build sets it empty), against the FFmpeg Qt's kit ships for
-  its own multimedia, without headers -- **7.1 in this machine's kit,
-  9.0 in the released 6.12.0 CI installs**: the local kit is a July
-  pre-release (`~/Qt/components.xml`, 202607...), the release's
-  multimedia archive is 2026-09-28. The headers come from
-  `FFMPEG_HEADERS` -- the desktop's by default -- and only the four
-  FFmpeg directories are copied into the build tree, since the multiarch
-  directory they sit in holds glibc's too. Before copying, the header's
-  libavformat major is compared with the kit library's (`Lavf61` in its
-  strings), because a mismatch compiles and links and then reads the
-  wrong struct field at run time; both refusals were run. **The copy
-  is re-checked when the kit or the headers change**: its stamp first
-  outlived both, so a build directory rebuilt against the other kit kept
-  its old headers and 9.0's went through against the 7.1 kit unchecked
-  (2026-11-13); `ffmpeg-include.source` records the pair, rewritten only
-  when it moves. And **the
-  guard earned itself on CI's first run**, refusing the runner's
-  headers against the release kit's libavformat 63. CI's Android job
-  takes 9.0's public headers from the release tarball, checksum pinned,
-  copied rather than configured -- nothing of the download runs -- with
-  `avconfig.h` written by hand (little-endian, fast unaligned). Qt
-  Multimedia joins the job's modules, since the kit's FFmpeg comes with
-  it. snurra's 18 sources compile for arm64 against both 7.1's and
-  9.0's headers. **Both have played**: 7.1 in the emulator run below,
-  and 9.0 the same day once the released kit was installed here, on the
-  holder's word, with aqt into `~/Qt-release/6.12.0` (host `gcc_64`,
-  `android_x86_64` and `android_arm64_v8a` with Qt Multimedia, 2.9 GB)
-  -- beside the pre-release rather than over it, since the other Android
-  trees build from `~/Qt/6.12.0`. Its libavformat reads `Lavf63.1.101`
-  and its `qdevice.pri` names NDK r27c, as the pre-release's does; CI's
-  9.0 headers sit beside it in `ffmpeg-9.0-headers`. A release-kit build
-  is `make android QT_ANDROID_ROOT=$HOME/Qt-release/6.12.0/android_<abi>
-  FFMPEG_HEADERS=$HOME/Qt-release/6.12.0/ffmpeg-9.0-headers
-  ANDROID_BUILD_DIR=build-android-rel-<abi>`, the last so its copied
-  headers and objects never mix with a pre-release build's. The x86_64
-  APK is 61 MB (arm64 58 MB); on the API 36 emulator the 8 s tone ran to
-  its end through AAudio and the test film played with "SUBTITLE FROM
-  THE HOST" over it. The Fold has played neither yet. Told to
+  its own multimedia, without headers: **9.0 (libavformat 63) in the
+  released 6.12.0 kit**, which `~/Qt/6.12.0` is since 2026-11-13 -- the
+  holder had it replace the July pre-release (FFmpeg 7.1) that was there,
+  through the kit's own MaintenanceTool, so its record of what is
+  installed stays true (438 components, build 20260928). Only the four
+  FFmpeg header directories are copied into the build tree, chosen by
+  `tool/ffmpeg-headers.sh`: `FFMPEG_HEADERS` when given, else the
+  desktop's when their libavformat major is the kit's, else the kit's
+  release's own, fetched once into `build-ffmpeg/` from ffmpeg.org's
+  tarball against a pinned sum -- headers extracted, nothing of the
+  download run, `avconfig.h` written by hand (little-endian, fast
+  unaligned). A kit whose major has no pinned release is refused by
+  name; the table holds 7.1 and 9.0, both fetched and checked. CI's
+  Android job uses the same path, so the version and sum live in one
+  place. Whatever is chosen has the kit's major, because a header from
+  one release against a library from another compiles and links and
+  then reads the wrong struct field at run time; **the guard earned
+  itself on CI's first run**, refusing the runner's 6.1 headers against
+  the release kit's 63.
+  **A build directory follows its kit.** Two stamps first outlived a
+  change of kit, each found that day: the header copy kept 7.1's
+  headers after the kit moved to 9.0 without re-running the comparison,
+  and -- once the kit was updated in place -- objects compiled against
+  the pre-release's Qt headers linked against the release's libraries
+  (an undefined `QSaveFile::setPermissions`), because the new headers
+  carry archive dates older than the objects. `ffmpeg-include.source`
+  and `kit.source` record what each was built from (the kit's path and
+  its QtCore's size and date), rewritten only when they move; a changed
+  kit has the directory's objects cleaned by qmake's own `clean` and its
+  `android-build/libs` removed, a dry run cleaning nothing. The second
+  half was found by launching: androiddeployqt skips a library whose
+  staged copy is newer than the kit's, so the rebuilt APK still carried
+  the pre-release's QtCore and FFmpeg 7.1 and died at start on `cannot
+  locate symbol "av_freep"` (the 9.0 binary wants `LIBAVUTIL_61`, the
+  staged copy was `_59`). After the fix every staged library from the
+  kit compares equal to the kit's, and the app starts. Each half was
+  reproduced before its fix and passed after it. Qt Multimedia joins CI's modules, since the kit's FFmpeg
+  comes with it.
+  **Played against both**: 7.1 in the emulator run below, and 9.0 the
+  same day from the released kit -- the x86_64 APK, 61 MB, ran the 8 s
+  tone to its end through AAudio and played the test film with
+  "SUBTITLE FROM THE HOST" over it on the API 36 emulator. The arm64
+  APK builds; the Fold has played neither yet. Told to
   snurra, whose own Android build copies the desktop's headers with no
   such check (its inbox, 20261113T0126Z).
   **The deploy list had to learn them.** `beerssh.pro` names exactly
