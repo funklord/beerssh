@@ -241,6 +241,7 @@ private slots:
 	void the_script_toggle_is_offered_only_where_it_does_something();
 	void the_detach_action_makes_a_window();
 	void the_last_tab_does_not_tear_out();
+	void a_held_size_keeps_the_cursors_line();
 	void a_pane_can_be_moved_along_the_arrangement();
 	void a_tab_can_be_moved_along_the_bar();
 	void touch_gets_no_pane_grip();

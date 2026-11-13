@@ -917,6 +917,9 @@ void bssh_session::resize(int cols, int rows) {
 	m_cols = cols;
 	m_rows = rows;
 
+	/* Held, the screen waits too (below), and takes the size it settles at
+	 * when the hold is released. */
+	if (m_size_holds) return;
 	m_emulator->resize(cols, rows);
 	send_size();
 }
@@ -927,12 +930,24 @@ void bssh_session::resize(int cols, int rows) {
  * pane out at its minimum width for a moment, the shell was told 20
  * columns and then 64, and bash, redrawing a prompt that had wrapped at
  * 20, moved up past it and cleared the lines above -- the terminal came
- * out of the split showing only a prompt. The screen here follows every
- * size, since what is drawn has to fit; the remote waits while held.
+ * out of the split showing only a prompt. The remote waits while held.
+ *
+ * And so does the screen here, since 2026-11-13. It followed every size,
+ * so that what is drawn fits, and a passing narrow size -- the 20 columns
+ * above -- cut the line with the cursor at its edge (vterm-patch/0021:
+ * cut for the shell to redraw), but the program is not told a held size,
+ * so nothing is redrawn for it: output still being written on that line
+ * kept the cut. For the moment of the hold the view draws the screen it
+ * had, which a view already does with a screen of another size; it takes
+ * the settled size on release.
  */
 void bssh_session::hold_size(bool held) {
 	m_size_holds = qMax(0, m_size_holds + (held ? 1 : -1));
-	if (!m_size_holds) send_size();
+	if (m_size_holds) return;
+	const bssh_screen &screen = m_emulator->screen();
+	if (m_cols > 0 && m_rows > 0 && (screen.cols() != m_cols || screen.rows() != m_rows))
+		m_emulator->resize(m_cols, m_rows);
+	send_size();
 }
 
 void bssh_session::send_size() {

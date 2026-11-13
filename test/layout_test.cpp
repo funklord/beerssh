@@ -4107,6 +4107,38 @@ void layout_test::a_tab_can_be_moved_along_the_bar() {
 	QCOMPARE(registry->sessions(), registry_before);
 }
 
+void layout_test::a_held_size_keeps_the_cursors_line() {
+	/*
+	 * The line with the cursor is cut at the edge when the screen narrows,
+	 * for the shell to redraw (vterm-patch/0021) -- but while a split
+	 * settles the shell is not told the sizes it passes through, so
+	 * nothing redraws what a passing narrow size cut, and with Android's
+	 * mksh nothing redraws it at all: Split Beside Current left the local
+	 * shell's prompt line blank (an Android emulator, 2026-11-13; the
+	 * shell was told 40x44 and 42x44 and nothing narrower). Held, the
+	 * screen waits for the size it settles at, as the remote does.
+	 */
+	bssh_session_registry registry;
+	bssh_session *session = registry.create(named(QStringLiteral("held")));
+	session->resize(80, 24);
+	const QString prompt = QStringLiteral(":/data/data/se.vibes.beerssh/files $");
+	session->emulator()->feed("ready\r\n" + prompt.toUtf8() + ' ');
+
+	session->hold_size(true);
+	session->resize(12, 40);
+	session->resize(44, 42);
+	session->hold_size(false);
+
+	QCOMPARE(session->emulator()->screen().cols(), 44);
+	QCOMPARE(session->emulator()->screen().rows(), 42);
+	QVERIFY2(session->emulator()->screen().to_text().contains(prompt),
+	         qPrintable(session->emulator()->screen().to_text().left(200)));
+
+	/* Not held, the screen follows at once, as before. */
+	session->resize(50, 20);
+	QCOMPARE(session->emulator()->screen().cols(), 50);
+}
+
 void layout_test::a_pane_can_be_moved_along_the_arrangement() {
 	bssh_main_window window;
 	window.resize(1400, 700);

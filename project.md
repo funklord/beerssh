@@ -7716,6 +7716,24 @@ between a widget and the screen.
   once. Reproduced with real shells (offscreen) as well as on screen;
   `splitting_a_pane_keeps_what_its_terminals_show` holds the sizes told and
   the screen's lines.
+  **And the screen waits too, since 2026-11-13.** It followed every size
+  so that what is drawn fits, and the passing 20 columns cut the line with
+  the cursor at its edge, as vterm-patch/0021 does for the shell to redraw
+  -- but nothing is told a held size, so nothing redraws for it, and
+  output still being written on that line kept the cut. Held, the screen
+  keeps the size it had and takes the settled one on release; the view
+  draws a screen of another size for that moment, as it already could.
+  0021's chosen cost stands for a real narrowing the program is told of.
+  `a_held_size_keeps_the_cursors_line` fails before and passes after; two
+  sabotages in `resize-to-the-remote.toml`.
+  **Not the cause of what prompted it**, which is worth keeping: on an
+  Android emulator Split Beside Current left the local shell's prompt
+  line blank, and so did a divider drag. Traced byte by byte: the held
+  sizes never went below the settled 44 columns, and Android's mksh (R59)
+  answers its first SIGWINCH by writing CR, 43 spaces and 43 backspaces --
+  blanking its own line -- and does not print the prompt again until the
+  next Enter. That is the shell's, as in any terminal running it; a
+  widening, by contrast, it answers with a fresh prompt on a new line.
 - **A bar a tab was torn from stayed drawn mid-move.** A tab slid along its
   bar and on out of it was left drawn half way along the row, over the "+",
   once it was dropped somewhere that changed nothing: the tear-out takes the

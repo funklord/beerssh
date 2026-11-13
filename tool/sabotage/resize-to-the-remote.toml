@@ -39,3 +39,22 @@ file = "src/model/session.cpp"
 find = "\tif (cols == m_cols && rows == m_rows) return;"
 replace = "\tif (cols == m_cols) return;"
 expect = "a_resized_pane_tells_the_remote_its_size"
+
+# The screen here waits while a size is held, as the remote does: a
+# passing narrow size cut the cursor's line at its edge, and the shell,
+# not told that size, never redrew it -- the local shell's prompt line
+# blank after Split Beside Current on Android (2026-11-13).
+[[sabotage]]
+name = "a held size still narrows the screen"
+file = "src/model/session.cpp"
+find = "\tif (m_size_holds) return;\n\tm_emulator->resize(cols, rows);\n"
+replace = "\tm_emulator->resize(cols, rows);\n"
+expect = "a_held_size_keeps_the_cursors_line"
+
+# And its other half: released, the screen takes the size it settled at.
+[[sabotage]]
+name = "a released hold leaves the screen at its old size"
+file = "src/model/session.cpp"
+find = "\t\tm_emulator->resize(m_cols, m_rows);\n\tsend_size();\n"
+replace = "\tsend_size();\n"
+expect = "a_held_size_keeps_the_cursors_line"
