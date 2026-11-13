@@ -598,6 +598,17 @@ void bssh_file_panel::activate(QTreeWidgetItem *item) {
 		open_directory(remote_path_of(entry));
 		return;
 	}
+	/*
+	 * A file Play takes is played, as a file manager opens a song (sec
+	 * 6.4, *A media tile*): on a phone the tap had put up a folder picker
+	 * for a copy, and Play hid behind More (2026-11-13). Only for the one
+	 * file activated, so a selection of several still copies.
+	 */
+	const QList<QTreeWidgetItem *> selected = m_list->selectedItems();
+	if (selected.size() == 1 && selected.first() == item && can_play_selected()) {
+		play_selected();
+		return;
+	}
 	if (m_download_directory.isEmpty()) copy_selected_elsewhere();
 	else copy_selected_to(m_download_directory);
 }

@@ -3122,6 +3122,16 @@ void live_ssh_test::a_file_played_is_opened_as_it_arrives()
 	QCOMPARE(read_back.size(), bytes.size());
 	QVERIFY2(read_back == bytes, "the in-app player read other bytes than the host's");
 	QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty(), 15000);
+
+	/* Opened as a file manager opens a song -- a tap on a phone, a double
+	 * click here -- it plays rather than being copied elsewhere. */
+	handed.reset();
+	handed_name.clear();
+	select(QStringLiteral("clip.ogg"));
+	QTreeWidgetItem *clip = list->selectedItems().value(0);
+	QVERIFY(clip);
+	emit list->itemActivated(clip, 0);
+	QVERIFY2(handed && handed_name == QStringLiteral("clip.ogg"), "opening a playable file did not play it");
 	delete session;
 }
 

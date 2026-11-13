@@ -4603,8 +4603,15 @@ model on a finger.
   `.ogg` (it is offered on Android only when the in-app player exists),
   snurra's tile opened over the list, AAudio opened shared at 48 kHz,
   the copy read "All here" and the playhead ran to the end of the 8 s
-  tone. On a phone a tap on a file opens it -- a copy to a chosen
-  folder -- so Play is reached from More with the row selected.
+  tone. On a phone a tap on a file opened it -- a copy to a chosen
+  folder -- so Play was reached only from More with the row selected.
+  **Opening a playable file now plays it** (the same day), as this
+  section's *A media tile* entry always said and the code never did: a
+  tap on a phone, a double click on the desktop -- where it goes to
+  BeerSSH's player or the desktop's, as Play does. A selection of
+  several, and every other file, still copies; Copy to... and a drag
+  copy a media file as before
+  (`a_file_played_is_opened_as_it_arrives`, a sabotage).
   Not yet on the Fold (arm64, One UI's audio).
   **Step 3, the phone's form, built 2026-11-11 and not yet seen on a
   device.** On touch the panel lies over the terminal view, its child,

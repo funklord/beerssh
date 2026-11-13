@@ -279,6 +279,15 @@ find = "\tm_session->download_pieces(path, dir, pieces);\n\n\tif (bssh_in_app_pl
 replace = "\tm_session->download_pieces(path, dir, pieces);\n\n\tif (false) {"
 expect = "a_file_played_is_opened_as_it_arrives"
 
+# A playable file opened copies it: on a phone a tap puts up a folder
+# picker, and Play is only behind More.
+[[sabotage]]
+name = "opening a playable file copies it rather than playing it"
+file = "src/ui/file_panel.cpp"
+find = "\tif (selected.size() == 1 && selected.first() == item && can_play_selected()) {"
+replace = "\tif (false) {"
+expect = "a_file_played_is_opened_as_it_arrives"
+
 # The file played before kept on disk and on the mount, one per Play.
 [[sabotage]]
 name = "a file played before is never put away"
