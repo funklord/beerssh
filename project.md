@@ -4527,9 +4527,23 @@ model on a finger.
   player, and the day the pin passes it BeerSSH plays in snurra's tile
   with nothing here changed. The glue was compiled against the proposed
   header verbatim (syntax only, snurra's real `source.h`).
+  **Default on the Linux desktop since 2026-11-13** -- the holder, "Snurra
+  is kinda done for this purpose", after the packaged BeerSSH handed a
+  video to mpv while the APK had played in its own panel since that
+  morning. The default build compiles snurra in (`DESKTOP_MEDIA ?= 1` on
+  Linux; `DESKTOP_MEDIA=` turns it off), and so does the package, which
+  builds with plain `make`; `debian/control` and CI's Linux job gained
+  FFmpeg's and ALSA's development packages. Not on macOS: snurra's
+  desktop sound is ALSA's. An existing build tree follows the switch --
+  `build/media.source` records it, rewritten only when it moves, and the
+  compile-flag check in the qmake rule rebuilds the tree from clean; seen
+  so here. `make media` is a name for the default build now, and
+  `build-media/` is no longer written. Ubuntu 24.04's FFmpeg 6.1 was
+  checked before CI met it: snurra's 19 desktop sources compile against
+  6.1.1's headers (syntax only). The paragraph below is how it began.
   **The build:** snurra is a submodule at `snurra/`, pinned (`611b7f9` at
-  first), and `make media` builds BeerSSH with it into `build-media/` --
-  never the default tree, and never part of `all`. It fetches the
+  first), and `make media` built BeerSSH with it into `build-media/` --
+  then never the default tree, and never part of `all`. It fetches the
   submodule there and only there, stops if it cannot, and asks
   pkg-config for snurra's libraries first, naming the Debian package for
   any missing (`media-check`). Moving the pin is how BeerSSH takes up

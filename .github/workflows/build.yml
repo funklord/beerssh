@@ -87,7 +87,10 @@ jobs:
           # nothing about the server.
           sudo apt-get install -y qt6-base-dev libgl1-mesa-dev cmake \
                                   libsixel-dev libssl-dev libsecret-1-dev \
-                                  zlib1g-dev libxcb1-dev openssh-client
+                                  zlib1g-dev libxcb1-dev openssh-client \
+                                  libavformat-dev libavcodec-dev \
+                                  libswresample-dev libswscale-dev \
+                                  libavutil-dev libasound2-dev
       # The curated set, from the fonts job's cache, so the suite's tests
       # of the set run here too. Without it seven of them skip ("the fonts
       # have not been fetched here"), and the set the packages ship was

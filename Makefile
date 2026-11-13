@@ -730,7 +730,35 @@ endef
 # the compiler's, from the build just before. See the fragment.
 QMAKE_SUBMAKE = -f Makefile -f $(CURDIR)/tool/qmake-deps.mk
 
-$(BUILD_DIR)/Makefile: beerssh.pro
+# snurra in the desktop build, by default -- the holder, 2026-11-13: "Snurra
+# is kinda done for this purpose", after the packaged BeerSSH handed a
+# video to mpv while the APK had played in its own panel since that
+# morning. On Linux only: snurra's desktop sound is ALSA's, which macOS
+# has not, and that build keeps the desktop's player. DESKTOP_MEDIA= turns
+# it off -- a machine without FFmpeg's development files, say; without it
+# the build stops and names the packages (media-check) rather than
+# building less than it was asked for.
+#
+# Which way the tree was configured is kept in media.source, rewritten
+# only when it moves: the switch changes the compile flags, and qmake runs
+# again only when a file it depends on moves, so a tree built before would
+# otherwise have kept building without snurra.
+DESKTOP_MEDIA ?= $(if $(filter Linux,$(shell uname -s)),1,)
+DESKTOP_MEDIA_SOURCE = $(BUILD_DIR)/media.source
+SNURRA_DIR = snurra
+SNURRA_PKGS = libavformat libavcodec libswresample libswscale libavutil alsa xcb
+
+$(DESKTOP_MEDIA_SOURCE): FORCE
+	@mkdir -p $(BUILD_DIR); \
+	want='$(DESKTOP_MEDIA)'; \
+	[ -f $@ ] && [ "$$(cat $@)" = "$$want" ] || echo "$$want" > $@
+
+ifeq ($(DESKTOP_MEDIA),1)
+$(BUILD_DIR)/Makefile: QMAKE_CONFIG += BSSH_MEDIA=1
+$(BUILD_DIR)/Makefile: $(SNURRA_DIR)/snurra.pri | media-check
+endif
+
+$(BUILD_DIR)/Makefile: beerssh.pro $(DESKTOP_MEDIA_SOURCE)
 	$(call bssh_qmake,$(BUILD_DIR),beerssh.pro)
 
 $(TARGET): $(VTERM_LIB) $(LIBSSH_LIB) $(BUILD_DIR)/Makefile $(SOURCES) $(HEADERS)
@@ -740,32 +768,18 @@ $(TARGET): $(VTERM_LIB) $(LIBSSH_LIB) $(BUILD_DIR)/Makefile $(SOURCES) $(HEADERS
 run: $(TARGET)
 	./$(TARGET)
 
-# The media build (project.md sec 6.4, *Playing a file*): BeerSSH with
-# snurra, the player it is to play in, compiled in from the snurra
-# submodule -- in a tree of its own, so the default build is never built
-# the other way. Not part of `all`: snurra is far from done, and BeerSSH
-# takes it up through one header, snurra/embed.h, which the glue uses only
-# once the pinned snurra has it; until then this build plays in the
-# desktop's player as the default one does.
+# `make media` was the build with snurra in it, in a tree of its own, while
+# snurra was "far from done"; the default build is that build now (above),
+# and this keeps the name. build-media/ is no longer written; `clean` still
+# removes one an older build left.
 #
-# The submodule is fetched here and only here, and the build stops if it
-# cannot be -- before qmake, which would otherwise fail reading
-# snurra.pri. And snurra's libraries are asked for by name first, so a
-# missing one is said as a package rather than as a header a compile
-# could not find.
+# The submodule is fetched by the build, which stops if it cannot be --
+# before qmake, which would otherwise fail reading snurra.pri. And snurra's
+# libraries are asked for by name first (media-check), so a missing one is
+# said as a package rather than as a header a compile could not find.
 MEDIA_BUILD_DIR ?= build-media
-SNURRA_DIR = snurra
-SNURRA_PKGS = libavformat libavcodec libswresample libswscale libavutil alsa xcb
 
-# qmake as a file rule, as the default build's is: run again only when a
-# project file it reads has moved, so a second `make media` writes nothing.
-media: QMAKE_CONFIG += BSSH_MEDIA=1
-media: media-check $(VTERM_LIB) $(LIBSSH_LIB) $(MEDIA_BUILD_DIR)/Makefile
-	$(MAKE) -C $(MEDIA_BUILD_DIR) $(QMAKE_SUBMAKE)
-
-$(MEDIA_BUILD_DIR)/Makefile: beerssh.pro $(SNURRA_DIR)/snurra.pri
-	$(call bssh_qmake,$(MEDIA_BUILD_DIR),beerssh.pro)
-	@echo "media: built $(MEDIA_BUILD_DIR)/$(TARGET) with snurra at $$(git -C $(SNURRA_DIR) rev-parse --short HEAD)"
+media: all
 
 # The submodule, fetched when its project file is missing: a file rule, so
 # the Android build can name it as a prerequisite and fetch it only once.
@@ -789,11 +803,6 @@ media-check: $(SNURRA_DIR)/snurra.pri
 		done; \
 		echo "media:   on Debian: apt install$$debs" >&2; \
 		exit 1; \
-	fi; \
-	if [ -f $(SNURRA_DIR)/include/snurra/embed.h ]; then \
-		echo "media: snurra offers snurra/embed.h -- Play uses snurra's player"; \
-	else \
-		echo "media: snurra has no snurra/embed.h yet -- Play uses the desktop's player"; \
 	fi
 
 # beersshd, the SFTP-only server (project.md sec 19): its own program from

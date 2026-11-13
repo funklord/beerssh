@@ -56,6 +56,7 @@ debian/tmp/
 debian/beerssh/
 debian/beerssh-fonts/
 debian/beersshd/
+debian/beerssh-session/
 debian/*.substvars
 debian/*.debhelper.log
 debian/debhelper-build-stamp
