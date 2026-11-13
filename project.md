@@ -11377,7 +11377,13 @@ used is the missing fact.
     tried first, reached only the window itself, and the corner stayed
     hidden for good under twin;
   - **faint (30%) until the pointer is over it** on the desktop, solid on
-    touch, which has no hover;
+    touch, which has no hover. **Fixed 2026-11-13:** with focus following
+    the mouse across tiled panes, some panes' corners came up solid and
+    some faint -- the holder: "as if they remember some state". The corner
+    shows on the focused pane only, so it is hidden and shown all the
+    time, and one hidden under the pointer got no leave and stayed
+    "pointed at" for good. Shown, it asks where the pointer is; hidden,
+    it is not pointed at;
   - the drawer's **x closes the panel and nothing more**. It used to
     decline the offer and take the handle with it, which suited a handle
     on the text's edge; the session's decline and the terminal menu's

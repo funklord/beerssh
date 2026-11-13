@@ -263,3 +263,12 @@ file = "src/ui/main_window.cpp"
 find = "\t\tshow_bar->setObjectName(QStringLiteral(\"terminal_show_menu_bar\"));\n"
 replace = "\t\tshow_bar->setVisible(false);\n"
 expect = "a_hidden_menu_bar_comes_back_from_the_terminal_menu"
+
+# Shown and hidden without asking where the pointer is: a corner hidden
+# under it keeps believing it is pointed at, solid on that pane for ever.
+[[sabotage]]
+name = "a corner hidden under the pointer comes back solid"
+file = "src/ui/pane_corner.cpp"
+find = "\tm_hovered = rect().contains(mapFromGlobal(QCursor::pos()));\n\tsync_opacity();\n\tQWidget::showEvent(event);\n}\n\nvoid bssh_pane_corner::hideEvent(QHideEvent *event) {\n\tm_hovered = false;\n"
+replace = "\tsync_opacity();\n\tQWidget::showEvent(event);\n}\n\nvoid bssh_pane_corner::hideEvent(QHideEvent *event) {\n"
+expect = "the_corner_hides_with_its_window_and_is_faint_until_pointed_at"

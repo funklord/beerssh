@@ -1,5 +1,7 @@
 #include "ui/pane_corner.h"
 
+#include <QCursor>
+
 #include <QApplication>
 #include <QEnterEvent>
 #include <QGraphicsOpacityEffect>
@@ -211,6 +213,26 @@ void bssh_pane_corner::leaveEvent(QEvent *event) {
 	m_hovered = false;
 	sync_opacity();
 	QWidget::leaveEvent(event);
+}
+
+/*
+ * Shown and hidden, the pointer asked where it is rather than the last
+ * enter or leave believed. The corner shows on the focused pane only, so
+ * with focus following the mouse it is hidden and shown all the time,
+ * and one hidden under the pointer got no leave: that pane's corner came
+ * back solid every time after, the next pane's faint -- "as if they
+ * remember some state" (the holder, 2026-11-13).
+ */
+void bssh_pane_corner::showEvent(QShowEvent *event) {
+	m_hovered = rect().contains(mapFromGlobal(QCursor::pos()));
+	sync_opacity();
+	QWidget::showEvent(event);
+}
+
+void bssh_pane_corner::hideEvent(QHideEvent *event) {
+	m_hovered = false;
+	sync_opacity();
+	QWidget::hideEvent(event);
 }
 
 QSize bssh_pane_corner::sizeHint() const {

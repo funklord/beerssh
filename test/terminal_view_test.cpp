@@ -3894,6 +3894,20 @@ void terminal_view_test::the_corner_hides_with_its_window_and_is_faint_until_poi
 	QCoreApplication::sendEvent(view.corner(), &leave);
 	QVERIFY(view.corner()->is_faint());
 
+	/*
+	 * Hidden under the pointer -- its pane losing focus, with focus
+	 * following the mouse -- it gets no leave; shown again with the
+	 * pointer elsewhere it is faint, not solid from before.
+	 */
+	QCoreApplication::sendEvent(view.corner(), &enter);
+	QVERIFY(!view.corner()->is_faint());
+	view.set_corner_active(false);
+	QTRY_VERIFY(!view.corner()->isVisible());
+	QCursor::setPos(view.mapToGlobal(QPoint(10, view.height() - 10)));
+	view.set_corner_active(true);
+	QTRY_VERIFY(view.corner()->isVisible());
+	QVERIFY2(view.corner()->is_faint(), "the corner came back solid, remembering a pointer long gone");
+
 	/* Another window active: gone, and back when this one is again. */
 	QWidget other;
 	other.resize(200, 100);
