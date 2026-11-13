@@ -767,17 +767,19 @@ $(MEDIA_BUILD_DIR)/Makefile: beerssh.pro $(SNURRA_DIR)/snurra.pri
 	$(call bssh_qmake,$(MEDIA_BUILD_DIR),beerssh.pro)
 	@echo "media: built $(MEDIA_BUILD_DIR)/$(TARGET) with snurra at $$(git -C $(SNURRA_DIR) rev-parse --short HEAD)"
 
-media-check:
-	@if [ ! -f $(SNURRA_DIR)/snurra.pri ]; then \
-		if git rev-parse --git-dir >/dev/null 2>&1; then \
-			echo "media: fetching the $(SNURRA_DIR) submodule" >&2; \
-			git submodule update --init $(SNURRA_DIR) >&2; \
-		else \
-			echo "media: $(SNURRA_DIR)/ is empty and this is not a git checkout" >&2; \
-		fi; \
-	fi; \
-	[ -f $(SNURRA_DIR)/snurra.pri ] || { echo "media: the $(SNURRA_DIR) submodule is missing and could not be fetched" >&2; exit 1; }; \
-	missing=""; \
+# The submodule, fetched when its project file is missing: a file rule, so
+# the Android build can name it as a prerequisite and fetch it only once.
+$(SNURRA_DIR)/snurra.pri:
+	@if git rev-parse --git-dir >/dev/null 2>&1; then \
+		echo "media: fetching the $(SNURRA_DIR) submodule" >&2; \
+		git submodule update --init $(SNURRA_DIR) >&2; \
+	else \
+		echo "media: $(SNURRA_DIR)/ is empty and this is not a git checkout" >&2; \
+	fi
+	@[ -f $@ ] || { echo "media: the $(SNURRA_DIR) submodule is missing and could not be fetched" >&2; exit 1; }
+
+media-check: $(SNURRA_DIR)/snurra.pri
+	@missing=""; \
 	for p in $(SNURRA_PKGS); do pkg-config --exists $$p || missing="$$missing $$p"; done; \
 	if [ -n "$$missing" ]; then \
 		echo "media: snurra needs these libraries' development files:$$missing" >&2; \
@@ -1337,10 +1339,60 @@ android-check-beerssh:
 ANDROID_PRO    ?= beerssh.pro
 ANDROID_ASSETS ?= android-fonts android-terminfo
 
-$(ANDROID_BUILD_DIR)/Makefile: android-check $(VTERM_ANDROID_LIB) $(ANDROID_PRO)
+# BeerSSH on Android plays in snurra's player (project.md sec 6.4, *Playing
+# a file*): the phone has no other road, since Android opens no app's
+# private file in another app. So the media build is the Android build,
+# as the holder asked 2026-11-13; beersshd plays nothing and sets this
+# empty.
+ANDROID_MEDIA ?= 1
+
+# FFmpeg on Android is the kit's: the libraries Qt ships for its own
+# multimedia, without headers (snurra's snurra.pri says so too). They are
+# compiled against the same release's headers, taken from FFMPEG_HEADERS
+# -- the desktop's, by default, which live in the multiarch directory
+# beside glibc's and so must not go on an NDK compile's path whole: the
+# four FFmpeg directories alone are copied, by name, into this build's
+# tree. The majors are compared before anything is compiled, because a
+# header from one release against a library from another compiles,
+# links and then reads the wrong field of a struct at run time.
+FFMPEG_HEADERS ?= $(shell pkg-config --variable=includedir libavformat 2>/dev/null)
+ANDROID_FFMPEG_DIRS = libavformat libavcodec libavutil libswresample
+ANDROID_FFMPEG_INCLUDE = $(ANDROID_BUILD_DIR)/ffmpeg-include
+
+$(ANDROID_FFMPEG_INCLUDE)/.copied: | android-check
+	@for d in $(ANDROID_FFMPEG_DIRS); do \
+		[ -d "$(FFMPEG_HEADERS)/$$d" ] || { \
+			echo "android: no FFmpeg headers for $$d under '$(FFMPEG_HEADERS)'" >&2; \
+			echo "android:   snurra compiles against the Qt kit's FFmpeg, which ships none;" >&2; \
+			echo "android:   install the same release's (Debian: libavformat-dev libavcodec-dev" >&2; \
+			echo "android:   libswresample-dev) or point FFMPEG_HEADERS at a copy" >&2; \
+			exit 1; }; \
+	done
+	@have=$$(sed -n 's/^#define LIBAVFORMAT_VERSION_MAJOR *\([0-9]*\).*/\1/p' $(FFMPEG_HEADERS)/libavformat/version_major.h); \
+	kit=$$(strings $(QT_ANDROID_ROOT)/lib/libavformat.so 2>/dev/null | sed -n 's|^Lavf/\{0,1\}\([0-9][0-9]*\)\..*|\1|p' | head -1); \
+	if [ -z "$$kit" ]; then \
+		echo "android: the Qt kit has no FFmpeg ($(QT_ANDROID_ROOT)/lib/libavformat.so);" >&2; \
+		echo "android:   it comes with Qt Multimedia -- install that module for this kit" >&2; \
+		exit 1; \
+	fi; \
+	if [ "$$have" != "$$kit" ]; then \
+		echo "android: FFmpeg headers are libavformat $$have, the kit's library $$kit" >&2; \
+		echo "android:   point FFMPEG_HEADERS at the kit's release's headers" >&2; \
+		exit 1; \
+	fi
+	mkdir -p $(ANDROID_FFMPEG_INCLUDE)
+	for d in $(ANDROID_FFMPEG_DIRS); do cp -r $(FFMPEG_HEADERS)/$$d $(ANDROID_FFMPEG_INCLUDE)/; done
+	touch $@
+
+ifeq ($(ANDROID_MEDIA),1)
+ANDROID_MEDIA_DEPS  = $(SNURRA_DIR)/snurra.pri $(ANDROID_FFMPEG_INCLUDE)/.copied
+ANDROID_MEDIA_QMAKE = BSSH_MEDIA=1 SNURRA_FFMPEG_INCLUDE=$(abspath $(ANDROID_FFMPEG_INCLUDE))
+endif
+
+$(ANDROID_BUILD_DIR)/Makefile: android-check $(VTERM_ANDROID_LIB) $(ANDROID_PRO) $(ANDROID_MEDIA_DEPS)
 	mkdir -p $(ANDROID_BUILD_DIR)
 	cd $(ANDROID_BUILD_DIR) && $(QT_ANDROID_ROOT)/bin/qmake ../$(ANDROID_PRO) $(QMAKE_CONFIG) \
-	        BSSH_VERSION=$(VERSION) BSSH_VERSION_CODE=$(ANDROID_VERSION_CODE)
+	        BSSH_VERSION=$(VERSION) BSSH_VERSION_CODE=$(ANDROID_VERSION_CODE) $(ANDROID_MEDIA_QMAKE)
 
 # The base font set that ships inside the APK (project.md sec 9.4).
 #
@@ -1610,7 +1662,7 @@ endif
 # one no generated Makefile uses.
 SSHD_APP_ID = se.vibes.beersshd
 SSHD_ANDROID = ANDROID_PROGRAM=$(SSHD_TARGET) APP_ID=$(SSHD_APP_ID) ANDROID_PRO=beersshd.pro \
-               ANDROID_BUILD_DIR=build-sshd-android-$(ANDROID_ABI) ANDROID_ASSETS= \
+               ANDROID_BUILD_DIR=build-sshd-android-$(ANDROID_ABI) ANDROID_ASSETS= ANDROID_MEDIA= \
                STORE_VIEWS='server setup'
 
 # android-sshd-aab is beersshd's Play bundle (sec 13): the same rule as

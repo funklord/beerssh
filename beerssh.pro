@@ -384,6 +384,33 @@ android {
     #                         compiles and links without it and simply finds
     #                         no backend at runtime, so a Wi-Fi-to-mobile
     #                         handover waits out the backoff in silence.
+
+    # snurra, the in-app player (project.md sec 6.4, *Playing a file*):
+    # FFmpeg as Qt's kit ships it, and what that FFmpeg links. Left off
+    # this list, the first media build linked against them and packaged
+    # none, so the app would have died loading its own library.
+    # avformat/avcodec/avutil  decoding (avcodec is 14 of the 19 MB)
+    # swresample              resampling to the output's rate
+    # FFmpegStub-ssl/-crypto  avformat's NEEDED: Qt's stand-ins for
+    #                         OpenSSL, which load the real one if present
+    # Multimedia, Concurrent  what the stubs link, and snurra's QAudioSink
+    #                         output; its Java side with it. Its media
+    #                         plugins are not deployed: snurra plays
+    #                         through AAudio first, and QAudioSink is the
+    #                         fallback the plugin would serve.
+    equals(BSSH_MEDIA, 1) {
+        ANDROID_DEPLOYMENT_DEPENDENCIES += \
+            jar/Qt6AndroidMultimedia.jar \
+            lib/libQt6FFmpegStub-ssl_$${QT_ARCH}.so \
+            lib/libQt6FFmpegStub-crypto_$${QT_ARCH}.so \
+            lib/libQt6Multimedia_$${QT_ARCH}.so \
+            lib/libQt6Concurrent_$${QT_ARCH}.so
+        # FFmpeg's own libraries carry no ABI suffix, and androiddeployqt
+        # took them on the list above without packaging them (2026-11-13):
+        # a library that is not Qt's goes by path, as an extra.
+        for(lib, $$list(avformat avcodec avutil swresample)): \
+            ANDROID_EXTRA_LIBS += $$[QT_INSTALL_LIBS]/lib$${lib}.so
+    }
 } else {
     SOURCES += \
         src/platform/platform_desktop.cpp \

@@ -4520,8 +4520,8 @@ model on a finger.
   `wire.o` in qmake's one object directory, the second replacing the
   first. The media build keeps objects beside their sources' paths
   (`object_parallel_to_source`), and `tool/qmake-deps.mk` reads the `.d`
-  files below the top, which it otherwise never would. Android stays
-  off until the APK cost is measured.
+  files below the top, which it otherwise never would. Android is the
+  media build since 2026-11-13 (*On Android*, below).
   **Played with it the same day**, under Xvfb against a loopback sshd: the
   panel's menu offered Play for an `.ogg`, which went by `xdg-open` to
   the desktop's player (Audacious there), holding the file open on the
@@ -4554,6 +4554,44 @@ model on a finger.
   opening the file for itself. A 10 s test pattern from the loopback
   host played in the panel, its picture in snurra's drawer above the
   tile, counting up to its last frame.
+  **On Android, 2026-11-13 -- the holder: "ship snurra in the android
+  apk too".** `make android` compiles snurra in (`ANDROID_MEDIA ?= 1`;
+  beersshd's build sets it empty), against the FFmpeg Qt's kit ships for
+  its own multimedia: 7.1, without headers. The headers come from
+  `FFMPEG_HEADERS` -- the desktop's by default -- and only the four
+  FFmpeg directories are copied into the build tree, since the multiarch
+  directory they sit in holds glibc's too. Before copying, the header's
+  libavformat major is compared with the kit library's (`Lavf61` in its
+  strings), because a mismatch compiles and links and then reads the
+  wrong struct field at run time; both refusals were run. CI's Ubuntu has
+  6.1, so its Android job takes 7.1's public headers from the release
+  tarball, checksum pinned, copied rather than configured -- nothing of
+  the download runs -- with `avconfig.h` written by hand
+  (little-endian, fast unaligned); the kit's libraries are 7.1.0, which
+  those headers match more closely than Debian's 7.1.5 (only `MICRO`
+  and cast-only macro fixes differ). Qt Multimedia joins the job's
+  modules, since the kit's FFmpeg comes with it. snurra's 18 sources
+  compile for arm64 against those headers.
+  **The deploy list had to learn them.** `beerssh.pro` names exactly
+  what the APK carries (sec 9.4's reason: a scanning androiddeployqt
+  brings QML), so the first build linked FFmpeg and packaged none of it
+  -- an app that would have died loading its own library. Qt's libraries
+  go on that list (Multimedia, Concurrent, the two FFmpeg stubs avformat
+  needs, Multimedia's jar); FFmpeg's four, which carry no ABI suffix,
+  were taken on it and still not packaged, and go as
+  `ANDROID_EXTRA_LIBS` instead. Multimedia's media plugins are left out:
+  snurra plays through AAudio, and QAudioSink is only its fallback.
+  **Cost: the x86_64 APK from 42.7 to 60.0 MB, +17 MB**, avcodec 14.4 MB
+  of it -- not snurra's 27 MB, which was the scanned deploy's QML. All
+  the added libraries are 16 KB aligned, as Play requires.
+  **Played on the API 36 emulator** against a throwaway loopback sshd:
+  the app started with every library loaded, More offered Play for an
+  `.ogg` (it is offered on Android only when the in-app player exists),
+  snurra's tile opened over the list, AAudio opened shared at 48 kHz,
+  the copy read "All here" and the playhead ran to the end of the 8 s
+  tone. On a phone a tap on a file opens it -- a copy to a chosen
+  folder -- so Play is reached from More with the row selected.
+  Not yet on the Fold (arm64, One UI's audio).
   **Step 3, the phone's form, built 2026-11-11 and not yet seen on a
   device.** On touch the panel lies over the terminal view, its child,
   following its size, rather than beside it: the view keeps its size, so

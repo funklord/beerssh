@@ -175,6 +175,9 @@ jobs:
           host: all_os
           target: android
           arch: android_arm64_v8a
+          # Qt Multimedia carries the FFmpeg libraries snurra decodes with
+          # (project.md sec 6.4): the APK plays in snurra's player.
+          modules: qtmultimedia
 
       # The NDK the Qt kit was built with, which is the one its
       # mkspecs/qdevice.pri names: r27c for 6.12.0. Not the runner's
@@ -241,6 +244,25 @@ jobs:
         with:
           path: ~/.gradle/wrapper/dists
           key: gradle-dists-qt6.12.0
+
+      # snurra compiles against the kit's FFmpeg, which ships no headers,
+      # and the runner's own are 6.1 where the kit's are 7.1 -- a mismatch
+      # the Makefile refuses. So 7.1's public headers come from the
+      # release tarball, checked against a pinned sum, copied rather than
+      # configured: nothing of the download runs. The one header configure
+      # writes, avconfig.h, says little-endian with fast unaligned loads,
+      # as it does for arm64.
+      - name: FFmpeg 7.1 headers
+        run: |
+          set -e
+          curl -sSfL -o ffmpeg-7.1.tar.xz https://ffmpeg.org/releases/ffmpeg-7.1.tar.xz
+          echo "40973d44970dbc83ef302b0609f2e74982be2d85916dd2ee7472d30678a7abe6  ffmpeg-7.1.tar.xz" | sha256sum -c -
+          tar xf ffmpeg-7.1.tar.xz --wildcards 'ffmpeg-7.1/libavformat/*.h' 'ffmpeg-7.1/libavcodec/*.h' \
+              'ffmpeg-7.1/libavutil/*.h' 'ffmpeg-7.1/libswresample/*.h'
+          printf '%s\n' '#ifndef AVUTIL_AVCONFIG_H' '#define AVUTIL_AVCONFIG_H' \
+              '#define AV_HAVE_BIGENDIAN 0' '#define AV_HAVE_FAST_UNALIGNED 1' '#endif' \
+              > ffmpeg-7.1/libavutil/avconfig.h
+          echo "FFMPEG_HEADERS=$PWD/ffmpeg-7.1" >> "$GITHUB_ENV"
 
       # Compiles and links libbeerssh_arm64-v8a.so. Packaging into an AAB
       # additionally needs the SDK, which the runner image provides.
