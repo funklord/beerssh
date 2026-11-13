@@ -1399,39 +1399,8 @@ ANDROID_MEDIA_DEPS  = $(SNURRA_DIR)/snurra.pri $(ANDROID_FFMPEG_INCLUDE)/.copied
 ANDROID_MEDIA_QMAKE = BSSH_MEDIA=1 SNURRA_FFMPEG_INCLUDE=$(abspath $(ANDROID_FFMPEG_INCLUDE))
 endif
 
-# Which Qt kit this build directory's objects were compiled against: its
-# path and its QtCore's size and date. Qt's headers carry the dates of
-# the kit's archives, older than any object here, so updating a kit in
-# place -- the July 6.12.0 pre-release to the release, 2026-11-13 --
-# rebuilt nothing and linked objects made from the old headers against
-# the new libraries (an undefined QSaveFile::setPermissions). When the
-# kit moves, or a directory built before this record has none, its
-# objects are cleaned by qmake's own clean, which removes the files it
-# names. So is android-build/libs, the staging tree androiddeployqt
-# fills from the kit: it skips a library whose staged copy is newer, so
-# the APK went on carrying the pre-release's QtCore and FFmpeg 7.1 and
-# died at start on "cannot locate symbol av_freep". `make` rather than
-# $(MAKE), so a dry run prints it and runs nothing; the record is
-# written only when it changes.
-ANDROID_KIT_SOURCE = $(ANDROID_BUILD_DIR)/kit.source
-
-$(ANDROID_KIT_SOURCE): FORCE
-	@mkdir -p $(ANDROID_BUILD_DIR); \
-	want="$(QT_ANDROID_ROOT) $$(stat -c '%s %Y' $(QT_ANDROID_ROOT)/lib/libQt6Core_$(ANDROID_ABI).so 2>/dev/null)"; \
-	have=$$(cat $@ 2>/dev/null); \
-	[ "$$have" = "$$want" ] && exit 0; \
-	if [ -f $(ANDROID_BUILD_DIR)/Makefile ]; then \
-		echo "android: the Qt kit is not the one $(ANDROID_BUILD_DIR) was built with; cleaning its objects"; \
-		make -C $(ANDROID_BUILD_DIR) clean >/dev/null || exit 1; \
-	fi; \
-	case "$(ANDROID_BUILD_DIR)" in ''|/*|*..*) ;; *) \
-		if [ -d "$(ANDROID_BUILD_DIR)/android-build/libs" ]; then \
-			echo "android: and the libraries staged from the old kit"; \
-			rm -rf "$(ANDROID_BUILD_DIR)/android-build/libs" || exit 1; \
-		fi ;; \
-	esac; \
-	echo "$$want" > $@
-
+# ANDROID_KIT_SOURCE, the record of which Qt kit this build directory
+# was built with, comes from tool/android.mk.
 $(ANDROID_BUILD_DIR)/Makefile: android-check $(ANDROID_KIT_SOURCE) $(VTERM_ANDROID_LIB) $(ANDROID_PRO) $(ANDROID_MEDIA_DEPS)
 	mkdir -p $(ANDROID_BUILD_DIR)
 	cd $(ANDROID_BUILD_DIR) && $(QT_ANDROID_ROOT)/bin/qmake ../$(ANDROID_PRO) $(QMAKE_CONFIG) \
