@@ -1,5 +1,5 @@
 # Line and block characters drawn as shapes (term/box_drawing.h; the
-# holder's dotted Claude Code prompt lines, 2026-11-13).
+# dotted rules a TUI drew round its prompt, the holder, 2026-11-13).
 
 # A corner turned the wrong way in the table: U+250C drawn as U+2514.
 [[sabotage]]
@@ -24,3 +24,12 @@ file = "src/term/box_drawing.cpp"
 find = "\t\telse start = cx - lw / 2;\n\t\tfill(painter, start, x1, y.a, y.b, colour);\n"
 replace = "\t\telse start = cx - lw / 2;\n\t\tfill(painter, start, x1 - 1, y.a, y.b, colour);\n"
 expect = "box_drawing_meets_at_every_cell_edge"
+
+# Laid out in logical pixels again: at a fractional ratio heavy is no
+# longer twice light (an Android emulator at 2.625, 2026-11-13).
+[[sabotage]]
+name = "box shapes are laid out in logical pixels at a fractional ratio"
+file = "src/term/box_drawing.cpp"
+find = "\tif (ratio != 1.0 && painter.transform().type() <= QTransform::TxScale) {\n"
+replace = "\tif (false && ratio != 1.0 && painter.transform().type() <= QTransform::TxScale) {\n"
+expect = "box_drawing_weighs_true_at_a_fractional_ratio"

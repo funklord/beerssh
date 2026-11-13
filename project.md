@@ -11950,6 +11950,15 @@ is found:
   -- strokes swapped -- the first version of the font test missed, as it
   sampled only near the edges. Under Xvfb the dim line reads 127 end to end
   at 100% and 125%.
+  **Laid out in device pixels, found on an Android emulator the same
+  day.** At 420 dpi the ratio is 2.625, and shapes laid out in whole
+  logical pixels came out light 2 device pixels, each stroke of a double
+  3, heavy 5: rows unbroken, weights wrong. The cell is now mapped to the
+  device and rounded edge by edge, so neighbours still meet, and drawn
+  there; on the emulator light, double strokes and heavy read 2, 2+2 and 4.
+  `box_drawing_weighs_true_at_a_fractional_ratio` holds heavy at twice
+  light, a double's strokes at light's, and a lit row unbroken, at 1.25,
+  1.5 and 2.625; a sabotage taking the device layout away is caught.
 - **Double-width cells:** implement `wcwidth`-equivalent logic so CJK and many
   emoji occupy exactly two cells, matching what the remote program assumed when it
   laid out the screen. Getting this wrong misaligns every TUI. Note that emoji

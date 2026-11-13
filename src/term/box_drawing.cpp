@@ -312,21 +312,47 @@ bool bssh_draw_box(QPainter &painter, char32_t ch, const QRect &cell, const QCol
 	if (!bssh_box_drawn(ch) || cell.isEmpty()) return false;
 	painter.save();
 	painter.setRenderHint(QPainter::Antialiasing, false);
+	/*
+	 * Laid out in device pixels. At a fractional ratio -- 1.25 on a
+	 * desktop, 2.625 on a 420 dpi phone -- a stroke a whole logical pixel
+	 * wide lands as 2 or 3 device pixels by where it falls, so heavy came
+	 * out other than twice light and a double's strokes wider than a light
+	 * line (an Android emulator, 2026-11-13). Each cell edge is rounded
+	 * from the same logical edge in both cells beside it, so neighbours
+	 * still meet. Only under a translation or a scale, which is all the
+	 * terminal paints with.
+	 */
+	QRect box = cell;
+	const qreal ratio = painter.device() ? painter.device()->devicePixelRatioF() : 1.0;
+	if (ratio != 1.0 && painter.transform().type() <= QTransform::TxScale) {
+		const QRectF mapped = painter.transform().mapRect(QRectF(cell));
+		const int left = qRound(mapped.left() * ratio);
+		const int top = qRound(mapped.top() * ratio);
+		const int right = qRound(mapped.right() * ratio);
+		const int bottom = qRound(mapped.bottom() * ratio);
+		painter.resetTransform();
+		painter.scale(1.0 / ratio, 1.0 / ratio);
+		box = QRect(left, top, right - left, bottom - top);
+	}
+	if (box.isEmpty()) {
+		painter.restore();
+		return true;
+	}
 	if (ch >= 0x2580) {
-		draw_block(painter, ch, cell, colour);
+		draw_block(painter, ch, box, colour);
 	} else if (ch >= 0x2504 && ch <= 0x250B) {
 		/* Triple dashes then quadruple: light/heavy, horizontal/vertical. */
 		const int i = int(ch - 0x2504);
-		draw_dashes(painter, cell, colour, (i / 2) % 2 == 1, i % 2 == 0 ? 1 : 2, i < 4 ? 3 : 4);
+		draw_dashes(painter, box, colour, (i / 2) % 2 == 1, i % 2 == 0 ? 1 : 2, i < 4 ? 3 : 4);
 	} else if (ch >= 0x254C && ch <= 0x254F) {
 		const int i = int(ch - 0x254C);
-		draw_dashes(painter, cell, colour, i >= 2, i % 2 == 0 ? 1 : 2, 2);
+		draw_dashes(painter, box, colour, i >= 2, i % 2 == 0 ? 1 : 2, 2);
 	} else if (ch >= 0x256D && ch <= 0x2570) {
-		draw_arc(painter, ch, cell, colour);
+		draw_arc(painter, ch, box, colour);
 	} else if (ch >= 0x2571 && ch <= 0x2573) {
-		draw_diagonals(painter, ch, cell, colour);
+		draw_diagonals(painter, ch, box, colour);
 	} else {
-		draw_lines(painter, bssh_box_arms(ch), cell, colour);
+		draw_lines(painter, bssh_box_arms(ch), box, colour);
 	}
 	painter.restore();
 	return true;

@@ -62,6 +62,7 @@ private slots:
 	void a_selection_goes_when_its_text_changes_under_it();
 	void box_drawing_matches_a_font();
 	void box_drawing_meets_at_every_cell_edge();
+	void box_drawing_weighs_true_at_a_fractional_ratio();
 	void a_selection_stays_on_its_text_when_the_scrollback_evicts();
 	void shrinking_the_scrollback_brings_the_view_back_with_it();
 	void double_click_selects_a_word();

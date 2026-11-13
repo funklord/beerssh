@@ -1,3 +1,4 @@
+#include <QtMath>
 #include <QHBoxLayout>
 #include <QFontDatabase>
 #include <QPainter>
@@ -558,6 +559,58 @@ void terminal_view_test::box_drawing_meets_at_every_cell_edge() {
 			if (qGray(image.pixel(x, y)) != 255)
 				QFAIL(qPrintable(QStringLiteral("a gap at x=%1 in cells of %2x%3").arg(x).arg(size.width()).arg(size.height())));
 		}
+	}
+}
+
+void terminal_view_test::box_drawing_weighs_true_at_a_fractional_ratio() {
+	/*
+	 * Laid out in logical pixels and scaled by 2.625 -- an Android phone at
+	 * 420 dpi, 2026-11-13 -- a one-pixel stroke came out 2 or 3 device
+	 * pixels by where it fell: light 2, each stroke of a double 3, heavy 5.
+	 * Laid out in device pixels, heavy is twice light and a double's
+	 * strokes are each a light line, at every ratio.
+	 */
+	for (const qreal ratio : { 1.25, 1.5, 2.625 }) {
+		const QSize cell(9, 18);
+		const QSize device_size(qCeil(cell.width() * 3 * ratio), qCeil(cell.height() * ratio));
+		/* The vertical run of lit pixels down the middle column. */
+		const auto runs = [&](char32_t ch) {
+			QImage image(device_size, QImage::Format_RGB32);
+			image.setDevicePixelRatio(ratio);
+			image.fill(Qt::black);
+			QPainter painter(&image);
+			for (int i = 0; i < 3; ++i)
+				bssh_draw_box(painter, ch, QRect(i * cell.width(), 0, cell.width(), cell.height()), Qt::white);
+			painter.end();
+			QList<int> out;
+			int run = 0;
+			const int x = device_size.width() / 2;
+			for (int y = 0; y < image.height(); ++y) {
+				if (qGray(image.pixel(x, y)) == 255) {
+					++run;
+				} else if (run) {
+					out << run;
+					run = 0;
+				}
+			}
+			if (run) out << run;
+			/* And unbroken across the cells: every pixel of a lit row lit. */
+			for (int y = 0; y < image.height(); ++y) {
+				if (qGray(image.pixel(x, y)) != 255) continue;
+				for (int across = 0; across < qRound(cell.width() * 3 * ratio); ++across) {
+					if (qGray(image.pixel(across, y)) != 255) return QList<int>{ -across - 1 };
+				}
+			}
+			return out;
+		};
+		const QList<int> light = runs(0x2500);
+		const QList<int> heavy = runs(0x2501);
+		const QList<int> doubled = runs(0x2550);
+		const QString at = QStringLiteral(" at %1").arg(ratio);
+		QVERIFY2(light.size() == 1 && heavy.size() == 1 && doubled.size() == 2, qPrintable(at));
+		QVERIFY2(heavy[0] == 2 * light[0], qPrintable(QStringLiteral("heavy %1, light %2").arg(heavy[0]).arg(light[0]) + at));
+		QVERIFY2(doubled[0] == light[0] && doubled[1] == light[0],
+		         qPrintable(QStringLiteral("double %1+%2, light %3").arg(doubled[0]).arg(doubled[1]).arg(light[0]) + at));
 	}
 }
 
