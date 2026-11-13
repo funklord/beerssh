@@ -235,6 +235,25 @@ bssh_file_panel::bssh_file_panel(bssh_session *session, QWidget *parent)
 			}
 			return;
 		}
+		if (m_play_fetching_subtitles && !m_play_dir.isEmpty() && directory == m_play_dir) {
+			/* The subtitles are here, or could not be had: now the file. */
+			m_play_fetching_subtitles = false;
+			m_play_subtitles.clear();
+			if (ok)
+				for (const QString &name : written) m_play_subtitles << QDir(directory).filePath(name);
+			/* Their copy's tile and word go: the film's own tile follows. */
+			for (auto it = m_tiles.begin(); it != m_tiles.end();) {
+				if (it->over && it->destination == directory) {
+					it->frame->deleteLater();
+					it = m_tiles.erase(it);
+				} else {
+					++it;
+				}
+			}
+			say(QString());
+			start_play_copy(m_play_waiting);
+			return;
+		}
 		if (!m_play_dir.isEmpty() && directory == m_play_dir) {
 			end_play(ok);
 			if (!ok && why != QLatin1String(BSSH_COPY_STOPPED)) say(tr("Could not play: %1").arg(why));
@@ -272,7 +291,8 @@ QString bssh_file_panel::transfer_label(const bssh_session::transfer_t &transfer
 	QStringList names;
 	for (const QString &path : transfer.paths) names << path.section(QLatin1Char('/'), -1);
 	QString what = names.size() == 1 ? names.first() : tr("%n items", nullptr, int(names.size()));
-	if (!m_play_dir.isEmpty() && transfer.destination == m_play_dir) return tr("%1, playing").arg(what);
+	if (!m_play_dir.isEmpty() && transfer.destination == m_play_dir)
+		return m_play_fetching_subtitles ? tr("%1, subtitles").arg(what) : tr("%1, playing").arg(what);
 	const bool staging = transfer.destination.startsWith(bssh_drag_staging_path() + QLatin1Char('/'));
 	if (staging) return tr("%1, for the drag").arg(what);
 	/*
@@ -732,6 +752,49 @@ bool bssh_file_panel::play_selected() {
 	const QString dir = bssh_drag_staging_root() + QStringLiteral("/play-") + QString::number(++m_drags);
 	if (!QDir().mkpath(dir)) return false;
 	m_play_dir = dir;
+	/*
+	 * A .srt beside a remote film is copied over first, so BeerSSH's own
+	 * player shows it as it would one beside a local file: snurra reads
+	 * them when the film opens (embed.h 2). Small, so the wait is short;
+	 * the desktop's player is handed a single file and gets none.
+	 */
+	const QStringList beside = bssh_in_app_player() ? subtitles_beside(entry) : QStringList();
+	if (!beside.isEmpty()) {
+		m_play_waiting = entry;
+		m_play_fetching_subtitles = true;
+		m_session->download(beside, dir);
+		say(tr("Fetching the subtitles for %1").arg(entry.name));
+		return true;
+	}
+	return start_play_copy(entry);
+}
+
+/* The .srt files that go with `entry`: its name's stem, and a language
+ * after it -- film.srt and film.en.srt for film.mkv. A few, and small. */
+QStringList bssh_file_panel::subtitles_beside(const bssh_remote_entry_t &entry) const {
+	const int dot = entry.name.lastIndexOf(QLatin1Char('.'));
+	if (dot <= 0) return {};
+	const QString stem = entry.name.left(dot);
+	QStringList found;
+	for (const bssh_remote_entry_t &other : m_entries) {
+		if (opens(other) || other.name == entry.name || other.size > 4 * 1024 * 1024) continue;
+		if (!other.name.endsWith(QLatin1String(".srt"), Qt::CaseInsensitive)) continue;
+		const QString base = other.name.left(other.name.size() - 4);
+		if (base != stem && !base.startsWith(stem + QLatin1Char('.'))) continue;
+		found << remote_path_of(other);
+		if (found.size() == 8) break;
+	}
+	return found;
+}
+
+/* The played file's copy begins, and its player is handed it. */
+bool bssh_file_panel::start_play_copy(const bssh_remote_entry_t &entry) {
+	if (!m_session || m_play_dir.isEmpty()) return false;
+	const QString dir = m_play_dir;
+	const QString path = remote_path_of(entry);
+	bssh_media_t media;
+	media.name = entry.name;
+	media.subtitles = m_play_subtitles;
 	m_play_file = QDir(dir).filePath(entry.name);
 	/*
 	 * Filled in the order its reader asks: a seek in the player, or a read
@@ -812,6 +875,8 @@ void bssh_file_panel::put_away_play() {
 	m_play_open_when_whole = false;
 	m_play_in_app = false;
 	m_play_bytes.reset();
+	m_play_fetching_subtitles = false;
+	m_play_subtitles.clear();
 }
 
 /* Kept files nothing reads any more: off the mount and off the disk. */

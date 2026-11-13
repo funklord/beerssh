@@ -2,6 +2,7 @@
 #define BSSH_MEDIA_PLAYER_H
 
 #include <QString>
+#include <QStringList>
 
 #include <functional>
 #include <memory>
@@ -17,6 +18,7 @@ struct bssh_media_t {
 	QString name;                             /* the file's name; its kind is read from it */
 	QString path;                             /* a local path a player may open, when there is one */
 	std::shared_ptr<bssh_media_bytes> bytes;  /* the bytes as they arrive, for a player reading them */
+	QStringList subtitles;                    /* local copies of the .srt files beside a remote file */
 };
 
 /* Audio or video, by the name: what Play is offered for. */

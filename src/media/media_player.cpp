@@ -58,6 +58,10 @@ bool play_in_snurra(const bssh_media_t &media, QWidget *area) {
 	wanted.name = media.name;
 	wanted.path = media.path;
 	if (media.bytes) wanted.bytes = std::make_shared<arriving_bytes>(media.bytes);
+#if SNURRA_EMBED_VERSION >= 2
+	/* The .srt files beside a remote file, fetched first (embed.h 2). */
+	wanted.subtitles = media.subtitles;
+#endif
 	if (!player->open(wanted)) {
 		if (player->count() == 0) player->deleteLater();
 		return false;

@@ -194,6 +194,12 @@ private:
 	std::function<bool(const QUrl &)> m_opener;
 	QWidget *m_media_area = nullptr;
 	bool m_play_in_app = false;   /* handed to BeerSSH's own player */
+	/* Subtitles beside the played file, fetched before its copy starts. */
+	QStringList subtitles_beside(const bssh_remote_entry_t &entry) const;
+	bool start_play_copy(const bssh_remote_entry_t &entry);
+	bssh_remote_entry_t m_play_waiting;
+	bool m_play_fetching_subtitles = false;
+	QStringList m_play_subtitles;
 	void end_play(bool whole);
 	void put_away_play();
 	/*

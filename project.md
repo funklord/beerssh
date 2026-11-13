@@ -4562,6 +4562,22 @@ model on a finger.
   checks FFmpeg's headers against the kit, as BeerSSH's does (below).
   `make media` and the x86_64 APK build with it, and the media build's
   `--self-test` passes; nothing was played on this pin.
+  **Subtitles beside a remote film, pin `608c4d6`, 2026-11-13.** snurra
+  reads a `.srt` beside a local file itself, but BeerSSH plays a remote
+  file from its bytes, so a film's sidecar on the host was never seen.
+  Proposed to snurra (its inbox, 20261113T0139Z) and taken the same day
+  as `embed.h` version 2: `snurra_media::subtitles`, local paths offered
+  first. BeerSSH now copies the `.srt` files sharing the film's stem --
+  `film.srt`, `film.en.srt` for `film.mkv`, at most eight, none over
+  4 MB -- into the play directory first, then starts the film's copy
+  and hands both over (`SNURRA_EMBED_VERSION >= 2` in the glue). Only
+  for BeerSSH's own player; the desktop's is handed one file. The
+  subtitles' copy leaves no tile of its own. Seen on the API 36
+  emulator: a test film from the loopback host with "SUBTITLE FROM THE
+  HOST" beside it, shown over the picture
+  (`a_film_played_brings_the_subtitles_beside_it`, three sabotages).
+  The pin also brings `#` through a film's sound tracks and non-square
+  pixels and rotated phone video shown right.
   **On Android, 2026-11-13 -- the holder: "ship snurra in the android
   apk too".** `make android` compiles snurra in (`ANDROID_MEDIA ?= 1`;
   beersshd's build sets it empty), against the FFmpeg Qt's kit ships for

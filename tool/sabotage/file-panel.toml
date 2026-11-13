@@ -288,6 +288,30 @@ find = "\tif (selected.size() == 1 && selected.first() == item && can_play_selec
 replace = "\tif (false) {"
 expect = "a_file_played_is_opened_as_it_arrives"
 
+# The subtitles beside a remote film never fetched: it plays without them.
+[[sabotage]]
+name = "the subtitles beside a played film are not fetched"
+file = "src/ui/file_panel.cpp"
+find = "\tconst QStringList beside = bssh_in_app_player() ? subtitles_beside(entry) : QStringList();"
+replace = "\tconst QStringList beside;"
+expect = "a_film_played_brings_the_subtitles_beside_it"
+
+# Any .srt in the directory taken: another film's subtitles shown.
+[[sabotage]]
+name = "a .srt for another film is taken as this one's"
+file = "src/ui/file_panel.cpp"
+find = "\t\tif (base != stem && !base.startsWith(stem + QLatin1Char('.'))) continue;\n"
+replace = ""
+expect = "a_film_played_brings_the_subtitles_beside_it"
+
+# The subtitles' copy left as a tile: two things shown playing for one.
+[[sabotage]]
+name = "the subtitles' copy stays as a tile of its own"
+file = "src/ui/file_panel.cpp"
+find = "\t\t\t/* Their copy's tile and word go: the film's own tile follows. */\n\t\t\tfor (auto it = m_tiles.begin(); it != m_tiles.end();) {"
+replace = "\t\t\tfor (auto it = m_tiles.begin(); false && it != m_tiles.end();) {"
+expect = "a_film_played_brings_the_subtitles_beside_it"
+
 # The file played before kept on disk and on the mount, one per Play.
 [[sabotage]]
 name = "a file played before is never put away"
