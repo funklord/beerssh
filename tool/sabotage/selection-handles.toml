@@ -62,3 +62,29 @@ file = "src/ui/terminal_view.cpp"
 find = "\treturn QRect(x, cell.bottom(), side, side);"
 replace = "\treturn QRect(x, cell.top() - side, side, side);"
 expect = "a_long_press_selects_and_handles_adjust_it"
+
+# A selection whose text changes under it (the holder, 2026-11-13).
+
+# Never checked: a redraw leaves it over other text.
+[[sabotage]]
+name = "a selection stays over text redrawn under it"
+file = "src/ui/terminal_view.cpp"
+find = "\thold_cursor_on();\n\tcheck_selection_text();\n}"
+replace = "\thold_cursor_on();\n}"
+expect = "a_selection_goes_when_its_text_changes_under_it"
+
+# Nothing kept to compare with: output scrolling it up takes it too.
+[[sabotage]]
+name = "a selection goes as soon as output scrolls it up"
+file = "src/ui/terminal_view.cpp"
+find = "\tm_selection_snapshot = m_selection_anchor_line >= 0 ? selection_text() : QString();\n"
+replace = "\tm_selection_snapshot = QString();\n"
+expect = "a_selection_goes_when_its_text_changes_under_it"
+
+# Copy leaves it on the screen.
+[[sabotage]]
+name = "Copy leaves the selection on screen"
+file = "src/ui/main_window.cpp"
+find = "\tQGuiApplication::clipboard()->setText(selected);\n\tm_terminal_view->clear_selection();\n"
+replace = "\tQGuiApplication::clipboard()->setText(selected);\n"
+expect = "the_edit_verbs_on_that_menu_act_too"

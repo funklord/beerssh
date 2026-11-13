@@ -3972,6 +3972,7 @@ void bssh_terminal_view::place_multiplexer_drawer() {
 void bssh_terminal_view::on_rows_damaged(int first_row, int last_row) {
 	note_content_changed(first_row, last_row);
 	hold_cursor_on();
+	check_selection_text();
 }
 
 void bssh_terminal_view::on_rows_scrolled(int first_row, int last_row, int delta) {
@@ -4048,7 +4049,20 @@ void bssh_terminal_view::update_rows(int first_row, int last_row) {
 	       width(), (last - first + 1) * m_cell_height);
 }
 
+void bssh_terminal_view::check_selection_text() {
+	if (m_selecting || m_selection_anchor_line < 0) return;
+	qint64 first_line = 0;
+	qint64 last_line = 0;
+	int first_col = 0;
+	int last_col = 0;
+	if (!selection_range(first_line, first_col, last_line, last_col)) return;
+	const qint64 history = m_scrollback ? m_scrollback->count() : 0;
+	if (last_line < history_base() + history) return;
+	if (selection_text() != m_selection_snapshot) clear_selection();
+}
+
 void bssh_terminal_view::note_selection_changed() {
+	m_selection_snapshot = m_selection_anchor_line >= 0 ? selection_text() : QString();
 	emit selection_changed();
 
 	/*

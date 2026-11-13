@@ -5492,6 +5492,23 @@ model on a finger.
   fold into scrollback, and scrolling must not drag the highlight across the
   text. It renders by **inverting** the cell rather than tinting it — a fixed
   highlight colour cannot stay legible against 256 possible backgrounds.
+  **A selection whose text changes under it goes -- 2026-11-13.** The holder:
+  "selections stay permanently even when text moves, this is misleading and
+  different from other terminals". Anchoring follows text scrolled up into
+  the history, but not text a program redraws or moves inside the screen --
+  a clear and redraw, a full-screen program scrolling its region -- where the
+  highlight stayed put over other text. As xterm, VTE and Konsole do, the
+  text a selection was made over is kept, and when the screen changes under
+  a selection reaching the live screen and its text is no longer that, it is
+  cleared; one only in the history cannot change and is not checked, and one
+  still being dragged is left alone. **And Copy clears it** once it is in the
+  clipboard -- the holder: "They usually remove the selection immediately
+  after putting it in the clipboard", as Windows Terminal does; the X
+  primary selection, filled as it was made, keeps its text. The shortcut, the
+  Edit menu and the terminal menu each had their own two lines for Copy and
+  share one now. Tested (`a_selection_goes_when_its_text_changes_under_it`,
+  and Copy in `the_edit_verbs_on_that_menu_act_too`); three sabotages. The
+  first run of the sabotages caught a wrongly named test, not a wrong fix.
 - **Multi-line paste is a footgun**: a paste containing newlines executes
   commands. Warn on multi-line paste by default (a setting), on both platforms.
   **[BUILT]**, and it had been asked for here and built nowhere: a paste

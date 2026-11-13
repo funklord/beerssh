@@ -715,6 +715,7 @@ public slots:
 	 */
 	void note_selection_changed();
 
+
 	void on_screen_damaged();
 
 	/* The emulator's rows_damaged(): repaints only those rows. */
@@ -1207,6 +1208,19 @@ private:
 	int m_selection_anchor_col;
 	qint64 m_selection_focus_line;
 	int m_selection_focus_col;
+
+	/*
+	 * A selection whose text changes under it goes, as in xterm, VTE and
+	 * Konsole: kept while output scrolls it up into the history -- it is
+	 * stored by absolute line, so it moves with its text -- and dropped
+	 * when a program redraws or moves what was selected, where it would
+	 * otherwise sit over other text (the holder, 2026-11-13: "this is
+	 * misleading and different from other terminals"). The text it was
+	 * made over is kept to compare against; only a selection reaching
+	 * the live screen can change, so only that one is checked.
+	 */
+	void check_selection_text();
+	QString m_selection_snapshot;
 
 	/*
 	 * A find match as a range in absolute line coordinates -- start and end

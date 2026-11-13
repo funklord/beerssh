@@ -2597,6 +2597,23 @@ void bssh_main_window::on_pane_focus_changed(bssh_session *session) {
 	refresh_menu_bar();
 }
 
+/*
+ * Copy: the selection into the clipboard, and then off the screen -- the
+ * holder, 2026-11-13: "They usually remove the selection immediately
+ * after putting it in the clipboard", as Windows Terminal does. One place
+ * for the shortcut, the Edit menu and the terminal's own menu, which each
+ * had a copy of the two lines. The X primary selection, filled as the
+ * selection was made, keeps its text: Qt owns it until something else
+ * selects, and clearing what is drawn does not give it up.
+ */
+void bssh_main_window::copy_selection() {
+	if (!m_terminal_view) return;
+	const QString selected = m_terminal_view->selection_text();
+	if (selected.isEmpty()) return;
+	QGuiApplication::clipboard()->setText(selected);
+	m_terminal_view->clear_selection();
+}
+
 void bssh_main_window::detach_session() {
 	/*
 	 * Held BEFORE m_current is cleared, and that one line is the whole
@@ -2689,10 +2706,7 @@ void bssh_main_window::handle_shortcut(bssh_input_router::shortcut_t shortcut) {
 		return;
 	}
 
-	if (shortcut == bssh_input_router::SHORTCUT_COPY) {
-		const QString selected = m_terminal_view->selection_text();
-		if (!selected.isEmpty()) QGuiApplication::clipboard()->setText(selected);
-	}
+	if (shortcut == bssh_input_router::SHORTCUT_COPY) copy_selection();
 	if (shortcut == bssh_input_router::SHORTCUT_PASTE && m_current) {
 		paste_into_current(QGuiApplication::clipboard()->text());
 	}
@@ -5780,11 +5794,7 @@ void bssh_main_window::build_menu_bar() {
 	m_copy_action = edit->addAction(QStringLiteral("&Copy"));
 	m_copy_action->setObjectName(QStringLiteral("menu_copy"));
 	m_copy_action->setShortcut(chord("copy"));
-	connect(m_copy_action, &QAction::triggered, this, [this] {
-		if (!m_terminal_view) return;
-		const QString selected = m_terminal_view->selection_text();
-		if (!selected.isEmpty()) QGuiApplication::clipboard()->setText(selected);
-	});
+	connect(m_copy_action, &QAction::triggered, this, &bssh_main_window::copy_selection);
 
 	m_paste_action = edit->addAction(QStringLiteral("&Paste"));
 	m_paste_action->setObjectName(QStringLiteral("menu_paste"));
@@ -6704,8 +6714,7 @@ void bssh_main_window::act_on_terminal_menu(QMenu *menu, const QAction *chosen,
 	        menu->findChild<QAction *>(QStringLiteral("terminal_select_all"));
 
 	if (chosen == copy) {
-		const QString selected = m_terminal_view->selection_text();
-		if (!selected.isEmpty()) QGuiApplication::clipboard()->setText(selected);
+		copy_selection();
 		return;
 	}
 	if (chosen == paste && m_current) {

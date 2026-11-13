@@ -46,8 +46,8 @@ expect = "both_menus_agree_on_when_paste_is_offered"
 [[sabotage]]
 name = "choosing Copy puts nothing on the clipboard"
 file = "src/ui/main_window.cpp"
-find = "\t\tif (!selected.isEmpty()) QGuiApplication::clipboard()->setText(selected);\n\t\treturn;"
-replace = "\t\treturn;"
+find = "\tif (chosen == copy) {\n\t\tcopy_selection();\n\t\treturn;"
+replace = "\tif (chosen == copy) {\n\t\treturn;"
 expect = "the_edit_verbs_on_that_menu_act_too"
 
 # Choosing Split does not split.

@@ -627,6 +627,7 @@ private:
 	/* The pane bar the container asks for, wired to this window. */
 	QWidget *make_pane_bar(bssh_session *front, QWidget *parent);
 	void show_session(bssh_session *session);
+	void copy_selection();
 	void detach_session();
 	void update_status();
 

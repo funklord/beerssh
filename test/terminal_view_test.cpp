@@ -295,6 +295,57 @@ void terminal_view_test::selection_spans_the_scrollback() {
 	QCOMPARE(view.selection_text(), before);
 }
 
+void terminal_view_test::a_selection_goes_when_its_text_changes_under_it() {
+	/*
+	 * The holder, 2026-11-13: "selections stay permanently even when text
+	 * moves, this is misleading and different from other terminals". As in
+	 * xterm, VTE and Konsole: kept while output scrolls it up into the
+	 * history, gone when what it covers is redrawn or moved.
+	 */
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 160);
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+	/* Wired as the pane container wires a view to its session. */
+	QObject::connect(&emulator, &bssh_emulator::rows_scrolled, &view, &bssh_terminal_view::on_rows_scrolled);
+	QObject::connect(&emulator, &bssh_emulator::rows_damaged, &view, &bssh_terminal_view::on_rows_damaged);
+
+	/* Scrolled up into the history: still there, still over "hello". */
+	emulator.feed(QByteArrayLiteral("hello world"));
+	drag(view, 0, 0, 4, 0);
+	QCOMPARE(view.selection_text(), QStringLiteral("hello"));
+	for (int i = 0; i < view.rows() + 3; ++i) emulator.feed(QByteArrayLiteral("\r\nmore output"));
+	QCoreApplication::processEvents();
+	QVERIFY(emulator.scrollback().count() > 0);
+	QVERIFY2(view.has_selection(), "output scrolling it up took the selection");
+	QCOMPARE(view.selection_text(), QStringLiteral("hello"));
+
+	/* Rewritten in place: gone. */
+	emulator.feed(QByteArrayLiteral("\x1b[2J\x1b[Hfirst line\r\nsecond"));
+	drag(view, 0, 0, 4, 0);
+	QCOMPARE(view.selection_text(), QStringLiteral("first"));
+	emulator.feed(QByteArrayLiteral("\x1b[H\x1b[2Kredrawn"));
+	QCoreApplication::processEvents();
+	QVERIFY2(!view.has_selection(), "a redraw left the selection over other text");
+
+	/* Untouched rows changing elsewhere: kept. */
+	drag(view, 0, 0, 4, 0);
+	QCOMPARE(view.selection_text(), QStringLiteral("redra"));
+	emulator.feed(QByteArrayLiteral("\x1b[3;1Hthird row"));
+	QCoreApplication::processEvents();
+	QVERIFY2(view.has_selection(), "a change to another row took the selection");
+
+	/* A full-screen program scrolling its screen: the text moved, gone. */
+	emulator.feed(QByteArrayLiteral("\x1b[?1049h\x1b[Haaaa\r\nbbbb\r\ncccc"));
+	drag(view, 0, 1, 3, 1);
+	QCOMPARE(view.selection_text(), QStringLiteral("bbbb"));
+	emulator.feed(QByteArrayLiteral("\x1b[S"));
+	QCoreApplication::processEvents();
+	QVERIFY2(!view.has_selection(), "the selection stayed while its text scrolled away");
+}
+
 void terminal_view_test::shrinking_the_scrollback_brings_the_view_back_with_it() {
 	bssh_terminal_view view;
 	show_and_resize(view, 640, 320);
@@ -5574,6 +5625,8 @@ void terminal_view_test::the_edit_verbs_on_that_menu_act_too() {
 	QVERIFY2(QGuiApplication::clipboard()->text().contains(QStringLiteral("selectable")),
 	          qPrintable(QStringLiteral("Copy put %1 on the clipboard")
 	                             .arg(QGuiApplication::clipboard()->text())));
+	/* And off the screen once it is there (the holder, 2026-11-13). */
+	QVERIFY2(!view->has_selection(), "Copy left the selection on screen");
 
 	/*
 	 * One line, deliberately: more than one line of content is what
