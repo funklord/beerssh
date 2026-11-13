@@ -1359,7 +1359,21 @@ FFMPEG_HEADERS ?= $(shell pkg-config --variable=includedir libavformat 2>/dev/nu
 ANDROID_FFMPEG_DIRS = libavformat libavcodec libavutil libswresample
 ANDROID_FFMPEG_INCLUDE = $(ANDROID_BUILD_DIR)/ffmpeg-include
 
-$(ANDROID_FFMPEG_INCLUDE)/.copied: | android-check
+# Which kit and which headers the copy was checked for. Without it the
+# stamp below outlived a change of either: a build directory built
+# against one kit and rebuilt against another kept the first headers and
+# never re-ran the comparison -- 9.0's headers went through against the
+# 7.1 kit without a word (2026-11-13), the mismatch the comparison is
+# there to refuse. Written only when it changes, so a second make writes
+# nothing.
+ANDROID_FFMPEG_SOURCE = $(ANDROID_BUILD_DIR)/ffmpeg-include.source
+
+$(ANDROID_FFMPEG_SOURCE): FORCE
+	@mkdir -p $(ANDROID_BUILD_DIR); \
+	want='$(QT_ANDROID_ROOT) $(FFMPEG_HEADERS)'; \
+	[ "$$(cat $@ 2>/dev/null)" = "$$want" ] || echo "$$want" > $@
+
+$(ANDROID_FFMPEG_INCLUDE)/.copied: $(ANDROID_FFMPEG_SOURCE) | android-check
 	@for d in $(ANDROID_FFMPEG_DIRS); do \
 		[ -d "$(FFMPEG_HEADERS)/$$d" ] || { \
 			echo "android: no FFmpeg headers for $$d under '$(FFMPEG_HEADERS)'" >&2; \
@@ -1381,6 +1395,7 @@ $(ANDROID_FFMPEG_INCLUDE)/.copied: | android-check
 		exit 1; \
 	fi
 	mkdir -p $(ANDROID_FFMPEG_INCLUDE)
+	for d in $(ANDROID_FFMPEG_DIRS); do rm -rf $(ANDROID_FFMPEG_INCLUDE)/$$d; done
 	for d in $(ANDROID_FFMPEG_DIRS); do cp -r $(FFMPEG_HEADERS)/$$d $(ANDROID_FFMPEG_INCLUDE)/; done
 	touch $@
 

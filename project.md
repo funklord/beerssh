@@ -4590,7 +4590,12 @@ model on a finger.
   directory they sit in holds glibc's too. Before copying, the header's
   libavformat major is compared with the kit library's (`Lavf61` in its
   strings), because a mismatch compiles and links and then reads the
-  wrong struct field at run time; both refusals were run, and **the
+  wrong struct field at run time; both refusals were run. **The copy
+  is re-checked when the kit or the headers change**: its stamp first
+  outlived both, so a build directory rebuilt against the other kit kept
+  its old headers and 9.0's went through against the 7.1 kit unchecked
+  (2026-11-13); `ffmpeg-include.source` records the pair, rewritten only
+  when it moves. And **the
   guard earned itself on CI's first run**, refusing the runner's
   headers against the release kit's libavformat 63. CI's Android job
   takes 9.0's public headers from the release tarball, checksum pinned,
