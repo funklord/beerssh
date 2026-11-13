@@ -4554,6 +4554,14 @@ model on a finger.
   opening the file for itself. A 10 s test pattern from the loopback
   host played in the panel, its picture in snurra's drawer above the
   tile, counting up to its last frame.
+  **Pin `4fea617`, 2026-11-13** (snurra's word the same day, the
+  facade unchanged; `source.h` gains only a defaulted virtual):
+  subtitles, from a file's own streams -- read from the host's bytes
+  like the rest -- and from a `.srt` beside the file for local files
+  only, so not yet for a remote one; and snurra's own Android build now
+  checks FFmpeg's headers against the kit, as BeerSSH's does (below).
+  `make media` and the x86_64 APK build with it, and the media build's
+  `--self-test` passes; nothing was played on this pin.
   **On Android, 2026-11-13 -- the holder: "ship snurra in the android
   apk too".** `make android` compiles snurra in (`ANDROID_MEDIA ?= 1`;
   beersshd's build sets it empty), against the FFmpeg Qt's kit ships for
