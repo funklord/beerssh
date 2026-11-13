@@ -4639,8 +4639,11 @@ model on a finger.
   heard it**: the stream opened, was registered as media and played to
   its end, but the test tone is 440 Hz at 5% amplitude and the phone's
   media volume was 5 of 15, and the holder, beside the phone, heard
-  nothing. A started stream is not sound; an audible play is still to
-  come.
+  nothing. A started stream is not sound. **Then heard**: a 3 s tone at
+  30% amplitude, media volume 11, and the holder: "heard the tone". The
+  mixer at that moment: output thread on `AUDIO_DEVICE_OUT_SPEAKER`,
+  `AUDIO_OUTPUT_FLAG_FAST`, out of standby, BeerSSH holding an audio
+  session.
   **Reaching the phone took adb over Wi-Fi**: on this desk its USB goes
   through two hubs (a Microchip USB2734, then a USB 2.0 hub) and dropped
   every transfer of 1 MB or more, 256 KB passing, then came back
