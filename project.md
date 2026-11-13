@@ -4598,8 +4598,21 @@ model on a finger.
   `avconfig.h` written by hand (little-endian, fast unaligned). Qt
   Multimedia joins the job's modules, since the kit's FFmpeg comes with
   it. snurra's 18 sources compile for arm64 against both 7.1's and
-  9.0's headers; **only 7.1 has been played** (the emulator run below),
-  so a release-kit build has its first play still to come. Told to
+  9.0's headers. **Both have played**: 7.1 in the emulator run below,
+  and 9.0 the same day once the released kit was installed here, on the
+  holder's word, with aqt into `~/Qt-release/6.12.0` (host `gcc_64`,
+  `android_x86_64` and `android_arm64_v8a` with Qt Multimedia, 2.9 GB)
+  -- beside the pre-release rather than over it, since the other Android
+  trees build from `~/Qt/6.12.0`. Its libavformat reads `Lavf63.1.101`
+  and its `qdevice.pri` names NDK r27c, as the pre-release's does; CI's
+  9.0 headers sit beside it in `ffmpeg-9.0-headers`. A release-kit build
+  is `make android QT_ANDROID_ROOT=$HOME/Qt-release/6.12.0/android_<abi>
+  FFMPEG_HEADERS=$HOME/Qt-release/6.12.0/ffmpeg-9.0-headers
+  ANDROID_BUILD_DIR=build-android-rel-<abi>`, the last so its copied
+  headers and objects never mix with a pre-release build's. The x86_64
+  APK is 61 MB (arm64 58 MB); on the API 36 emulator the 8 s tone ran to
+  its end through AAudio and the test film played with "SUBTITLE FROM
+  THE HOST" over it. The Fold has played neither yet. Told to
   snurra, whose own Android build copies the desktop's headers with no
   such check (its inbox, 20261113T0126Z).
   **The deploy list had to learn them.** `beerssh.pro` names exactly
