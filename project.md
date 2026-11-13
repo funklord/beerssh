@@ -4557,21 +4557,27 @@ model on a finger.
   **On Android, 2026-11-13 -- the holder: "ship snurra in the android
   apk too".** `make android` compiles snurra in (`ANDROID_MEDIA ?= 1`;
   beersshd's build sets it empty), against the FFmpeg Qt's kit ships for
-  its own multimedia: 7.1, without headers. The headers come from
+  its own multimedia, without headers -- **7.1 in this machine's kit,
+  9.0 in the released 6.12.0 CI installs**: the local kit is a July
+  pre-release (`~/Qt/components.xml`, 202607...), the release's
+  multimedia archive is 2026-09-28. The headers come from
   `FFMPEG_HEADERS` -- the desktop's by default -- and only the four
   FFmpeg directories are copied into the build tree, since the multiarch
   directory they sit in holds glibc's too. Before copying, the header's
   libavformat major is compared with the kit library's (`Lavf61` in its
   strings), because a mismatch compiles and links and then reads the
-  wrong struct field at run time; both refusals were run. CI's Ubuntu has
-  6.1, so its Android job takes 7.1's public headers from the release
-  tarball, checksum pinned, copied rather than configured -- nothing of
-  the download runs -- with `avconfig.h` written by hand
-  (little-endian, fast unaligned); the kit's libraries are 7.1.0, which
-  those headers match more closely than Debian's 7.1.5 (only `MICRO`
-  and cast-only macro fixes differ). Qt Multimedia joins the job's
-  modules, since the kit's FFmpeg comes with it. snurra's 18 sources
-  compile for arm64 against those headers.
+  wrong struct field at run time; both refusals were run, and **the
+  guard earned itself on CI's first run**, refusing the runner's
+  headers against the release kit's libavformat 63. CI's Android job
+  takes 9.0's public headers from the release tarball, checksum pinned,
+  copied rather than configured -- nothing of the download runs -- with
+  `avconfig.h` written by hand (little-endian, fast unaligned). Qt
+  Multimedia joins the job's modules, since the kit's FFmpeg comes with
+  it. snurra's 18 sources compile for arm64 against both 7.1's and
+  9.0's headers; **only 7.1 has been played** (the emulator run below),
+  so a release-kit build has its first play still to come. Told to
+  snurra, whose own Android build copies the desktop's headers with no
+  such check (its inbox, 20261113T0126Z).
   **The deploy list had to learn them.** `beerssh.pro` names exactly
   what the APK carries (sec 9.4's reason: a scanning androiddeployqt
   brings QML), so the first build linked FFmpeg and packaged none of it

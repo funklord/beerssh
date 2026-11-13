@@ -245,24 +245,27 @@ jobs:
           path: ~/.gradle/wrapper/dists
           key: gradle-dists-qt6.12.0
 
-      # snurra compiles against the kit's FFmpeg, which ships no headers,
-      # and the runner's own are 6.1 where the kit's are 7.1 -- a mismatch
-      # the Makefile refuses. So 7.1's public headers come from the
-      # release tarball, checked against a pinned sum, copied rather than
-      # configured: nothing of the download runs. The one header configure
-      # writes, avconfig.h, says little-endian with fast unaligned loads,
-      # as it does for arm64.
-      - name: FFmpeg 7.1 headers
+      # snurra compiles against the kit's FFmpeg, which ships no headers.
+      # The released 6.12.0 kit's is FFmpeg 9.0 (libavformat 63, read by
+      # the Makefile's guard on this job's first run, 2026-11-13), and
+      # the runner's own headers are 6.1 -- a mismatch the Makefile
+      # refuses. So 9.0's public headers come from the release tarball,
+      # checked against a pinned sum, copied rather than configured:
+      # nothing of the download runs. The one header configure writes,
+      # avconfig.h, says little-endian with fast unaligned loads, as it
+      # does for arm64. A new kit with another FFmpeg fails the guard by
+      # name; move the version and the sum together.
+      - name: FFmpeg headers for the kit
         run: |
           set -e
-          curl -sSfL -o ffmpeg-7.1.tar.xz https://ffmpeg.org/releases/ffmpeg-7.1.tar.xz
-          echo "40973d44970dbc83ef302b0609f2e74982be2d85916dd2ee7472d30678a7abe6  ffmpeg-7.1.tar.xz" | sha256sum -c -
-          tar xf ffmpeg-7.1.tar.xz --wildcards 'ffmpeg-7.1/libavformat/*.h' 'ffmpeg-7.1/libavcodec/*.h' \
-              'ffmpeg-7.1/libavutil/*.h' 'ffmpeg-7.1/libswresample/*.h'
+          curl -sSfL -o ffmpeg-9.0.tar.xz https://ffmpeg.org/releases/ffmpeg-9.0.tar.xz
+          echo "7f607a00dd0d28a729d5a4811205812eef01cf6ef6155025febb6f36a9062d52  ffmpeg-9.0.tar.xz" | sha256sum -c -
+          tar xf ffmpeg-9.0.tar.xz --wildcards 'ffmpeg-9.0/libavformat/*.h' 'ffmpeg-9.0/libavcodec/*.h' \
+              'ffmpeg-9.0/libavutil/*.h' 'ffmpeg-9.0/libswresample/*.h'
           printf '%s\n' '#ifndef AVUTIL_AVCONFIG_H' '#define AVUTIL_AVCONFIG_H' \
               '#define AV_HAVE_BIGENDIAN 0' '#define AV_HAVE_FAST_UNALIGNED 1' '#endif' \
-              > ffmpeg-7.1/libavutil/avconfig.h
-          echo "FFMPEG_HEADERS=$PWD/ffmpeg-7.1" >> "$GITHUB_ENV"
+              > ffmpeg-9.0/libavutil/avconfig.h
+          echo "FFMPEG_HEADERS=$PWD/ffmpeg-9.0" >> "$GITHUB_ENV"
 
       # Compiles and links libbeerssh_arm64-v8a.so. Packaging into an AAB
       # additionally needs the SDK, which the runner image provides.
