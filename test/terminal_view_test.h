@@ -122,6 +122,8 @@ private slots:
 	void every_control_announces_a_name();
 	void the_contrast_floor_can_be_turned_off();
 	void the_floor_lifts_glyphs_and_leaves_backgrounds_faithful();
+	void every_attribute_is_drawn_data();
+	void every_attribute_is_drawn();
 	void faint_text_draws_fainter_than_plain_text();
 	void dimming_takes_the_text_and_the_blocks_but_never_the_background();
 	void a_reader_can_reach_the_scrollback_and_the_selection();

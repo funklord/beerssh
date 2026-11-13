@@ -17982,6 +17982,14 @@ of features; a new sequence is a new row, not a new test.
   other attribute kept and not drawn; left so, as several terminals do by
   default and a blinking screen costs more than it says.
   `struck_text_is_drawn_struck` (pixels), `tool/sabotage/strike.toml`.
+  And the guard the table lacked, 2026-11-14: `every_attribute_is_drawn`
+  draws a word with each attribute and without, in two views at the same
+  place, and the frames must differ -- bold, faint, italic, the three
+  underlines, inverse, strike and the four kinds of colour. It found no
+  other attribute undrawn. Its controls (SGR 0, and conceal, which is not
+  drawn) fail as they should; a first version comparing two rows of one
+  view passed for plain against plain, the grid's one-pixel inset putting
+  one row's underscore into the other's crop.
 - **The holder's "no colour on the coloured prompt" was `TERM`, not the
   renderer -- [DECIDED 2026-10-26, the holder: keep xterm-256color].**
   Their `~/.bashrc` coloured the prompt (and set the window title) only

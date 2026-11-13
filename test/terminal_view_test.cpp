@@ -2268,6 +2268,54 @@ void terminal_view_test::dimming_takes_the_text_and_the_blocks_but_never_the_bac
 	QCOMPARE(view.grab().toImage(), full);
 }
 
+void terminal_view_test::every_attribute_is_drawn_data() {
+	QTest::addColumn<QByteArray>("sgr");
+	QTest::newRow("bold") << QByteArray("1");
+	QTest::newRow("faint") << QByteArray("2");
+	QTest::newRow("italic") << QByteArray("3");
+	QTest::newRow("underline") << QByteArray("4");
+	QTest::newRow("double underline") << QByteArray("21");
+	QTest::newRow("curly underline") << QByteArray("4:3");
+	QTest::newRow("inverse") << QByteArray("7");
+	QTest::newRow("strike") << QByteArray("9");
+	QTest::newRow("red") << QByteArray("31");
+	QTest::newRow("on blue") << QByteArray("44");
+	QTest::newRow("256 colour") << QByteArray("38;5;208");
+	QTest::newRow("truecolour") << QByteArray("38;2;10;200;90");
+}
+
+void terminal_view_test::every_attribute_is_drawn() {
+	/*
+	 * The conformance table (sec 12.3w) holds that a cell KEEPS each
+	 * attribute; nothing held that the view DRAWS it, and strike was kept
+	 * for weeks and drawn as plain text. So the same word is drawn with
+	 * the attribute and without, each in a view of its own at the same
+	 * place, and the two frames must differ. Blink is left out on purpose
+	 * (drawn steady, sec 12.3w).
+	 */
+	QFETCH(QByteArray, sgr);
+	const auto drawn = [](const QByteArray &bytes) {
+		bssh_emulator emulator(12, 2);
+		emulator.feed(bytes + "\x1b[?25l");
+		bssh_terminal_view view;
+		/* In a font the app ships, as every host is drawn. */
+		QJsonObject settings;
+		settings.insert(QStringLiteral("font_family"), QStringLiteral("dejavu-sans-mono"));
+		settings.insert(QStringLiteral("font_size"), 11);
+		bssh_apply_appearance(&view, settings);
+		view.attach_screen(&emulator.screen());
+		view.set_colour_scheme(QStringLiteral("default"));
+		view.resize(12 * 16, 2 * 32);
+		view.show();
+		if (!QTest::qWaitForWindowExposed(&view)) return QImage();
+		return view.grab().toImage();
+	};
+	const QImage styled = drawn("\x1b[" + sgr + "mWord_gy\x1b[0m");
+	const QImage plain = drawn("Word_gy");
+	QVERIFY(!styled.isNull() && !plain.isNull());
+	QVERIFY2(styled != plain, "drawn exactly as plain text");
+}
+
 void terminal_view_test::faint_text_draws_fainter_than_plain_text() {
 	/*
 	 * SGR 2 was parsed by nobody: libvterm had no faint attribute, so
