@@ -15,6 +15,7 @@
 class QMimeData;
 class QScrollArea;
 class QSplitter;
+class QSplitterHandle;
 class QTimer;
 class QVBoxLayout;
 class bssh_layout_manager;
@@ -222,6 +223,8 @@ protected:
 	 */
 	void showEvent(QShowEvent *event) override;
 	void hideEvent(QHideEvent *event) override;
+	void mouseMoveEvent(QMouseEvent *event) override;
+	void mouseReleaseEvent(QMouseEvent *event) override;
 
 signals:
 	/* The focused pane changed -- the window retargets its shortcuts. */
@@ -312,6 +315,37 @@ private:
 	QList<QSplitter *> all_splitters() const;
 	void snap_splitter(QSplitter *splitter);
 	void equalize_splitter(QSplitter *splitter);
+
+	/*
+	 * Dividers in line move together (sec 8.3, divider_links.h): which
+	 * ones is decided when a drag begins, from where they are then, and
+	 * each move of the dragged one is copied to the rest. Alt held, or
+	 * the divider held still half a second before it moves -- the same
+	 * gesture on a phone, which has no Alt -- moves it alone.
+	 */
+	struct divider_ref_t {
+		QPointer<QSplitter> splitter;
+		int index = 0;
+	};
+	QList<divider_ref_t> all_dividers() const;
+	static int divider_at(QSplitter *splitter, int index, const QWidget *in);
+	void move_divider_to(const divider_ref_t &divider, int at);
+	void begin_divider_drag(QSplitterHandle *handle, bool alone);
+	void follow_divider(QSplitter *splitter, int index);
+	/*
+	 * A divider the whole way across moved alone: the tree rebuilt the
+	 * other way first (divider_links.h), and the drag carried on by the
+	 * container on the piece that was under the pointer.
+	 */
+	bool renest_for(QSplitterHandle *handle, const QPoint &global);
+	bool m_renest_dragging = false;
+	bool m_renest_vertical_line = false;
+	QPoint m_renest_from;
+	divider_ref_t m_renest;
+	QList<divider_ref_t> m_drag_linked;
+	divider_ref_t m_drag;
+	qint64 m_drag_pressed_ms = -1;
+	bool m_drag_moved = false;
 
 	/*
 	 * The dividers kept across a rebuild (sec 8.3). Every layout change

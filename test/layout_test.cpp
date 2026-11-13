@@ -113,6 +113,7 @@
 #include "ui/pane_bar.h"
 #include "ui/pane_container.h"
 #include "ui/pane_snap.h"
+#include "ui/divider_links.h"
 #include "ui/find_bar.h"
 #include "ui/terminal_view.h"
 
@@ -10766,6 +10767,394 @@ void layout_test::a_divider_equalizes_on_a_double_click() {
 	QVERIFY2(difference <= cell,
 	          qPrintable(QStringLiteral("panes differ by %1px, one cell is %2px")
 	                             .arg(difference).arg(cell)));
+}
+
+void layout_test::dividers_in_line_are_linked_end_to_end() {
+	/*
+	 * sec 8.3's linked dividers as geometry: three rows' column dividers
+	 * at x=100, a crossing divider's 8px between each, are one line; a
+	 * fourth far below is not reached; one 3px out of line is not in it.
+	 */
+	const auto line = [](int at, int from) {
+		bssh_divider_t each;
+		each.vertical = true;
+		each.at = at;
+		each.from = from;
+		each.to = from + 99;
+		return each;
+	};
+	QList<bssh_divider_t> all{ line(100, 0), line(101, 108), line(100, 216), line(100, 500), line(300, 0) };
+	QList<int> linked = bssh_linked_dividers(all, 0, 2, 10);
+	std::sort(linked.begin(), linked.end());
+	QCOMPARE(linked, QList<int>({ 0, 1, 2 }));
+
+	all[1].at = 103;
+	linked = bssh_linked_dividers(all, 0, 2, 10);
+	QCOMPARE(linked, QList<int>({ 0 }));
+
+	/* Dragged to 105 beside the one at 103: snapped to it; at 120, not. */
+	QCOMPARE(bssh_snap_divider(all, { 0 }, 105, 8, 10), 1);
+	QCOMPARE(bssh_snap_divider(all, { 0 }, 120, 8, 10), -1);
+	/* Not to one in line but not continuing it, far down the screen. */
+	all[1].at = 100;
+	QCOMPARE(bssh_snap_divider(all, { 0, 1, 2 }, 104, 8, 10), -1);
+}
+
+namespace {
+
+/* A grid of sessions named r<row>c<col>, rows of the given lengths. */
+bssh_pane_node grid_tree(bssh_session_registry &registry, const QList<int> &rows) {
+	bssh_pane_node tree;
+	tree.orientation = Qt::Vertical;
+	for (int r = 0; r < rows.size(); ++r) {
+		bssh_pane_node line;
+		line.orientation = Qt::Horizontal;
+		for (int c = 0; c < rows.at(r); ++c) {
+			bssh_pane_node pane;
+			pane.session = registry.create(named(QStringLiteral("r%1c%2").arg(r).arg(c)));
+			line.children.push_back(pane);
+		}
+		tree.children.push_back(line);
+	}
+	return tree;
+}
+
+/* The rows' splitters, top to bottom. */
+QList<QSplitter *> row_splitters(bssh_pane_container &container) {
+	QList<QSplitter *> rows;
+	for (QSplitter *each : container.findChildren<QSplitter *>()) {
+		if (each->orientation() == Qt::Horizontal && each->count() > 1) rows.append(each);
+	}
+	std::sort(rows.begin(), rows.end(), [&container](QSplitter *a, QSplitter *b) {
+		return a->mapTo(&container, QPoint(0, 0)).y() < b->mapTo(&container, QPoint(0, 0)).y();
+	});
+	return rows;
+}
+
+int handle_x(QSplitter *splitter, int index, QWidget *in) {
+	QSplitterHandle *handle = splitter->handle(index);
+	return handle->mapTo(in, QPoint(0, 0)).x() + handle->width() / 2;
+}
+
+/* A drag as a pointer makes one: press, a few moves, release. */
+void drag_handle(QSplitterHandle *handle, int dx, Qt::KeyboardModifiers modifiers, int hold_ms = 0) {
+	const QPoint at(handle->width() / 2, handle->height() / 2);
+	const QPoint global = handle->mapToGlobal(at);
+	QMouseEvent press(QEvent::MouseButtonPress, at, global, Qt::LeftButton, Qt::LeftButton, modifiers);
+	QApplication::sendEvent(handle, &press);
+	if (hold_ms > 0) QTest::qWait(hold_ms);
+	QPoint step;
+	for (int i = 1; i <= 4; ++i) {
+		step = QPoint(dx * i / 4, 0);
+		QMouseEvent move(QEvent::MouseMove, at + step, global + step, Qt::NoButton, Qt::LeftButton, modifiers);
+		QApplication::sendEvent(handle, &move);
+	}
+	QMouseEvent release(QEvent::MouseButtonRelease, at + step, global + step, Qt::LeftButton, Qt::NoButton,
+	                    modifiers);
+	QApplication::sendEvent(handle, &release);
+	QCoreApplication::processEvents();
+}
+
+} /* namespace */
+
+void layout_test::a_grid_column_divider_moves_every_row() {
+	/*
+	 * The holder's 3x3 (2026-11-13): a row divider moved all three rows,
+	 * a column divider only its own row, and the grid came apart. Dividers
+	 * in line move together now (sec 8.3).
+	 */
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(1200, 900);
+	/* The room the window would report: without it a tiled window holds
+	 * four panes (sec 8.2), with it as many as fit. */
+	layout.set_room(QSize(1200, 900), QSize(120, 80), 8);
+	layout.set_tree(grid_tree(registry, { 3, 3, 3 }));
+	QCoreApplication::processEvents();
+	QCOMPARE(container.pane_count(), 9);
+	const QList<QSplitter *> rows = row_splitters(container);
+	QCOMPARE(rows.size(), 3);
+	const int before = handle_x(rows.at(0), 1, &container);
+	for (QSplitter *row : rows) QVERIFY(qAbs(handle_x(row, 1, &container) - before) <= 2);
+
+	drag_handle(rows.at(0)->handle(1), 120, Qt::NoModifier);
+	const int moved = handle_x(rows.at(0), 1, &container);
+	QVERIFY2(moved > before + 60, qPrintable(QStringLiteral("the divider went %1 -> %2").arg(before).arg(moved)));
+	for (QSplitter *row : rows) {
+		QVERIFY2(qAbs(handle_x(row, 1, &container) - moved) <= 1,
+		         qPrintable(QStringLiteral("a row's divider at %1, the dragged one at %2")
+		                            .arg(handle_x(row, 1, &container)).arg(moved)));
+	}
+	/* The second column's dividers were not in it. */
+	for (QSplitter *row : rows) QVERIFY(handle_x(row, 2, &container) > moved + 100);
+}
+
+void layout_test::a_divider_moves_alone_with_shift_or_after_a_hold() {
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(1200, 900);
+	/* The room the window would report: without it a tiled window holds
+	 * four panes (sec 8.2), with it as many as fit. */
+	layout.set_room(QSize(1200, 900), QSize(120, 80), 8);
+	layout.set_tree(grid_tree(registry, { 3, 3, 3 }));
+	QCoreApplication::processEvents();
+	const QList<QSplitter *> rows = row_splitters(container);
+	QCOMPARE(rows.size(), 3);
+	const int before = handle_x(rows.at(1), 1, &container);
+
+	/* Shift: the middle row's alone. */
+	drag_handle(rows.at(0)->handle(1), 120, Qt::ShiftModifier);
+	QVERIFY(handle_x(rows.at(0), 1, &container) > before + 60);
+	QVERIFY(qAbs(handle_x(rows.at(1), 1, &container) - before) <= 1);
+	QVERIFY(qAbs(handle_x(rows.at(2), 1, &container) - before) <= 1);
+
+	/* Held still first, as a thumb would: the bottom row's alone. */
+	drag_handle(rows.at(2)->handle(1), -120, Qt::NoModifier, 600);
+	QVERIFY(handle_x(rows.at(2), 1, &container) < before - 60);
+	QVERIFY(qAbs(handle_x(rows.at(1), 1, &container) - before) <= 1);
+}
+
+void layout_test::a_dragged_divider_snaps_into_line_with_its_neighbour() {
+	/*
+	 * A row of two over a row of three: nothing in line, so nothing
+	 * linked -- and the top divider dragged near the lower row's first
+	 * snaps onto it exactly.
+	 */
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(1200, 900);
+	/* The room the window would report: without it a tiled window holds
+	 * four panes (sec 8.2), with it as many as fit. */
+	layout.set_room(QSize(1200, 900), QSize(120, 80), 8);
+	layout.set_tree(grid_tree(registry, { 2, 3 }));
+	QCoreApplication::processEvents();
+	const QList<QSplitter *> rows = row_splitters(container);
+	QCOMPARE(rows.size(), 2);
+	const int top = handle_x(rows.at(0), 1, &container);
+	const int lower = handle_x(rows.at(1), 1, &container);
+	QVERIFY(top - lower > 100);
+
+	drag_handle(rows.at(0)->handle(1), lower - top + 3, Qt::NoModifier);
+	QCOMPARE(handle_x(rows.at(0), 1, &container), lower);
+	/* And the lower row was not moved by it. */
+	QCOMPARE(handle_x(rows.at(1), 1, &container), lower);
+}
+
+void layout_test::a_double_click_evens_out_every_row_of_a_grid() {
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(1200, 900);
+	/* The room the window would report: without it a tiled window holds
+	 * four panes (sec 8.2), with it as many as fit. */
+	layout.set_room(QSize(1200, 900), QSize(120, 80), 8);
+	layout.set_tree(grid_tree(registry, { 3, 3, 3 }));
+	QCoreApplication::processEvents();
+	const QList<QSplitter *> rows = row_splitters(container);
+	QCOMPARE(rows.size(), 3);
+
+	drag_handle(rows.at(0)->handle(1), 200, Qt::NoModifier);
+	for (QSplitter *row : rows) QVERIFY(row->sizes().at(0) > row->sizes().at(1) + 150);
+
+	QSplitterHandle *handle = rows.at(0)->handle(1);
+	const QPoint at(2, 20);
+	QMouseEvent click(QEvent::MouseButtonDblClick, at, handle->mapToGlobal(at), Qt::LeftButton,
+	                  Qt::LeftButton, Qt::NoModifier);
+	QApplication::sendEvent(handle, &click);
+	QCoreApplication::processEvents();
+	const int cell = qMax(1, container.view_at(0)->cell_width());
+	for (QSplitter *row : rows) {
+		const QList<int> sizes = row->sizes();
+		QVERIFY2(qAbs(sizes.at(0) - sizes.at(1)) <= cell && qAbs(sizes.at(1) - sizes.at(2)) <= cell,
+		         qPrintable(QStringLiteral("a row left %1,%2,%3").arg(sizes.at(0)).arg(sizes.at(1)).arg(sizes.at(2))));
+	}
+}
+
+void layout_test::a_tree_is_rebuilt_from_where_its_panes_are() {
+	/*
+	 * sec 8.3's re-nesting, as geometry: a 3x3 of 100px panes with 8px
+	 * between, cut columns first or rows first as asked, each pane's own
+	 * node kept; and four panes wound round a fifth, which no split tree
+	 * holds, refused.
+	 */
+	bssh_session_registry registry;
+	std::vector<bssh_placed_pane_t> grid;
+	QList<bssh_session *> sessions;
+	for (int r = 0; r < 3; ++r) {
+		for (int c = 0; c < 3; ++c) {
+			bssh_placed_pane_t pane;
+			pane.leaf.session = registry.create(named(QStringLiteral("p%1%2").arg(r).arg(c)));
+			pane.leaf.tabs = { pane.leaf.session };
+			pane.rect = QRect(c * 108, r * 108, 100, 100);
+			sessions << pane.leaf.session;
+			grid.push_back(pane);
+		}
+	}
+	const auto shape = [&sessions](const bssh_pane_node &tree) {
+		return bssh_layout_manager::shape_text(tree, [&sessions](bssh_session *each) {
+			return QString::number(sessions.indexOf(each));
+		});
+	};
+	bssh_pane_node tree;
+	QVERIFY(bssh_tree_from_rects(grid, Qt::Horizontal, &tree));
+	QCOMPARE(shape(tree), QStringLiteral("H(V(0,3,6),V(1,4,7),V(2,5,8))"));
+	QVERIFY(bssh_tree_from_rects(grid, Qt::Vertical, &tree));
+	QCOMPARE(shape(tree), QStringLiteral("V(H(0,1,2),H(3,4,5),H(6,7,8))"));
+	QCOMPARE(tree.children.front().children.front().tabs, QList<bssh_session *>({ sessions.first() }));
+
+	/* The middle column's row divider moved: still a tree, columns first. */
+	grid[1].rect.setHeight(150);
+	grid[4].rect.moveTop(158);
+	grid[4].rect.setHeight(50);
+	/*
+	 * Rows first where rows still run the whole way: the lower one does,
+	 * so it stays one divider, and the top pair is cut into columns.
+	 */
+	QVERIFY(bssh_tree_from_rects(grid, Qt::Vertical, &tree));
+	QCOMPARE(shape(tree), QStringLiteral("V(H(V(0,3),V(1,4),V(2,5)),H(6,7,8))"));
+	QVERIFY(bssh_tree_from_rects(grid, Qt::Horizontal, &tree));
+	QCOMPARE(shape(tree), QStringLiteral("H(V(0,3,6),V(1,4,7),V(2,5,8))"));
+
+	/* A pinwheel: no line crosses the whole without cutting a pane. */
+	std::vector<bssh_placed_pane_t> wheel(5);
+	const QList<QRect> rects{ QRect(0, 0, 200, 100), QRect(208, 0, 100, 200), QRect(108, 208, 200, 100),
+	                          QRect(0, 108, 100, 200), QRect(108, 108, 92, 92) };
+	for (int i = 0; i < 5; ++i) {
+		wheel[i].leaf.session = sessions.at(i);
+		wheel[i].rect = rects.at(i);
+	}
+	QVERIFY(!bssh_tree_from_rects(wheel, Qt::Horizontal, &tree));
+	QVERIFY(!bssh_tree_from_rects(wheel, Qt::Vertical, &tree));
+}
+
+void layout_test::a_row_divider_moved_alone_breaks_at_its_column() {
+	/*
+	 * The holder's follow-up (2026-11-13): with columns linked, a 3x3's
+	 * rows were still one divider each, the whole way across. Moved alone,
+	 * the tree is rebuilt columns first and only the piece under the
+	 * pointer moves.
+	 */
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(1200, 900);
+	layout.set_room(QSize(1200, 900), QSize(120, 80), 8);
+	layout.set_tree(grid_tree(registry, { 3, 3, 3 }));
+	QCoreApplication::processEvents();
+	QCOMPARE(container.pane_count(), 9);
+
+	/* A column made wider first, as the holder's was: it keeps its width. */
+	const QList<QSplitter *> row_list = row_splitters(container);
+	drag_handle(row_list.at(0)->handle(1), 120, Qt::NoModifier);
+	const int wide = row_list.at(0)->sizes().at(0);
+	QVERIFY(wide > row_list.at(0)->sizes().at(2) + 60);
+
+	QSplitter *rows = nullptr;
+	for (QSplitter *each : container.findChildren<QSplitter *>()) {
+		if (each->orientation() == Qt::Vertical && each->count() == 3) rows = each;
+	}
+	QVERIFY(rows);
+	QSplitterHandle *handle = rows->handle(1);
+	const int y_before = handle->mapTo(&container, QPoint(0, 0)).y() + handle->height() / 2;
+	/* In the middle column. */
+	const QPoint at(600, handle->height() / 2);
+	const QPoint global = handle->mapToGlobal(at);
+	QMouseEvent press(QEvent::MouseButtonPress, at, global, Qt::LeftButton, Qt::LeftButton, Qt::ShiftModifier);
+	QApplication::sendEvent(handle, &press);
+	QCoreApplication::processEvents();
+
+	const QString shape = bssh_layout_manager::shape_text(layout.tree(), [](bssh_session *each) {
+		return each->profile().name;
+	});
+	QCOMPARE(shape, QStringLiteral("H(V(r0c0,r1c0,r2c0),V(r0c1,r1c1,r2c1),V(r0c2,r1c2,r2c2))"));
+
+	const QPoint inside = container.mapFromGlobal(global);
+	for (int dy = 30; dy <= 120; dy += 30) {
+		QMouseEvent move(QEvent::MouseMove, inside + QPoint(0, dy), global + QPoint(0, dy), Qt::NoButton,
+		                 Qt::LeftButton, Qt::ShiftModifier);
+		QApplication::sendEvent(&container, &move);
+	}
+	QMouseEvent release(QEvent::MouseButtonRelease, inside + QPoint(0, 120), global + QPoint(0, 120),
+	                    Qt::LeftButton, Qt::NoButton, Qt::ShiftModifier);
+	QApplication::sendEvent(&container, &release);
+	QCoreApplication::processEvents();
+
+	/* The middle column's first row divider is lower; the others are not. */
+	QList<QSplitter *> columns;
+	for (QSplitter *each : container.findChildren<QSplitter *>()) {
+		if (each->orientation() == Qt::Vertical && each->count() == 3) columns.append(each);
+	}
+	QCOMPARE(columns.size(), 3);
+	std::sort(columns.begin(), columns.end(), [&container](QSplitter *a, QSplitter *b) {
+		return a->mapTo(&container, QPoint(0, 0)).x() < b->mapTo(&container, QPoint(0, 0)).x();
+	});
+	const auto divider_y = [&container](QSplitter *column) {
+		QSplitterHandle *h = column->handle(1);
+		return h->mapTo(&container, QPoint(0, 0)).y() + h->height() / 2;
+	};
+	QVERIFY2(divider_y(columns.at(1)) > y_before + 60,
+	         qPrintable(QStringLiteral("the middle piece went %1 -> %2").arg(y_before).arg(divider_y(columns.at(1)))));
+	QVERIFY(qAbs(divider_y(columns.at(0)) - y_before) <= 2);
+	QVERIFY(qAbs(divider_y(columns.at(2)) - y_before) <= 2);
+	/* Only that piece: the column's lower divider stayed in line. */
+	const auto lower_y = [&container](QSplitter *column) {
+		QSplitterHandle *h = column->handle(2);
+		return h->mapTo(&container, QPoint(0, 0)).y() + h->height() / 2;
+	};
+	QVERIFY2(qAbs(lower_y(columns.at(1)) - lower_y(columns.at(0))) <= 1,
+	         qPrintable(QStringLiteral("the lower divider %1 beside %2").arg(lower_y(columns.at(1))).arg(lower_y(columns.at(0)))));
+	/* And the wide column is as wide as it was. */
+	const int cell = qMax(1, container.view_at(0)->cell_width());
+	QVERIFY2(qAbs(columns.at(0)->width() - wide) <= cell,
+	         qPrintable(QStringLiteral("the first column went %1 -> %2").arg(wide).arg(columns.at(0)->width())));
+}
+
+void layout_test::a_grid_keeps_its_dividers_through_a_rebuild() {
+	/*
+	 * Every layout change rebuilds the panes and gives the dividers back
+	 * (sec 8.3, "a divider stays where it was put"). A grid's root runs
+	 * top to bottom, and the rebuild turned the root side by side before
+	 * remembering: the rows lay side by side for a moment and were
+	 * remembered so, and a grid came back with its dividers moved.
+	 */
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(1200, 900);
+	layout.set_room(QSize(1200, 900), QSize(120, 80), 8);
+	layout.set_tree(grid_tree(registry, { 3, 3, 3 }));
+	QCoreApplication::processEvents();
+	QList<QSplitter *> rows = row_splitters(container);
+	QCOMPARE(rows.size(), 3);
+	drag_handle(rows.at(0)->handle(1), 120, Qt::NoModifier);
+	const int wide = rows.at(0)->sizes().at(0);
+	QVERIFY(wide > rows.at(0)->sizes().at(2) + 60);
+
+	container.rebuild();
+	QCoreApplication::processEvents();
+	rows = row_splitters(container);
+	QCOMPARE(rows.size(), 3);
+	const int cell = qMax(1, container.view_at(0)->cell_width());
+	for (QSplitter *row : rows) {
+		QVERIFY2(qAbs(row->sizes().at(0) - wide) <= cell,
+		         qPrintable(QStringLiteral("a row's first pane %1 after the rebuild, %2 before")
+		                            .arg(row->sizes().at(0)).arg(wide)));
+	}
 }
 
 void layout_test::a_divider_is_thumb_sized_only_where_a_thumb_uses_it() {

@@ -170,6 +170,7 @@ SOURCES += \
     ../src/ui/layout_manager.cpp \
     ../src/ui/pane_bar.cpp \
     ../src/ui/pane_container.cpp \
+    ../src/ui/divider_links.cpp \
     ../src/ui/file_panel.cpp \
     ../src/ui/remote_drag.cpp \
     ../src/platform/fuse_shelf.cpp \
@@ -298,6 +299,7 @@ HEADERS += \
     ../src/ui/layout_manager.h \
     ../src/ui/pane_bar.h \
     ../src/ui/pane_container.h \
+    ../src/ui/divider_links.h \
     ../src/ui/pane_snap.h \
     ../src/ui/file_panel.h \
     ../src/ui/remote_drag.h \

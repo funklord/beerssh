@@ -4178,7 +4178,13 @@ model on a finger.
   libkonq4-trinity 14.2.0~pre928 contain no `XdndDirectSave`, libkonq
   knows `text/uri-list` only -- so a request went to the `tde` tree's
   inbox (20261111T1149Z) with the receiving side of the protocol; it is
-  that tree's to carry. Here the order at a drop becomes: XDS where the
+  that tree's to carry. **tde answered 2026-11-13 (inbox 20261113T0749Z):
+  XDS drops implemented in libkonq** (`patch/tdebase/feat-konqueror-xds`
+  there), run against a minimal Xlib XDS source -- version 0, the name in
+  `XdndDirectSave0` as UTF-8 text/plain, `file://host/path` written back,
+  E and F handled. Not installed here nor merged upstream, so BeerSSH's
+  drop into this machine's Konqueror is still the link until it is.
+  Here the order at a drop becomes: XDS where the
   target speaks it; KDE's Ark drag-out over D-Bus, which Dolphin takes
   on Wayland too; else a `file://` link to a copy staged from the moment
   the drag began, when it has finished -- a small file is there before
@@ -4341,7 +4347,10 @@ model on a finger.
   was trusted unasked -- **it did ask: the holder accepted the dialog**,
   so trust is fine. The lost modification time went to the `tde` inbox
   (20261111T1202Z) to be carried upstream with the XDS request, as the
-  holder asked. The test's line was removed afterwards. Unmeasured: whether
+  holder asked; **fixed there 2026-11-13** (`patch/tdebase/fix-sftp-mtime`
+  in tde): the creation time was sent as a second modification time,
+  always 0 from OpenSSH's SFTP v3. Run with the patched slave, not
+  installed here. The test's line was removed afterwards. Unmeasured: whether
   Nautilus 43 and later (GTK4) still take XDS; Finder's file promises
   are the macOS equivalent and would need native code.
 - **Transfer tiles -- [BUILT 2026-11-12]**, as planned below. Every
@@ -4582,7 +4591,11 @@ model on a finger.
   so its own look beside the file found nothing. A local film's `.srt`
   files now go over the same way as a remote one's, where they lie,
   nothing copied (`a_local_film_played_brings_the_subtitles_beside_it`,
-  which needs no server, and a sabotage that removes the line).
+  which needs no server, and a sabotage that removes the line). snurra
+  took the other half the same day (its `5ae5b85`, after this tree's
+  inbox note): it offers the `.srt` beside `path` whether or not bytes
+  come too, duplicates dropped, so naming them here stays right; this
+  tree's pin is still `608c4d6`.
   The pin also brings `#` through a film's sound tracks and non-square
   pixels and rotated phone video shown right.
   **On Android, 2026-11-13 -- the holder: "ship snurra in the android
@@ -8014,6 +8027,55 @@ a tab dragged to the end of a two-tab bar would tear itself out mid-reorder.
   allows. The comment is the part worth remembering: it asserted compliance,
   which is what stopped anyone checking. A claim in a comment is not evidence
   either.
+  **Dividers in line move together -- 2026-11-13.** The holder, with a 3x3:
+  a row divider resized all three rows, a column divider only its own row,
+  and the grid came apart. The cause is the tree: a grid is a split of rows,
+  each row a split of its own, so a column is three separate dividers. They
+  are taken as one by where they are, not by a "grid" flag -- dividers of a
+  direction within 2px of one line and reached end to end (a crossing
+  divider's width between) move together, which a fresh grid is and a row
+  of two over a row of three is not, so an unequal layout stays free with
+  no rule of its own (`divider_links.h`; decided when the drag begins, each
+  move copied to the rest). A dragged divider within the column snap's
+  reach (sec 8.7's setting) of one continuing it snaps into line, and is
+  linked to it next time rather than for the rest of the drag, so passing
+  one by takes nothing along. **Shift** moves one alone -- not Alt, which
+  TDE's and KDE's window managers take for moving the window -- and so
+  does holding the divider still half a second before moving it, the same
+  gesture on a phone, which has no Shift (sec 6.2's rule about a way out
+  only one input can make). A double click evens out every split holding
+  a divider in line with the one clicked, so a grid evened out stays one.
+  **And the other way, by re-nesting.** A 3x3's rows were still one
+  divider each the whole width, since the tree puts rows first and has no
+  way to say "this column's piece moved". Moved alone (Shift, or the
+  hold), such a divider breaks at the pointer: the tree is rebuilt from
+  where the panes are, cut the other way first -- straight lines across
+  the whole area that cut no pane, again inside each part, each pane's
+  own node (tabs, bar side) carried over -- and the piece under the
+  pointer moves. Where a line still runs the whole way it stays one
+  divider. A layout no split tree can hold, four panes wound round a
+  fifth, is refused and the divider moves whole as before; so is a window
+  with panes folded into tabs (sec 8.2), whose tree is not all on screen.
+  The rebuild waits until the handle's own event is over, since it
+  deletes the handle, and the container carries the drag; the piece is
+  looked for once the new splitters are laid out, and only the pane before
+  it is rounded to whole cells, since rounding the whole split nudged the
+  column's next divider out of line. **Building it found an older fault:**
+  a rebuild turned the root side by side before remembering the dividers,
+  and a grid's root runs top to bottom, so its rows lay side by side for
+  that moment and were remembered so -- every pane a ninth of the width
+  and the whole height. A grid came back from any rebuild (a tab opened,
+  a pane moved) with its dividers moved; they are remembered before the
+  turn now (`a_grid_keeps_its_dividers_through_a_rebuild`). The layout's pane order
+  follows the new nesting (columns first after such a break), which moves
+  focus-next and the order panes fold into tabs. The design, limit
+  included, was agreed with the holder before it was built.
+  Tested: the geometry both ways and the pinwheel refused, a 3x3's column
+  moving every row, Shift and the hold each moving one alone, the snap,
+  the double click, and a row divider broken at its middle column with
+  the other columns' left where they were, and a grid kept through a
+  rebuild; nine sabotages. Not yet seen
+  under a real window manager or on a touch screen.
 - **Per-pane geometry:** each pane computes its own cols×rows from its own size and
   its session's font — panes may legitimately differ.
 - **The grid size in the status line is asked of the view, not remembered.** The

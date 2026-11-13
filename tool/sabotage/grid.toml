@@ -41,3 +41,79 @@ file = "src/ui/pane_container.cpp"
 find = "\t\t\tsplitter->setSizes(QList<int>(splitter->count(), 1));\n"
 replace = ""
 expect = "a_grid_opens_rows_of_terminals_of_one_host"
+
+# Dividers in line (sec 8.3's linked dividers, 2026-11-13).
+
+# The dragged divider's move not copied to those in line with it: a grid
+# column moves in one row only, as before.
+[[sabotage]]
+name = "a grid's column divider moves its own row only"
+file = "src/ui/pane_container.cpp"
+find = "\tfor (const divider_ref_t &link : m_drag_linked) move_divider_to(link, at);\n"
+replace = ""
+expect = "a_grid_column_divider_moves_every_row"
+
+# Shift not read: no way to move one row's divider alone on a desktop.
+[[sabotage]]
+name = "Shift does not move a divider alone"
+file = "src/ui/pane_container.cpp"
+find = "\t\tconst bool alone = press->modifiers() & Qt::ShiftModifier;\n"
+replace = "\t\tconst bool alone = false;\n"
+expect = "a_divider_moves_alone_with_shift_or_after_a_hold"
+
+# The hold not read: a phone, with no Shift, can never move one alone.
+[[sabotage]]
+name = "a hold before the drag does not move a divider alone"
+file = "src/ui/pane_container.cpp"
+find = "\t\tif (QDateTime::currentMSecsSinceEpoch() - m_drag_pressed_ms >= 500) {\n"
+replace = "\t\tif (false) {\n"
+expect = "a_divider_moves_alone_with_shift_or_after_a_hold"
+
+# No magnet: a divider dragged beside its neighbour stops a few pixels off.
+[[sabotage]]
+name = "a dragged divider does not snap into line"
+file = "src/ui/pane_container.cpp"
+find = "\tif (target >= 0 && geometry.at(target).at != at) {\n"
+replace = "\tif (false && target >= 0 && geometry.at(target).at != at) {\n"
+expect = "a_dragged_divider_snaps_into_line_with_its_neighbour"
+
+# A double click evens out its own row and leaves the grid uneven.
+[[sabotage]]
+name = "a double click evens out one row of a grid"
+file = "src/ui/pane_container.cpp"
+find = "\t\tfor (QSplitter *each : splitters) equalize_splitter(each);\n"
+replace = "\t\tequalize_splitter(handle->splitter());\n"
+expect = "a_double_click_evens_out_every_row_of_a_grid"
+
+# A row divider moved alone never breaks: it moves the whole way across.
+[[sabotage]]
+name = "a divider the whole way across never breaks at the pointer"
+file = "src/ui/pane_container.cpp"
+find = "\t\tif (alone && renest_for(handle, press->globalPosition().toPoint())) return true;\n"
+replace = ""
+expect = "a_row_divider_moved_alone_breaks_at_its_column"
+
+# The re-nesting tries only the asked direction at every level.
+[[sabotage]]
+name = "a tree is cut only the asked way at every level"
+file = "src/ui/divider_links.cpp"
+find = "\tfor (const Qt::Orientation orientation : { first, other }) {\n"
+replace = "\t(void)other;\n\tfor (const Qt::Orientation orientation : { first }) {\n"
+expect = "a_tree_is_rebuilt_from_where_its_panes_are"
+
+# The piece looked for before the new splitters are laid out: none found.
+[[sabotage]]
+name = "the broken piece is looked for before the panes are laid out"
+file = "src/ui/pane_container.cpp"
+find = "\t\tQCoreApplication::sendPostedEvents(nullptr, QEvent::LayoutRequest);\n"
+replace = ""
+expect = "a_row_divider_moved_alone_breaks_at_its_column"
+
+# The dividers remembered after the root is turned side by side: a grid's
+# rows lie side by side for that moment, and come back wrong.
+[[sabotage]]
+name = "a rebuild remembers a grid's dividers after turning its root"
+file = "src/ui/pane_container.cpp"
+find = "\tif (!column) remember_divisions();\n\tm_splitter->setOrientation(column ? Qt::Vertical : Qt::Horizontal);\n"
+replace = "\tm_splitter->setOrientation(column ? Qt::Vertical : Qt::Horizontal);\n\tif (!column) remember_divisions();\n"
+expect = "a_grid_keeps_its_dividers_through_a_rebuild"

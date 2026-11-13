@@ -13,9 +13,14 @@
 #include <QSplitterHandle>
 #include <QPointer>
 #include <QTimer>
+#include <QDateTime>
+#include <QCoreApplication>
+#include <QMouseEvent>
 #include <QBoxLayout>
 #include <QVBoxLayout>
 
+#include <cstdlib>
+#include <functional>
 #include <utility>
 
 #include "model/session.h"
@@ -25,6 +30,7 @@
 #include "ui/layout_manager.h"
 #include "model/app_settings.h"
 #include "ui/pane_snap.h"
+#include "ui/divider_links.h"
 #include "ui/terminal_view.h"
 
 /*
@@ -217,8 +223,9 @@ void bssh_pane_container::configure_splitter(QSplitter *splitter) {
 	 * two and a half columns wide renders a half column at its edge, and
 	 * the half is not blank -- it is the left side of a glyph.
 	 */
-	connect(splitter, &QSplitter::splitterMoved, this, [this, splitter] {
+	connect(splitter, &QSplitter::splitterMoved, this, [this, splitter](int, int index) {
 		snap_splitter(splitter);
+		follow_divider(splitter, index);
 	});
 }
 
@@ -834,6 +841,16 @@ void bssh_pane_container::rebuild() {
 	 * snapping keys off the same orientation below.
 	 */
 	const bool column = m_layout->arrangement() == bssh_layout_manager::COLUMN;
+	/*
+	 * What the dividers were, before anything moves them: turning the root
+	 * re-lays it out at once, so a grid -- rows one above the other, a
+	 * root that runs top to bottom -- had its rows side by side for a
+	 * moment and was remembered so, every pane a ninth of the width and
+	 * the whole height. Each rebuild of a grid then came back wrong; it
+	 * was found when breaking a row divider lost the columns' widths
+	 * (2026-11-13).
+	 */
+	if (!column) remember_divisions();
 	m_splitter->setOrientation(column ? Qt::Vertical : Qt::Horizontal);
 
 	/*
@@ -863,8 +880,6 @@ void bssh_pane_container::rebuild() {
 	 * loses precisely nothing. Diffing would be an optimisation of the
 	 * cheap half at the cost of the subtle half.
 	 */
-	/* What the dividers were, before the splitters holding them go. */
-	if (!column) remember_divisions();
 	m_splitter_paths.clear();
 	m_frame_tabs.clear();
 
@@ -1176,6 +1191,235 @@ void bssh_pane_container::equalize_splitter(QSplitter *splitter) {
 	snap_splitter(splitter);
 }
 
+QList<bssh_pane_container::divider_ref_t> bssh_pane_container::all_dividers() const {
+	QList<divider_ref_t> dividers;
+	for (QSplitter *splitter : all_splitters()) {
+		/* Handle 0 is the zero-width one before the first part. */
+		for (int i = 1; i < splitter->count(); ++i) {
+			QSplitterHandle *handle = splitter->handle(i);
+			if (handle && handle->isVisible()) dividers.append({ splitter, i });
+		}
+	}
+	return dividers;
+}
+
+/* Where a divider's line is across, in `in`'s coordinates: its middle. */
+int bssh_pane_container::divider_at(QSplitter *splitter, int index, const QWidget *in) {
+	QSplitterHandle *handle = splitter->handle(index);
+	const QPoint corner = handle->mapTo(in, QPoint(0, 0));
+	return splitter->orientation() == Qt::Horizontal ? corner.x() + handle->width() / 2
+	                                                  : corner.y() + handle->height() / 2;
+}
+
+namespace {
+
+/* The same dividers as plain geometry, for divider_links.h. */
+template <typename refs_t>
+QList<bssh_divider_t> divider_geometry(const refs_t &refs, const QWidget *in) {
+	QList<bssh_divider_t> out;
+	for (const auto &ref : refs) {
+		QSplitterHandle *handle = ref.splitter->handle(ref.index);
+		const QPoint corner = handle->mapTo(in, QPoint(0, 0));
+		bssh_divider_t each;
+		each.vertical = ref.splitter->orientation() == Qt::Horizontal;
+		each.at = each.vertical ? corner.x() + handle->width() / 2 : corner.y() + handle->height() / 2;
+		each.from = each.vertical ? corner.y() : corner.x();
+		each.to = each.from + (each.vertical ? handle->height() : handle->width()) - 1;
+		out.append(each);
+	}
+	return out;
+}
+
+} /* namespace */
+
+void bssh_pane_container::move_divider_to(const divider_ref_t &divider, int at) {
+	QSplitter *splitter = divider.splitter;
+	if (!splitter || divider.index < 1 || divider.index >= splitter->count()) return;
+	int delta = at - divider_at(splitter, divider.index, this);
+	if (delta == 0) return;
+
+	QList<int> sizes = splitter->sizes();
+	const int before = divider.index - 1;
+	const int after = divider.index;
+	const bool across = splitter->orientation() == Qt::Horizontal;
+	const auto least = [splitter, across](int i) {
+		const QSize hint = splitter->widget(i)->minimumSizeHint();
+		return across ? hint.width() : hint.height();
+	};
+	/* No part below its least: the line stops where a pane would. */
+	if (sizes.at(before) + delta < least(before)) delta = least(before) - sizes.at(before);
+	if (sizes.at(after) - delta < least(after)) delta = sizes.at(after) - least(after);
+	if (delta == 0) return;
+	sizes[before] += delta;
+	sizes[after] -= delta;
+	splitter->setSizes(sizes);
+}
+
+void bssh_pane_container::begin_divider_drag(QSplitterHandle *handle, bool alone) {
+	m_drag = {};
+	m_drag_linked.clear();
+	QSplitter *splitter = handle->splitter();
+	for (int i = 1; i < splitter->count(); ++i) {
+		if (splitter->handle(i) == handle) m_drag = { splitter, i };
+	}
+	if (!m_drag.splitter || alone) return;
+
+	const QList<divider_ref_t> dividers = all_dividers();
+	int dragged = -1;
+	for (int i = 0; i < dividers.size(); ++i) {
+		if (dividers.at(i).splitter == splitter && dividers.at(i).index == m_drag.index) dragged = i;
+	}
+	/*
+	 * In line within two pixels: dividers snap to whole cells, so a grid's
+	 * columns land on the same pixel or one apart. The gap end to end is a
+	 * crossing divider's width, which is what lies between two rows'.
+	 */
+	const QList<int> linked = bssh_linked_dividers(divider_geometry(dividers, this), dragged, 2,
+	                                               splitter->handleWidth() + 2);
+	for (const int i : linked) {
+		if (i != dragged) m_drag_linked.append(dividers.at(i));
+	}
+}
+
+void bssh_pane_container::follow_divider(QSplitter *splitter, int index) {
+	if (m_drag.splitter != splitter || m_drag.index != index) return;
+	int at = divider_at(splitter, index, this);
+
+	/*
+	 * Snapped into line with a divider that continues this one: within
+	 * the column snap's reach (sec 8.7's setting, the same magnet), held
+	 * there. Not joined for the rest of the drag -- passing one by takes
+	 * nothing along -- but in line once let go, and so linked next time.
+	 */
+	const QList<divider_ref_t> dividers = all_dividers();
+	QList<int> moving;
+	for (int i = 0; i < dividers.size(); ++i) {
+		const divider_ref_t &each = dividers.at(i);
+		bool ours = each.splitter == splitter && each.index == index;
+		for (const divider_ref_t &link : m_drag_linked)
+			ours = ours || (link.splitter == each.splitter && link.index == each.index);
+		if (ours) moving.append(i);
+	}
+	const QList<bssh_divider_t> geometry = divider_geometry(dividers, this);
+	const int target = bssh_snap_divider(geometry, moving, at, bssh_app_settings().column_snap_radius(),
+	                                     splitter->handleWidth() + 2);
+	if (target >= 0 && geometry.at(target).at != at) {
+		move_divider_to(m_drag, geometry.at(target).at);
+		at = divider_at(splitter, index, this);
+	}
+
+	for (const divider_ref_t &link : m_drag_linked) move_divider_to(link, at);
+}
+
+bool bssh_pane_container::renest_for(QSplitterHandle *handle, const QPoint &global) {
+	/*
+	 * Only with every pane on screen: the tree rebuilt here is the one
+	 * shown, and panes folded away into tabs (sec 8.2) are not in it.
+	 */
+	if (!m_layout || m_layout->arrangement() != bssh_layout_manager::TILED || m_layout->is_collapsed())
+		return false;
+	QSplitter *splitter = handle->splitter();
+	int index = -1;
+	for (int i = 1; i < splitter->count(); ++i) {
+		if (splitter->handle(i) == handle) index = i;
+	}
+	if (index < 1) return false;
+
+	/* Nothing to break unless it runs past a split the other way. */
+	const auto split_across = [splitter](QWidget *part) {
+		QSplitter *nested = qobject_cast<QSplitter *>(part);
+		return nested && nested->orientation() != splitter->orientation() && nested->count() > 1;
+	};
+	if (!split_across(splitter->widget(index - 1)) && !split_across(splitter->widget(index))) return false;
+
+	/* Each pane where it is, with its own node from the layout. */
+	const std::function<const bssh_pane_node *(const bssh_pane_node &, bssh_session *)> leaf_of =
+	        [&leaf_of](const bssh_pane_node &node, bssh_session *front) -> const bssh_pane_node * {
+		if (node.is_leaf()) return node.session == front ? &node : nullptr;
+		for (const bssh_pane_node &child : node.children) {
+			if (const bssh_pane_node *found = leaf_of(child, front)) return found;
+		}
+		return nullptr;
+	};
+	std::vector<bssh_placed_pane_t> placed;
+	for (int i = 0; i < m_frames.size() && i < m_sessions.size(); ++i) {
+		const bssh_pane_node *leaf = leaf_of(m_layout->tree(), m_sessions.at(i));
+		if (!leaf) return false;
+		placed.push_back({ *leaf, QRect(m_frames.at(i)->mapTo(this, QPoint(0, 0)), m_frames.at(i)->size()) });
+	}
+	const Qt::Orientation first = splitter->orientation() == Qt::Vertical ? Qt::Horizontal : Qt::Vertical;
+	bssh_pane_node tree;
+	/* No tree cut the other way first: this layout cannot break here, and
+	 * the divider moves whole, as it did. */
+	if (!bssh_tree_from_rects(placed, first, &tree) || tree.orientation != first) return false;
+
+	m_renest_from = mapFromGlobal(global);
+	m_renest_vertical_line = splitter->orientation() == Qt::Horizontal;
+	m_drag = {};
+	m_drag_linked.clear();
+	/*
+	 * Later, not here: this runs inside the handle's own event, and the
+	 * rebuild deletes the handle. The container takes the pointer from
+	 * then on, since the handle that had it is gone.
+	 */
+	QTimer::singleShot(0, this, [this, tree] {
+		if (!m_layout) return;
+		m_layout->set_tree(tree);
+		m_renest = {};
+		m_renest_dragging = true;
+		grabMouse();
+	});
+	return true;
+}
+
+void bssh_pane_container::mouseMoveEvent(QMouseEvent *event) {
+	if (!m_renest_dragging) return QWidget::mouseMoveEvent(event);
+	/*
+	 * The piece under the pointer, found on the first move rather than
+	 * straight after the rebuild: the new splitters have no geometry
+	 * until they are laid out, and all of them read as being at 0.
+	 */
+	if (!m_renest.splitter) {
+		QCoreApplication::sendPostedEvents(nullptr, QEvent::LayoutRequest);
+		const QList<divider_ref_t> dividers = all_dividers();
+		const QList<bssh_divider_t> geometry = divider_geometry(dividers, this);
+		const int across = m_renest_vertical_line ? m_renest_from.x() : m_renest_from.y();
+		const int along = m_renest_vertical_line ? m_renest_from.y() : m_renest_from.x();
+		for (int i = 0; i < dividers.size(); ++i) {
+			const bssh_divider_t &each = geometry.at(i);
+			if (each.vertical != m_renest_vertical_line || along < each.from || along > each.to) continue;
+			if (std::abs(each.at - across) > dividers.at(i).splitter->handleWidth()) continue;
+			m_renest = dividers.at(i);
+		}
+		if (!m_renest.splitter) return;
+	}
+	const QPoint at = event->position().toPoint();
+	move_divider_to(m_renest, m_renest_vertical_line ? at.x() : at.y());
+
+	/*
+	 * Onto a whole cell, the pane before it alone: rounding the whole
+	 * split, as a drag's own does, nudged the column's next divider by up
+	 * to a cell and out of line with the rest.
+	 */
+	QSplitter *splitter = m_renest.splitter;
+	if (m_views.isEmpty() || !splitter) return;
+	const int cell = m_renest_vertical_line ? m_views.first()->cell_width() : m_views.first()->cell_height();
+	QList<int> sizes = splitter->sizes();
+	const int before = m_renest.index - 1;
+	const int snapped = bssh_snap_pane_extent(sizes.at(before), cell);
+	if (snapped == sizes.at(before)) return;
+	sizes[m_renest.index] += sizes.at(before) - snapped;
+	sizes[before] = snapped;
+	splitter->setSizes(sizes);
+}
+
+void bssh_pane_container::mouseReleaseEvent(QMouseEvent *event) {
+	if (!m_renest_dragging) return QWidget::mouseReleaseEvent(event);
+	releaseMouse();
+	m_renest_dragging = false;
+	m_renest = {};
+}
+
 void bssh_pane_container::set_column_visible(int count) {
 	if (count == m_column_visible) return;
 	m_column_visible = count;
@@ -1227,13 +1471,52 @@ bool bssh_pane_container::eventFilter(QObject *watched, QEvent *event) {
 		return false;
 	}
 
+	QSplitterHandle *handle = qobject_cast<QSplitterHandle *>(watched);
+	if (!handle || !all_splitters().contains(handle->splitter())) return QWidget::eventFilter(watched, event);
+
 	if (event->type() == QEvent::MouseButtonDblClick) {
-		QSplitterHandle *handle = qobject_cast<QSplitterHandle *>(watched);
-		if (handle && all_splitters().contains(handle->splitter())) {
-			equalize_splitter(handle->splitter());
-			return true;
+		/* Its splitter and those of the dividers in line with it: equal
+		 * shares in each, so a grid evened out stays a grid. */
+		begin_divider_drag(handle, false);
+		QList<QSplitter *> splitters{ handle->splitter() };
+		for (const divider_ref_t &link : m_drag_linked) {
+			if (link.splitter && !splitters.contains(link.splitter.data())) splitters.append(link.splitter);
 		}
+		m_drag = {};
+		m_drag_linked.clear();
+		for (QSplitter *each : splitters) equalize_splitter(each);
+		return true;
 	}
+
+	if (event->type() == QEvent::MouseButtonPress) {
+		/*
+		 * Shift moves this one alone. Not Alt, which TDE's and KDE's window
+		 * managers take for moving the window, so it never reaches here.
+		 */
+		const auto *press = static_cast<QMouseEvent *>(event);
+		m_drag_pressed_ms = QDateTime::currentMSecsSinceEpoch();
+		m_drag_moved = false;
+		const bool alone = press->modifiers() & Qt::ShiftModifier;
+		/* Alone, a divider the whole way across breaks at the pointer. */
+		if (alone && renest_for(handle, press->globalPosition().toPoint())) return true;
+		begin_divider_drag(handle, alone);
+	} else if (event->type() == QEvent::MouseMove && !m_drag_moved && m_drag.splitter) {
+		/*
+		 * Held still half a second, then moved: alone too. A phone has no
+		 * Shift, and a way out only one input can produce is none on the
+		 * other (sec 6.2).
+		 */
+		m_drag_moved = true;
+		if (QDateTime::currentMSecsSinceEpoch() - m_drag_pressed_ms >= 500) {
+			const auto *move = static_cast<QMouseEvent *>(event);
+			if (renest_for(handle, move->globalPosition().toPoint())) return true;
+			m_drag_linked.clear();
+		}
+	} else if (event->type() == QEvent::MouseButtonRelease) {
+		m_drag = {};
+		m_drag_linked.clear();
+	}
+	return QWidget::eventFilter(watched, event);
 
 	return QWidget::eventFilter(watched, event);
 }

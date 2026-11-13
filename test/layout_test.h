@@ -481,6 +481,14 @@ private slots:
 	void the_tab_menu_offers_sec_8_3s_three_verbs();
 	void clicking_a_pane_focuses_it();
 	void a_divider_equalizes_on_a_double_click();
+	void dividers_in_line_are_linked_end_to_end();
+	void a_grid_column_divider_moves_every_row();
+	void a_divider_moves_alone_with_shift_or_after_a_hold();
+	void a_dragged_divider_snaps_into_line_with_its_neighbour();
+	void a_double_click_evens_out_every_row_of_a_grid();
+	void a_tree_is_rebuilt_from_where_its_panes_are();
+	void a_row_divider_moved_alone_breaks_at_its_column();
+	void a_grid_keeps_its_dividers_through_a_rebuild();
 	void a_divider_is_thumb_sized_only_where_a_thumb_uses_it();
 	void a_bell_in_a_visible_pane_is_not_a_missed_one();
 	void a_bell_with_the_window_away_is_a_missed_one();
