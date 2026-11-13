@@ -398,9 +398,9 @@ public:
 
 	/*
 	 * The pane under the pointer takes the keyboard, without a click
-	 * (sec 8.3). Off by default, which that section asked for before it
-	 * was built: it surprises anyone who expects click-to-focus, and the
-	 * cost of the surprise is typing into the wrong shell.
+	 * (sec 8.3). On by default since the holder asked for it, 2026-10-31
+	 * -- it was off at first, for anyone expecting click-to-focus -- with
+	 * the focus border showing which pane has the keyboard.
 	 */
 	/*
 	 * The media player Play hands a file to (sec 6.4), in hydra's words so
