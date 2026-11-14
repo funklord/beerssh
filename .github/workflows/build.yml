@@ -148,6 +148,42 @@ jobs:
       - name: Test
         run: gmake QMAKE=qmake test
 
+  # sec 1: Windows is best-effort too -- "it should build, and breakage
+  # there is a bug" -- and nothing built it until this job. MSYS2's UCRT64
+  # environment, which carries Qt 6, OpenSSL and the GNU tools the
+  # Makefile is written for. No local shell there yet: it is forkpty's.
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      # Git for Windows checks text out with CRLF, and the patches applied
+      # to vterm and libssh are LF: the first run stopped on
+      # "src/state.c: patch does not apply". Before the checkout, and in
+      # PowerShell, since MSYS2 is not set up yet.
+      - name: Keep line endings as committed
+        shell: pwsh
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            make git diffutils
+          pacboy: >-
+            toolchain:p qt6-base:p cmake:p pkgconf:p openssl:p zlib:p
+            libsixel:p libsecret:p
+      - name: Build
+        run: make QMAKE=qmake6 DESKTOP_MEDIA=
+      # Built is not running: the program started headless, its own
+      # self-test, as the linux job does.
+      - name: Headless smoke test
+        run: QT_QPA_PLATFORM=offscreen ./beerssh.exe --self-test
+
   android:
     runs-on: ubuntu-latest
     steps:
