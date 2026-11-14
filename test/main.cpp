@@ -112,10 +112,28 @@ static std::chrono::steady_clock::time_point watchdog_deadline;
 static bool watchdog_running = false;
 static int watchdog_seconds = 0;
 
+/*
+ * A sanitized build runs several times slower, and layout_test took 334 s
+ * under ASan against the 300 s budget (2026-11-14), so `make SANITIZE=1
+ * test` failed on the budget alone. Five times the budget there; still a
+ * bound, still overridden by BSSH_TEST_TIMEOUT.
+ */
+#if defined(__SANITIZE_ADDRESS__)
+static const int watchdog_build_factor = 5;
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+static const int watchdog_build_factor = 5;
+#else
+static const int watchdog_build_factor = 1;
+#endif
+#else
+static const int watchdog_build_factor = 1;
+#endif
+
 static int watchdog_env_seconds() {
 	bool ok = false;
 	const int value = qEnvironmentVariableIntValue("BSSH_TEST_TIMEOUT", &ok);
-	return ok ? value : watchdog_default_seconds;
+	return ok ? value : watchdog_default_seconds * watchdog_build_factor;
 }
 
 static long long watchdog_env_output_bytes() {
