@@ -44,6 +44,6 @@ expect = "a_session_through_a_jump_host_moves_too"
 [[sabotage]]
 name = "the giving side closes the tunnel it gave away"
 file = "src/ssh/jump_tunnel.cpp"
-find = "void bssh_jump_tunnel::release() {\n"
-replace = "void bssh_jump_tunnel::release() {\n\tclose();\n\treturn;\n"
+find = "void bssh_jump_tunnel::release() {\n\tm_stop = true;\n"
+replace = "void bssh_jump_tunnel::release() {\n\tclose();\n\treturn;\n\tm_stop = true;\n"
 expect = "a_session_through_a_jump_host_moves_too"
