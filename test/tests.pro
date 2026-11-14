@@ -45,7 +45,8 @@ isEmpty(BSSH_VERSION): BSSH_VERSION = 0.1.0
 DEFINES += BSSH_VERSION_STRING=\\\"$$BSSH_VERSION\\\"
 
 CONFIG += link_pkgconfig
-PKGCONFIG += libsixel libcrypto libsecret-1 xcb
+PKGCONFIG += libsixel libcrypto libsecret-1
+!win32: PKGCONFIG += xcb
 include($$PWD/../libssh.pri)
 CONFIG += c++17 console
 CONFIG -= app_bundle
@@ -64,7 +65,7 @@ include($$PWD/../softkeys/softkeys.pri)
 DEFINES += BSSH_TEST_FONT_DIR=\\\"$$PWD/../fonts\\\"
 # forkpty(3) for the local shell transport (sec 2, sec 3); glibc puts
 # it in libutil. macOS keeps it in libSystem.
-!macx: LIBS += -lutil
+!macx:!win32: LIBS += -lutil
 
 LIBS += $$PWD/../build-vterm/libvterm.a
 PRE_TARGETDEPS += $$PWD/../build-vterm/libvterm.a

@@ -1,7 +1,9 @@
 #include "ssh/ssh_session_libssh.h"
 
 #include "ssh/jump_tunnel.h"
+#ifndef _WIN32
 #include "ssh/pty_session.h"
+#endif
 
 #include "platform/platform.h"
 #include "model/piece_map.h"
@@ -18,9 +20,14 @@
 #include <QElapsedTimer>
 #include <QTimer>
 
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
+#endif
 
 #include <libssh/libssh.h>
 #include <libssh/sftp.h>
@@ -165,25 +172,27 @@ QString openssh_known_hosts_path() {
  * behind bssh_platform (sec 3): Android and desktop Linux take exactly
  * the same branch, and it is macOS and Windows that differ. Every one of
  * them is best-effort -- a failure means slower detection, never a
- * connection that does not work, so none of them is checked.
+ * connection that does not work, so none of them is checked. The value
+ * goes as const char *, which Winsock's setsockopt takes and POSIX's
+ * const void * accepts.
  */
 void bssh_configure_tcp_keepalive(int fd) {
 	if (fd < 0) return;
 
 	const int on = 1;
-	setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof(on));
+	setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, reinterpret_cast<const char *>(&on), sizeof(on));
 
 #ifdef TCP_KEEPIDLE
 	const int idle = BSSH_TCP_KEEPALIVE_IDLE_S;
-	setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle));
+	setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, reinterpret_cast<const char *>(&idle), sizeof(idle));
 #endif
 #ifdef TCP_KEEPINTVL
 	const int interval = BSSH_TCP_KEEPALIVE_INTERVAL_S;
-	setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(interval));
+	setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, reinterpret_cast<const char *>(&interval), sizeof(interval));
 #endif
 #ifdef TCP_KEEPCNT
 	const int count = BSSH_TCP_KEEPALIVE_COUNT;
-	setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &count, sizeof(count));
+	setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, reinterpret_cast<const char *>(&count), sizeof(count));
 #endif
 #ifdef TCP_USER_TIMEOUT
 	/*
@@ -195,7 +204,7 @@ void bssh_configure_tcp_keepalive(int fd) {
 	const int user_timeout_ms =
 	        (BSSH_TCP_KEEPALIVE_IDLE_S +
 	         BSSH_TCP_KEEPALIVE_INTERVAL_S * BSSH_TCP_KEEPALIVE_COUNT) * 1000;
-	setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &user_timeout_ms, sizeof(user_timeout_ms));
+	setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, reinterpret_cast<const char *>(&user_timeout_ms), sizeof(user_timeout_ms));
 #endif
 }
 
@@ -2965,7 +2974,9 @@ bool bssh_ssh_session_libssh::import_transport(const QByteArray &state, const QL
 
 bssh_ssh_session *bssh_ssh_session::create_for_import(const QString &kind, QObject *parent) {
 	if (kind == QStringLiteral("ssh")) return new bssh_ssh_session_libssh(parent);
+#ifndef _WIN32
 	if (kind == QStringLiteral("local")) return new bssh_pty_session(parent);
+#endif
 	return nullptr;
 }
 

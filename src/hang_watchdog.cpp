@@ -4,8 +4,10 @@
 #include <chrono>
 #include <thread>
 
+#ifndef _WIN32
 #include <signal.h>
 #include <unistd.h>
+#endif
 
 #ifdef Q_OS_ANDROID
 #include <android/log.h>
@@ -169,7 +171,9 @@ void bssh_start_hang_watchdog() {
 			 * without killing anything. The _exit() that would recover
 			 * the process is deliberately not here yet (sec 5.1).
 			 */
+#ifndef _WIN32
 			kill(getpid(), SIGQUIT);
+#endif
 		}
 	}).detach();
 }

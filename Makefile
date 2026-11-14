@@ -528,6 +528,13 @@ endif
 # does not need, so they are `make doc` -- and `install`, which ships
 # them, asks for everything.
 PROGRAMS = $(TARGET) $(SSHD_TARGET)
+# Windows (sec 1, best-effort): no beersshd, whose SFTP serving is POSIX
+# file handling throughout (pread, fstatat, realpath). qmake's MinGW
+# Makefiles write the program with its .exe, which the copy names.
+ifeq ($(OS),Windows_NT)
+PROGRAMS = $(TARGET)
+EXE = .exe
+endif
 DOCS = $(MAN_PAGE) $(SSHD_MAN_PAGE) $(COMPLETION)
 ARTIFACTS = $(PROGRAMS) $(DOCS)
 
@@ -779,7 +786,7 @@ $(BUILD_DIR)/Makefile: beerssh.pro $(DESKTOP_MEDIA_SOURCE) $(BUILD_DIR)/qmake.ar
 
 $(TARGET): $(VTERM_LIB) $(LIBSSH_LIB) $(BUILD_DIR)/Makefile $(SOURCES) $(HEADERS)
 	$(MAKE) -C $(BUILD_DIR) $(QMAKE_SUBMAKE)
-	cp $(BUILD_DIR)/$(TARGET) $(TARGET)
+	cp $(BUILD_DIR)/$(TARGET)$(EXE) $(TARGET)$(EXE)
 
 run: $(TARGET)
 	./$(TARGET)

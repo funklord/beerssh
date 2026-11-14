@@ -5,10 +5,12 @@
 
 #include "ssh/ssh_session_libssh.h"
 
+#ifndef _WIN32
 #include <errno.h>
 #include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#endif
 
 bssh_jump_tunnel::bssh_jump_tunnel(QObject *parent) : QThread(parent) {
 }
@@ -84,6 +86,7 @@ bssh_jump_tunnel::hop_t bssh_jump_tunnel::parse(const QString &spec,
 	return hop;
 }
 
+#ifndef _WIN32
 bool bssh_jump_tunnel::authenticate() {
 	/*
 	 * Keys and the agent only, deliberately.
@@ -547,3 +550,58 @@ bool bssh_jump_tunnel::adopt(const QByteArray &state, int jump_fd, int ours_fd, 
 	m_pause = true;
 	return true;
 }
+
+#else
+
+/*
+ * Windows (project.md sec 1, best-effort): the tunnel hands libssh one end
+ * of a socketpair(AF_UNIX), which Windows has not, and pumps it with
+ * poll(). Until it has a loopback pair of its own, a jump host is refused
+ * at open() with a reason, which the session shows as it shows any other
+ * failure to connect -- absent, not faked.
+ */
+int bssh_jump_tunnel::open(const hop_t &hop, const QString &target_host, quint16 target_port,
+                            const QString &known_hosts, const QString &identity_file) {
+	Q_UNUSED(hop);
+	Q_UNUSED(target_host);
+	Q_UNUSED(target_port);
+	Q_UNUSED(known_hosts);
+	Q_UNUSED(identity_file);
+	m_why = QStringLiteral("Jump hosts are not available on Windows yet");
+	return -1;
+}
+
+void bssh_jump_tunnel::run() {
+}
+
+void bssh_jump_tunnel::close() {
+}
+
+bool bssh_jump_tunnel::pause() {
+	return false;
+}
+
+void bssh_jump_tunnel::resume() {
+}
+
+bool bssh_jump_tunnel::export_state(QByteArray &state, QList<int> &fds, QString &why) {
+	Q_UNUSED(state);
+	Q_UNUSED(fds);
+	why = QStringLiteral("jump hosts are not available on Windows");
+	return false;
+}
+
+void bssh_jump_tunnel::release() {
+}
+
+bool bssh_jump_tunnel::adopt(const QByteArray &state, int jump_fd, int ours_fd, int theirs_fd,
+                             QString &why) {
+	Q_UNUSED(state);
+	Q_UNUSED(jump_fd);
+	Q_UNUSED(ours_fd);
+	Q_UNUSED(theirs_fd);
+	why = QStringLiteral("jump hosts are not available on Windows");
+	return false;
+}
+
+#endif

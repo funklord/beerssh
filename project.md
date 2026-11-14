@@ -15696,8 +15696,23 @@ without an icon is defective, so there is a plain one meant to be replaced.
   `TMPDIR` (`4e2a3de`). The last, ink one pixel past the grid, was the test
   measuring a font it never loaded: only the font tests register the set,
   so it ran in a fallback everywhere, "Sans Serif" on the runner (`4e22b9b`;
-  `3e301cc` had blamed a device pixel ratio, wrongly). Windows does
-  not build: no forkpty, no unix sockets in the handoff, and no CI job.
+  `3e301cc` had blamed a device pixel ratio, wrongly).
+  **Windows builds in CI since 2026-11-14** (the `windows` job: MSYS2's
+  UCRT64 Qt, OpenSSL and GNU make), and starts: `beerssh.exe --self-test`
+  runs headless and exits 0. SSH hosts work as anywhere; the SSH transport
+  takes Winsock's headers, setsockopt's value as `const char *` and
+  `-lws2_32 -liphlpapi` for static libssh, and drag staging asks
+  OpenProcess whether a pid is gone. **Four things are absent there, each
+  saying so rather than faked:** the local shell (forkpty;
+  `ssh/no_local_shell.cpp` fails to connect with a reason -- ConPTY is
+  the port it waits for), moving a session between processes (SCM_RIGHTS;
+  no handoff point, as on Android), jump hosts (socketpair; refused at
+  open -- a loopback pair is the port), and beersshd, not built (pread,
+  fstatat, realpath). The first runs met CRLF checkouts that broke
+  vterm's patches (`core.autocrlf false` before the checkout) and no
+  `cmp` (diffutils). The suite is not built there yet: it leans on the
+  local shell and on POSIX throughout, the same Linux assumptions macOS
+  shed.
 
 ### 12.2h Store screenshots from the build — **[BUILT 2026-10-22]**
 `make android-screenshots` (the shared `tool/android.mk`, play-store skill)

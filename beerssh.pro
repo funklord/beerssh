@@ -270,7 +270,20 @@ android {
 # forkpty(3) for the local shell transport (sec 2, sec 3). glibc puts it
 # in libutil; bionic has it in libc, so Android needs nothing and linking
 # -lutil there fails.
-!android:!macx: LIBS += -lutil
+!android:!macx:!win32: LIBS += -lutil
+
+# Windows (sec 1, best-effort) has no forkpty and no SCM_RIGHTS: the local
+# shell and the session handoff between processes are left out there, each
+# replaced by a version that says so (ssh/no_local_shell.cpp, and the
+# Windows half of model/handoff_point.cpp). Headers with them: moc would
+# otherwise write code for a class nobody compiled.
+win32 {
+    # One build, in build/ as everywhere else, not release/ and debug/.
+    CONFIG -= debug_and_release debug_and_release_target
+    SOURCES -= src/ssh/pty_session.cpp src/model/handoff_wire.cpp
+    HEADERS -= src/ssh/pty_session.h src/model/handoff_wire.h
+    SOURCES += src/ssh/no_local_shell.cpp
+}
 
 LIBS += $$BSSH_VTERM_LIB
 PRE_TARGETDEPS += $$BSSH_VTERM_LIB
@@ -430,8 +443,9 @@ android {
 
     # The X server, asked which window is under the pointer during the
     # app's own session drag (project.md sec 8.4): the one way to tell a
-    # drop on another BeerSSH from a drop on the desktop.
-    PKGCONFIG += xcb
+    # drop on another BeerSSH from a drop on the desktop. Not on Windows,
+    # which has no X server; the code asks QT_CONFIG(xcb) and steps aside.
+    !win32: PKGCONFIG += xcb
 }
 
 # Header dependencies from the compiler: tool/qmake-deps.mk says why.

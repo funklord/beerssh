@@ -13,6 +13,10 @@ BSSH_LIBSSH_PREFIX = $$PWD/build-libssh/prefix
 INCLUDEPATH += $$BSSH_LIBSSH_PREFIX/include
 DEFINES += LIBSSH_STATIC
 LIBS += $$BSSH_LIBSSH_PREFIX/lib/libssh.a
+# Windows: libssh's sockets are Winsock's, and its interface lookups
+# iphlpapi's; a static archive names neither (the sixth Windows run's
+# link). Ours, too: the keepalive's setsockopt.
+win32: LIBS += -lws2_32 -liphlpapi
 PRE_TARGETDEPS += $$BSSH_LIBSSH_PREFIX/lib/libssh.a
 
 # What a static libssh brings with it: its crypto backend and zlib, which

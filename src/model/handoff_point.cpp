@@ -1,5 +1,7 @@
 #include "model/handoff_point.h"
 
+#ifndef _WIN32
+
 #include "model/handoff_wire.h"
 #include "model/session.h"
 
@@ -424,3 +426,95 @@ bool bssh_handoff_point::request_quit(const QString &path, QString *why) {
 	QString text;
 	return ask(path, word(BSSH_HANDOFF_QUIT), verb, text, why) && verb == BSSH_HANDOFF_OK;
 }
+
+#else
+
+#include <QCoreApplication>
+
+/*
+ * Windows (project.md sec 1, best-effort): a session moves between
+ * processes by passing its socket over a Unix socket with SCM_RIGHTS,
+ * which Windows has not. So there is no handoff point there, as on
+ * Android: instance() is null, which every caller already reads as
+ * "nowhere to hand a session to", and the rest refuse with a reason.
+ */
+namespace {
+const QString not_here = QStringLiteral("moving a session between windows of different processes is not available on Windows");
+}
+
+bssh_handoff_point::bssh_handoff_point(finder_t finder, QObject *parent)
+    : QObject(parent), m_finder(std::move(finder)) {
+}
+
+bssh_handoff_point::~bssh_handoff_point() = default;
+
+bool bssh_handoff_point::listen(QString *why) {
+	if (why) *why = not_here;
+	return false;
+}
+
+bssh_handoff_point *bssh_handoff_point::instance() {
+	return nullptr;
+}
+
+QString bssh_handoff_point::path_for(qint64 pid) {
+	Q_UNUSED(pid);
+	return QString();
+}
+
+QString bssh_handoff_point::directory() {
+	return QString();
+}
+
+int bssh_handoff_point::sweep_stale() {
+	return 0;
+}
+
+bssh_session *bssh_handoff_point::take(const QString &path, const QString &handoff_id, QObject *parent,
+                                        QString *why, int timeout_ms) {
+	Q_UNUSED(path);
+	Q_UNUSED(handoff_id);
+	Q_UNUSED(parent);
+	Q_UNUSED(timeout_ms);
+	if (why) *why = not_here;
+	return nullptr;
+}
+
+bool bssh_handoff_point::offer(const QString &target, const QString &source, const QString &handoff_id,
+                               const QPoint &global, QString *why) {
+	Q_UNUSED(target);
+	Q_UNUSED(source);
+	Q_UNUSED(handoff_id);
+	Q_UNUSED(global);
+	if (why) *why = not_here;
+	return false;
+}
+
+QStringList bssh_handoff_point::list(const QString &path, QString *why) {
+	Q_UNUSED(path);
+	if (why) *why = not_here;
+	return {};
+}
+
+bool bssh_handoff_point::request_quit(const QString &path, QString *why) {
+	Q_UNUSED(path);
+	if (why) *why = not_here;
+	return false;
+}
+
+bool bssh_handoff_point::hover(const QString &path, const QPoint &global, bool active, QString *why) {
+	Q_UNUSED(path);
+	Q_UNUSED(global);
+	Q_UNUSED(active);
+	if (why) *why = not_here;
+	return false;
+}
+
+void bssh_handoff_point::on_connection() {
+}
+
+void bssh_handoff_point::serve(int socket) {
+	Q_UNUSED(socket);
+}
+
+#endif

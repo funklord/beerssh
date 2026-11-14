@@ -6,7 +6,11 @@
 #include <QStandardPaths>
 
 #include <cerrno>
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <signal.h>
+#endif
 
 bssh_remote_drag::bssh_remote_drag(const QList<QUrl> &remote) : m_remote(remote) {}
 
@@ -78,6 +82,23 @@ QString bssh_drag_staging_path() {
 	return staging_base() + QLatin1Char('/') + QString::number(QCoreApplication::applicationPid());
 }
 
+/* Whether no process has this pid. Only a sure "no such process" counts:
+ * one that exists and is not ours to ask about is still somebody's. */
+static bool process_gone(qint64 pid) {
+#ifdef _WIN32
+	HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, DWORD(pid));
+	if (process) {
+		DWORD code = 0;
+		const bool exited = GetExitCodeProcess(process, &code) && code != STILL_ACTIVE;
+		CloseHandle(process);
+		return exited;
+	}
+	return GetLastError() == ERROR_INVALID_PARAMETER;
+#else
+	return kill(pid_t(pid), 0) != 0 && errno == ESRCH;
+#endif
+}
+
 QString bssh_drag_staging_root() {
 	static QString root;
 	if (!root.isEmpty()) return root;
@@ -92,7 +113,7 @@ QString bssh_drag_staging_root() {
 		bool numeric = false;
 		const qint64 pid = name.toLongLong(&numeric);
 		if (!numeric || pid <= 0 || pid == QCoreApplication::applicationPid()) continue;
-		if (kill(pid_t(pid), 0) != 0 && errno == ESRCH) QDir(dir.filePath(name)).removeRecursively();
+		if (process_gone(pid)) QDir(dir.filePath(name)).removeRecursively();
 	}
 	root = base + QLatin1Char('/') + QString::number(QCoreApplication::applicationPid());
 	QDir().mkpath(root);
