@@ -190,6 +190,7 @@ void layout_test::the_media_player_is_started_as_hydra_starts_it() {
 	const setting_left_as_found_t selected(QStringLiteral("player/selected"));
 	const setting_left_as_found_t command(QStringLiteral("player/custom_command"));
 	const setting_left_as_found_t in_terminal(QStringLiteral("player/custom_in_terminal"));
+	const setting_left_as_found_t terminal(QStringLiteral("player/terminal"));
 	const QString file = QStringLiteral("/tmp/a film.mkv");
 	const QString url = QUrl::fromLocalFile(file).toString();
 
@@ -215,15 +216,28 @@ void layout_test::the_media_player_is_started_as_hydra_starts_it() {
 	settings.set_player_custom_in_terminal(true);
 	QVERIFY(bssh_player_wants_terminal(QStringLiteral("custom")));
 
-	/* A whole command line: Custom's program found, wrapped in a terminal. */
+	/*
+	 * A whole command line: Custom's program found, wrapped in a terminal.
+	 * The test's own terminal, a script, since a machine need have none:
+	 * GitHub's runners have no terminal program, and the line came back
+	 * empty there ("custom needs a terminal, and none is installed").
+	 */
+	QTemporaryDir terminal_dir;
+	QVERIFY(terminal_dir.isValid());
+	const QString fake_terminal = terminal_dir.filePath(QStringLiteral("term"));
+	{
+		QFile script(fake_terminal);
+		QVERIFY(script.open(QIODevice::WriteOnly));
+		script.write("#!/bin/sh\nshift\nexec \"$@\"\n");
+		script.close();
+		QVERIFY(script.setPermissions(script.permissions() | QFileDevice::ExeOwner));
+	}
+	settings.set_player_terminal(fake_terminal + QStringLiteral(" -e"));
 	settings.set_player_custom_command(QStringLiteral("/bin/echo %U"));
 	QString why;
 	const QStringList line = bssh_player_command(QStringLiteral("custom"), file, &why);
 	QVERIFY2(!line.isEmpty(), qPrintable(why));
-	QVERIFY(line.contains(QStringLiteral("/bin/echo")));
-	QCOMPARE(line.last(), url);
-	if (!bssh_player_terminal(QString()).isEmpty())
-		QVERIFY2(line.first() != QStringLiteral("/bin/echo"), "Custom asked for a terminal and was not given one");
+	QCOMPARE(line, QStringList({ fake_terminal, QStringLiteral("-e"), QStringLiteral("/bin/echo"), url }));
 	/* And one not installed says so. */
 	settings.set_player_custom_command(QStringLiteral("no-such-player-anywhere %U"));
 	QVERIFY(bssh_player_command(QStringLiteral("custom"), file, &why).isEmpty());
