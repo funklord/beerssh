@@ -18249,6 +18249,28 @@ Folded at 97 per cent of the weekly window; what the next session picks up.
   Measured: the APK's SHA-256 and the tree's 179 files are unchanged
   across a full `make deb`.
 
+### 12.3y Where the 2026-11-15 session stopped -- **[OPEN]**
+
+Folded at 99 per cent of the weekly window; what the next session picks up.
+
+- **Windows builds and starts** (sec 12.2's macOS/Windows entry, `980d6b0`):
+  the next step is building **the suite** there, so further Windows work
+  can be checked; then jump hosts over a loopback socket pair (`socketpair`
+  is all that stands in the way), then a ConPTY local shell. beersshd and
+  the cross-process handoff stay POSIX-only unless someone asks.
+- **Check CI after every push.** Master was red from `278b292` to `0384bb5`,
+  about ten hours and fifteen pushes, on a test that leaned on a terminal
+  program this machine has and GitHub's runners do not.
+- **Measured and clean:** the whole suite under ASan and UBSan (1112, no
+  report; `make SANITIZE=1 test` reruns qmake since `70958c2`), cppcheck at
+  warning level (six false positives), every SGR attribute drawn
+  (`every_attribute_is_drawn`).
+- **Android's mksh blanks its own prompt line** on its first width change
+  (sec 8's split entry) and reprints it only on Enter; not BeerSSH's.
+- **Still the holder's:** the Play release, a first tagged desktop release,
+  the Fold unplugged (do timers stall in deep sleep), a second monitor,
+  grids under the holder's window manager.
+
 ### 12.4 CI
 
 **Unused code goes at the link, since 2026-11-05** (the holder's size rule):
