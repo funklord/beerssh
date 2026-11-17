@@ -10,6 +10,7 @@
 #include <vterm.h>
 
 #include "term/graphics_internal.h"
+#include "session/screen_model.h"
 
 namespace {
 
@@ -2592,6 +2593,51 @@ const bssh_image_store &bssh_emulator::images() const {
 void bssh_emulator::restore_history(const bssh_scrollback &kept) {
 	for (int i = 0; i < kept.count(); ++i)
 		m_private->scrollback.push(kept.line(i), kept.is_continuation(i));
+}
+
+void bssh_emulator::push_history(const QList<bssh_cell_t> &line, bool continuation) {
+	m_private->scrollback.push(line, continuation);
+
+	/* What is already in the history goes one line further back with it. */
+	if (m_private->images.pushed_into_history(1)) emit images_changed();
+	emit scrollback_changed();
+}
+
+void bssh_emulator::push_history(const bssh_screen_cell_t *cells, int count, bool continuation) {
+	if (!m_private->vt) return;
+
+	VTermColor default_fg, default_bg;
+	vterm_state_get_default_colors(vterm_obtain_state(m_private->vt), &default_fg, &default_bg);
+
+	QList<bssh_cell_t> line;
+	line.reserve(count);
+	for (int i = 0; i < count; ++i) {
+		const bssh_screen_cell_t &from = cells[i];
+		VTermScreenCell source;
+		memset(&source, 0, sizeof(source));
+		source.chars[0] = from.chars[0];
+		source.width = from.width == 2 ? 2 : 1;
+		source.attrs.bold = !!(from.attrs & BSSH_SCREEN_BOLD);
+		source.attrs.italic = !!(from.attrs & BSSH_SCREEN_ITALIC);
+		source.attrs.underline = !!(from.attrs & BSSH_SCREEN_UNDERLINE);
+		source.attrs.reverse = !!(from.attrs & BSSH_SCREEN_REVERSE);
+		source.attrs.blink = !!(from.attrs & BSSH_SCREEN_BLINK);
+		source.attrs.strike = !!(from.attrs & BSSH_SCREEN_STRIKE);
+		source.attrs.dim = !!(from.attrs & BSSH_SCREEN_DIM);
+		source.fg = default_fg;
+		source.bg = default_bg;
+		if (from.fg.kind == BSSH_SCREEN_COLOR_INDEXED) vterm_color_indexed(&source.fg, from.fg.index);
+		else if (from.fg.kind == BSSH_SCREEN_COLOR_RGB)
+			vterm_color_rgb(&source.fg, from.fg.red, from.fg.green, from.fg.blue);
+		if (from.bg.kind == BSSH_SCREEN_COLOR_INDEXED) vterm_color_indexed(&source.bg, from.bg.index);
+		else if (from.bg.kind == BSSH_SCREEN_COLOR_RGB)
+			vterm_color_rgb(&source.bg, from.bg.red, from.bg.green, from.bg.blue);
+
+		const bssh_cell_t cell = m_private->convert_cell(source);
+		line.append(cell);
+		if (source.width == 2) line.append(continuation_of(cell));
+	}
+	push_history(line, continuation);
 }
 
 void bssh_emulator::set_image_budget(qint64 bytes) {

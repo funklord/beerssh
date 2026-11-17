@@ -56,6 +56,58 @@ static int take_lost(bssh_session_client_t *client, const bssh_wire_frame_t *fra
 	return 0;
 }
 
+static int take_keyframe(bssh_session_client_t *client, const bssh_wire_frame_t *frame) {
+	uint64_t from = 0;
+	int lost = 0;
+
+	if (bssh_wire_read_keyframe(frame, &from, &lost)) return -1;
+	client->history_next = from;
+	if (lost && client->events.history_lost) client->events.history_lost(client->events.context, 0);
+	return 0;
+}
+
+static int take_history(bssh_session_client_t *client, const bssh_wire_frame_t *frame) {
+	uint64_t number = 0;
+	int continuation = 0;
+	bssh_wire_cells_t cells;
+
+	if (bssh_wire_read_history(frame, &number, &continuation, &cells)) return -1;
+
+	/* A line built badly costs the protocol, as any malformed frame does,
+	 * and is refused before any of it reaches the scrollback. */
+	bssh_wire_cells_t check = cells;
+	bssh_screen_cell_t cell;
+	int step;
+	while ((step = bssh_wire_next_cell(&check, &cell)) > 0) {}
+	if (step < 0) return -1;
+
+	/* Sent twice, by a host that cannot tell exactly where a client stood. */
+	if (number < client->history_next) return 0;
+	if (number > client->history_next && client->events.history_lost)
+		client->events.history_lost(client->events.context, number - client->history_next);
+	client->history_next = number + 1;
+	if (client->events.history) client->events.history(client->events.context, &cells, continuation);
+	return 0;
+}
+
+static int take_repaint(bssh_session_client_t *client, const bssh_wire_frame_t *frame) {
+	uint64_t offset = 0;
+	uint64_t lines = 0;
+	int last = 0;
+	const uint8_t *bytes = NULL;
+	uint32_t len = 0;
+
+	if (bssh_wire_read_repaint(frame, &offset, &lines, &last, &bytes, &len)) return -1;
+	if (len) client->events.output(client->events.context, bytes, len);
+
+	/* The screen now stands for everything before the offset. */
+	if (last && offset > client->next) {
+		client->next = offset;
+		client->line = lines;
+	}
+	return 0;
+}
+
 static int take_restarted(bssh_session_client_t *client, const bssh_wire_frame_t *frame) {
 	uint64_t offset = 0;
 
@@ -112,6 +164,9 @@ static int take_frames(bssh_session_client_t *client) {
 		else if (frame.kind == BSSH_WIRE_EXITED) status = take_exited(client, &frame);
 		else if (frame.kind == BSSH_WIRE_RESTARTED) status = take_restarted(client, &frame);
 		else if (frame.kind == BSSH_WIRE_CAUGHT_UP) client->events.caught_up(client->events.context);
+		else if (frame.kind == BSSH_WIRE_KEYFRAME) status = take_keyframe(client, &frame);
+		else if (frame.kind == BSSH_WIRE_HISTORY) status = take_history(client, &frame);
+		else if (frame.kind == BSSH_WIRE_REPAINT) status = take_repaint(client, &frame);
 		if (status) return -1;
 
 		at += used;
@@ -152,4 +207,8 @@ size_t bssh_session_client_ack_due(bssh_session_client_t *client, uint64_t every
 	const size_t len = bssh_wire_put_offset(out, capacity, BSSH_WIRE_ACK, client->next);
 	if (len) client->acked = client->next;
 	return len;
+}
+
+size_t bssh_session_client_put_keyframes(uint8_t *out, size_t capacity) {
+	return bssh_wire_put(out, capacity, BSSH_WIRE_KEYFRAMES, NULL, 0);
 }

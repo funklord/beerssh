@@ -1,0 +1,78 @@
+# A keyframe in place of a replay (project.md sec 5.6): a client whose place
+# went past the server's log is sent the lines it missed, then the screen as
+# it is now, and stands past both. Each edit below was seen to fail its test
+# 2026-11-17.
+
+# The host never gives one, and replays from the oldest byte it holds.
+[[sabotage]]
+name = "the host replays rather than sending a keyframe"
+file = "src/session/session_host.c"
+find = "\tif (!host->keyframes || !host->screen) return 0;\n"
+replace = "\treturn 0;\n"
+expect = "a_client_that_takes_keyframes_is_sent_the_screen_and_the_lines_it_missed"
+
+# A line marked where its output began rather than where the line ended, so
+# a client part-way along a line is taken to hold what its newline pushes.
+[[sabotage]]
+name = "a history line is marked too early"
+file = "src/session/screen_model.c"
+find = "\t\tmodel->pushing_at = model->fed + piece;\n"
+replace = "\t\tmodel->pushing_at = model->fed;\n"
+expect = "the_servers_history_says_which_lines_a_client_lacks"
+
+# Lines gone past the limit before the first sent, and nobody told.
+[[sabotage]]
+name = "the host never says earlier lines went"
+file = "src/session/session_host.c"
+find = "\thost->history_lost = !bssh_screen_model_history_after("
+replace = "\thost->history_lost = 0 && !bssh_screen_model_history_after("
+expect = "a_client_that_takes_keyframes_is_sent_the_screen_and_the_lines_it_missed"
+
+# The far half of a wide character sent as a cell of its own.
+[[sabotage]]
+name = "a history line carries the far half of a wide character"
+file = "src/session/wire.c"
+find = "static int far_half(const bssh_screen_cell_t *cell) {\n\treturn cell->chars[0] == 0xFFFFFFFFu;\n"
+replace = "static int far_half(const bssh_screen_cell_t *cell) {\n\treturn 0 && cell->chars[0] == 0xFFFFFFFFu;\n"
+expect = "a_history_line_round_trips_with_its_styles"
+
+# A line sent twice lands twice in the scrollback.
+[[sabotage]]
+name = "the client takes a history line twice"
+file = "src/session/session_client.c"
+find = "\tif (number < client->history_next) return 0;\n"
+replace = "\t;\n"
+expect = "the_client_takes_history_in_order_and_says_what_went"
+
+# The place moves with the first part of a repaint, so a link lost part-way
+# leaves a half-drawn screen standing for bytes it never drew.
+[[sabotage]]
+name = "the client moves its place before the repaint is whole"
+file = "src/session/session_client.c"
+find = "\tif (last && offset > client->next) {\n"
+replace = "\tif (offset > client->next) {\n"
+expect = "the_client_takes_history_in_order_and_says_what_went"
+
+# The session never asks, and a gap is a replay again.
+[[sabotage]]
+name = "the session does not ask for keyframes"
+file = "src/model/session.cpp"
+find = "\t                             int(bssh_session_client_put_keyframes(frame, sizeof(frame)))));\n"
+replace = "\t                             0));\n"
+expect = "a_kept_session_puts_the_lines_it_missed_into_its_scrollback"
+
+# History lines converted without their colours.
+[[sabotage]]
+name = "a history line loses its colours on the client"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\tif (from.fg.kind == BSSH_SCREEN_COLOR_INDEXED) vterm_color_indexed(&source.fg, from.fg.index);\n"
+replace = "\t\tif (0) vterm_color_indexed(&source.fg, from.fg.index);\n"
+expect = "a_kept_session_puts_the_lines_it_missed_into_its_scrollback"
+
+# A malformed line half-applied rather than refused whole.
+[[sabotage]]
+name = "the client takes a malformed history line"
+file = "src/session/session_client.c"
+find = "\tif (step < 0) return -1;\n"
+replace = "\t;\n"
+expect = "a_malformed_history_line_is_refused"

@@ -20,6 +20,11 @@ private slots:
 	void a_shell_survives_losing_its_client();
 	void output_written_while_detached_arrives_on_return();
 	void a_client_too_far_behind_is_told_what_was_lost();
+	void a_client_that_takes_keyframes_is_sent_the_screen_and_the_lines_it_missed();
+	void a_history_line_round_trips_with_its_styles();
+	void a_malformed_history_line_is_refused();
+	void the_client_takes_history_in_order_and_says_what_went();
+	void a_kept_session_puts_the_lines_it_missed_into_its_scrollback();
 	void a_faithful_mode_pauses_the_program_and_loses_nothing();
 	void a_second_client_replaces_the_first();
 	void a_program_ending_is_reported_and_ends_the_host();

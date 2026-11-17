@@ -278,3 +278,147 @@ situ_err_t situ_bssh_frame_mode_validate(situ_view_t view)
 	return situ_bssh_frame_mode_check(view, NULL);
 }
 
+situ_err_t situ_bssh_frame_keyframe_check(situ_view_t view, uint32_t *which)
+{
+	/* One place rather than a guard at every refusal: a caller
+	 * that does not want the identity passes NULL, and the
+	 * refusals below stay one line each. */
+	uint32_t sink;
+
+	if (which == NULL) {
+		which = &sink;
+	}
+	*which = 0xFFFFFFFFu;
+
+	if (view.limit < SITU_BSSH_FRAME_KEYFRAME_SIZE_MIN) {
+		/* The whole struct is short, so no member is the one
+		 * that broke it -- the same case the depth checks
+		 * meet, and `check`'s contract is that every refusal
+		 * sets `*which` on the line above it. */
+		*which = 0xFFFFFFFFu;
+		return SITU_ERR_BOUNDS;
+	}
+	/* bssh_frame_keyframe.from: a varint whose bytes run out before it
+	 * ends is not one (26.778). */
+	if (situ_bssh_frame_keyframe_from_len(view) == 0u) {
+		*which = SITU_BSSH_FRAME_KEYFRAME_FROM_CHECK;
+		return SITU_ERR_BOUNDS;
+	}
+	/* bssh_frame_keyframe.lost: its offset is a sum of lengths the message
+	 * chose, so the frame is not known to contain it. The accessor
+	 * answers safely; this is where the message is called malformed. */
+	if (!situ_in_bounds(view, situ_bssh_frame_keyframe_lost_offset(view), 1u)) {
+		*which = SITU_BSSH_FRAME_KEYFRAME_LOST_CHECK;
+		return SITU_ERR_BOUNDS;
+	}
+	/* bssh_frame_keyframe.lost [max = 1] */
+	if (situ_bssh_frame_keyframe_lost_get(view) > 1) {
+		*which = SITU_BSSH_FRAME_KEYFRAME_LOST_CHECK;
+		return SITU_ERR_CONSTRAINT;
+	}
+	return SITU_OK;
+}
+
+situ_err_t situ_bssh_frame_keyframe_validate(situ_view_t view)
+{
+	return situ_bssh_frame_keyframe_check(view, NULL);
+}
+
+situ_err_t situ_bssh_frame_history_check(situ_view_t view, uint32_t *which)
+{
+	/* One place rather than a guard at every refusal: a caller
+	 * that does not want the identity passes NULL, and the
+	 * refusals below stay one line each. */
+	uint32_t sink;
+
+	if (which == NULL) {
+		which = &sink;
+	}
+	*which = 0xFFFFFFFFu;
+
+	if (view.limit < SITU_BSSH_FRAME_HISTORY_SIZE_MIN) {
+		/* The whole struct is short, so no member is the one
+		 * that broke it -- the same case the depth checks
+		 * meet, and `check`'s contract is that every refusal
+		 * sets `*which` on the line above it. */
+		*which = 0xFFFFFFFFu;
+		return SITU_ERR_BOUNDS;
+	}
+	/* bssh_frame_history.number: a varint whose bytes run out before it
+	 * ends is not one (26.778). */
+	if (situ_bssh_frame_history_number_len(view) == 0u) {
+		*which = SITU_BSSH_FRAME_HISTORY_NUMBER_CHECK;
+		return SITU_ERR_BOUNDS;
+	}
+	/* bssh_frame_history.continuation: its offset is a sum of lengths the message
+	 * chose, so the frame is not known to contain it. The accessor
+	 * answers safely; this is where the message is called malformed. */
+	if (!situ_in_bounds(view, situ_bssh_frame_history_continuation_offset(view), 1u)) {
+		*which = SITU_BSSH_FRAME_HISTORY_CONTINUATION_CHECK;
+		return SITU_ERR_BOUNDS;
+	}
+	/* bssh_frame_history.continuation [max = 1] */
+	if (situ_bssh_frame_history_continuation_get(view) > 1) {
+		*which = SITU_BSSH_FRAME_HISTORY_CONTINUATION_CHECK;
+		return SITU_ERR_CONSTRAINT;
+	}
+	return SITU_OK;
+}
+
+situ_err_t situ_bssh_frame_history_validate(situ_view_t view)
+{
+	return situ_bssh_frame_history_check(view, NULL);
+}
+
+situ_err_t situ_bssh_frame_repaint_check(situ_view_t view, uint32_t *which)
+{
+	/* One place rather than a guard at every refusal: a caller
+	 * that does not want the identity passes NULL, and the
+	 * refusals below stay one line each. */
+	uint32_t sink;
+
+	if (which == NULL) {
+		which = &sink;
+	}
+	*which = 0xFFFFFFFFu;
+
+	if (view.limit < SITU_BSSH_FRAME_REPAINT_SIZE_MIN) {
+		/* The whole struct is short, so no member is the one
+		 * that broke it -- the same case the depth checks
+		 * meet, and `check`'s contract is that every refusal
+		 * sets `*which` on the line above it. */
+		*which = 0xFFFFFFFFu;
+		return SITU_ERR_BOUNDS;
+	}
+	/* bssh_frame_repaint.offset: a varint whose bytes run out before it
+	 * ends is not one (26.778). */
+	if (situ_bssh_frame_repaint_offset_len(view) == 0u) {
+		*which = SITU_BSSH_FRAME_REPAINT_OFFSET_CHECK;
+		return SITU_ERR_BOUNDS;
+	}
+	/* bssh_frame_repaint.lines: a varint whose bytes run out before it
+	 * ends is not one (26.778). */
+	if (situ_bssh_frame_repaint_lines_len(view) == 0u) {
+		*which = SITU_BSSH_FRAME_REPAINT_LINES_CHECK;
+		return SITU_ERR_BOUNDS;
+	}
+	/* bssh_frame_repaint.last: its offset is a sum of lengths the message
+	 * chose, so the frame is not known to contain it. The accessor
+	 * answers safely; this is where the message is called malformed. */
+	if (!situ_in_bounds(view, situ_bssh_frame_repaint_last_offset(view), 1u)) {
+		*which = SITU_BSSH_FRAME_REPAINT_LAST_CHECK;
+		return SITU_ERR_BOUNDS;
+	}
+	/* bssh_frame_repaint.last [max = 1] */
+	if (situ_bssh_frame_repaint_last_get(view) > 1) {
+		*which = SITU_BSSH_FRAME_REPAINT_LAST_CHECK;
+		return SITU_ERR_CONSTRAINT;
+	}
+	return SITU_OK;
+}
+
+situ_err_t situ_bssh_frame_repaint_validate(situ_view_t view)
+{
+	return situ_bssh_frame_repaint_check(view, NULL);
+}
+

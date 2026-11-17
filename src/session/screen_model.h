@@ -92,9 +92,10 @@ int bssh_screen_model_alternate(const bssh_screen_model_t *model);
  * whole repaint, as snprintf does, so a caller can size a buffer and ask
  * again.
  *
- * Not carried yet: the primary screen underneath an alternate one, and
- * which rows continue the row above (what a later narrower resize rewraps
- * by).
+ * Not carried yet: the primary screen underneath an alternate one, which
+ * rows continue the row above (what a later narrower resize rewraps by), and
+ * modes that are not drawn -- application cursor keys, bracketed paste,
+ * mouse reporting.
  */
 size_t bssh_screen_model_repaint(const bssh_screen_model_t *model, uint8_t *out, size_t capacity);
 
@@ -115,6 +116,23 @@ void bssh_screen_model_history(const bssh_screen_model_t *model, uint64_t *first
  */
 int bssh_screen_model_history_line(const bssh_screen_model_t *model, uint64_t number,
                                    bssh_screen_cell_t *out, int capacity, int *continuation);
+
+/*
+ * How many bytes of the program's output the screen shows: every byte fed but
+ * the few held back for the next read (an unfinished UTF-8 sequence). Bytes
+ * from here on are what a client given this screen still needs.
+ */
+uint64_t bssh_screen_model_offset(const bssh_screen_model_t *model);
+
+/*
+ * The first line a client that has seen output up to `offset` lacks: the first
+ * pushed after it, or the end of the history when it lacks none. Each line is
+ * marked when it goes, at the end of the line of output being written, so a
+ * line wrapped off part-way may be counted as lacked when it was not -- sent
+ * twice rather than missed. Returns 0 when lines it lacked may have gone past
+ * the limit before `*from` as well, how many being unknown.
+ */
+int bssh_screen_model_history_after(const bssh_screen_model_t *model, uint64_t offset, uint64_t *from);
 
 #ifdef __cplusplus
 }

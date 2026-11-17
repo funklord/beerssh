@@ -39,6 +39,22 @@ static void on_restarted(void *context) {
 	(void)context;
 }
 
+static void on_history(void *context, bssh_wire_cells_t *cells, int continuation) {
+	(void)context;
+	assert(continuation == 0 || continuation == 1);
+
+	/* The client checked the line whole before this, so it must read whole. */
+	bssh_screen_cell_t cell;
+	int step;
+	while ((step = bssh_wire_next_cell(cells, &cell)) > 0) assert(cell.width == 1 || cell.width == 2);
+	assert(step == 0);
+}
+
+static void on_history_lost(void *context, uint64_t lines) {
+	(void)context;
+	(void)lines;
+}
+
 static void read_every_way(const bssh_wire_frame_t *frame) {
 	uint64_t offset = 0;
 	const uint8_t *bytes = NULL;
@@ -57,6 +73,20 @@ static void read_every_way(const bssh_wire_frame_t *frame) {
 	if (bssh_wire_read_output(frame, &offset, &bytes, &len) == 0) {
 		assert(len <= frame->body_len);
 		for (uint32_t i = 0; i < len; ++i) delivered += bytes[i];
+	}
+
+	uint64_t lines = 0;
+	int flag = 0;
+	if (bssh_wire_read_keyframe(frame, &offset, &flag) == 0) assert(flag == 0 || flag == 1);
+	if (bssh_wire_read_repaint(frame, &offset, &lines, &flag, &bytes, &len) == 0) {
+		assert(flag == 0 || flag == 1);
+		assert(len <= frame->body_len);
+		for (uint32_t i = 0; i < len; ++i) delivered += bytes[i];
+	}
+	bssh_wire_cells_t cells;
+	if (bssh_wire_read_history(frame, &offset, &flag, &cells) == 0) {
+		bssh_screen_cell_t cell;
+		while (bssh_wire_next_cell(&cells, &cell) > 0) delivered += cell.chars[0];
 	}
 }
 
@@ -86,8 +116,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 	}
 
 	static bssh_session_client_t client;
-	const bssh_session_client_events_t events = { NULL,         on_output,    on_gap,
-	                                              on_exited,    on_restarted, on_restarted };
+	const bssh_session_client_events_t events = { NULL,         on_output,    on_gap,       on_exited,
+	                                              on_restarted, on_restarted, on_history,   on_history_lost };
 	bssh_session_client_init(&client, &events);
 
 	uint8_t hello[32];

@@ -84,6 +84,7 @@ size_t bssh_output_log_append(bssh_output_log_t *log, const uint8_t *data, size_
 
 	add_mark(log, log->end, at_ms);
 	log->start_line += lines_pushed_out(log, data, taken);
+	log->end_line += count_lines(data, taken);
 
 	/* Only the tail of a write larger than the whole log can be kept. */
 	const size_t kept = taken < log->capacity ? taken : log->capacity;

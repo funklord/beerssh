@@ -19,6 +19,8 @@
  * seen part removed.
  */
 
+#include "session/wire.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -42,6 +44,19 @@ typedef struct bssh_session_client_events {
 	void (*restarted)(void *context);
 	/* What was written before this attach has all been delivered. */
 	void (*caught_up)(void *context);
+
+	/*
+	 * A keyframe, for a client that asked for them (put_keyframes): in place
+	 * of a replay from the oldest byte the host still holds, the lines that
+	 * scrolled off the top meanwhile, oldest first, and then the screen as it
+	 * is now, as bytes through `output`. Any may be NULL.
+	 *
+	 * `history` is one line for the scrollback, its cells read with
+	 * bssh_wire_next_cell. `history_lost` says lines went before they could
+	 * be sent: `lines` of them, or 0 when how many is unknown.
+	 */
+	void (*history)(void *context, bssh_wire_cells_t *cells, int continuation);
+	void (*history_lost)(void *context, uint64_t lines);
 } bssh_session_client_events_t;
 
 typedef struct bssh_session_client {
@@ -52,6 +67,7 @@ typedef struct bssh_session_client {
 	uint8_t in[BSSH_SESSION_CLIENT_BUFFER];
 	uint32_t in_used;
 	int said_hello;  /* this link has proved it speaks the protocol */
+	uint64_t history_next;  /* the history line expected next */
 } bssh_session_client_t;
 
 void bssh_session_client_init(bssh_session_client_t *client,
@@ -65,6 +81,9 @@ int bssh_session_client_feed(bssh_session_client_t *client, const uint8_t *bytes
 
 /* The connection went. What was seen stands; a half-read frame does not. */
 void bssh_session_client_reset_link(bssh_session_client_t *client);
+
+/* The frame that asks for keyframes, sent ahead of each attach. */
+size_t bssh_session_client_put_keyframes(uint8_t *out, size_t capacity);
 
 /* An acknowledgement if `every` bytes have arrived since the last one, or 0.
  * Writes to `out` as the bssh_wire_put functions do. */

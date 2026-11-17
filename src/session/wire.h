@@ -8,6 +8,8 @@
  * varint, so the writers are these few lines over its situ_varint_put.
  */
 
+#include "session/screen_model.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -29,6 +31,10 @@ enum {
 	BSSH_WIRE_RESTARTED = 10,
 	BSSH_WIRE_HANGUP = 11,
 	BSSH_WIRE_CAUGHT_UP = 12,
+	BSSH_WIRE_KEYFRAMES = 13,
+	BSSH_WIRE_KEYFRAME = 14,
+	BSSH_WIRE_HISTORY = 15,
+	BSSH_WIRE_REPAINT = 16,
 };
 
 /*
@@ -75,6 +81,13 @@ size_t bssh_wire_put_attach(uint8_t *out, size_t capacity, uint64_t offset, uint
 size_t bssh_wire_put_resize(uint8_t *out, size_t capacity, uint16_t columns, uint16_t rows);
 size_t bssh_wire_put_exited(uint8_t *out, size_t capacity, int32_t status);
 size_t bssh_wire_put_hello(uint8_t *out, size_t capacity);
+size_t bssh_wire_put_keyframe(uint8_t *out, size_t capacity, uint64_t from, int lost);
+/* As many of the cells as fit; the far half of a wide character is skipped. */
+size_t bssh_wire_put_history(uint8_t *out, size_t capacity, uint64_t number, int continuation,
+                             const bssh_screen_cell_t *cells, int count);
+/* At most what fits of `len`; *taken says how much. */
+size_t bssh_wire_put_repaint(uint8_t *out, size_t capacity, uint64_t offset, uint64_t lines, int last,
+                             const uint8_t *bytes, size_t len, size_t *taken);
 
 /* Reading a body. Each returns 0, or -1 when the body is not that message. */
 int bssh_wire_read_offset(const bssh_wire_frame_t *frame, uint64_t *offset);
@@ -86,6 +99,22 @@ int bssh_wire_read_attach(const bssh_wire_frame_t *frame, uint64_t *offset, uint
 int bssh_wire_read_resize(const bssh_wire_frame_t *frame, uint16_t *columns, uint16_t *rows);
 int bssh_wire_read_exited(const bssh_wire_frame_t *frame, int32_t *status);
 int bssh_wire_read_mode(const bssh_wire_frame_t *frame, uint8_t *mode);
+int bssh_wire_read_keyframe(const bssh_wire_frame_t *frame, uint64_t *from, int *lost);
+int bssh_wire_read_repaint(const bssh_wire_frame_t *frame, uint64_t *offset, uint64_t *lines, int *last,
+                           const uint8_t **bytes, uint32_t *len);
+
+/* A history line's cells, read one at a time; the bytes stay the frame's. */
+typedef struct bssh_wire_cells {
+	const uint8_t *at;
+	const uint8_t *end;
+	bssh_screen_cell_t style;
+	uint64_t left;   /* cells still to come in this run */
+} bssh_wire_cells_t;
+
+int bssh_wire_read_history(const bssh_wire_frame_t *frame, uint64_t *number, int *continuation,
+                           bssh_wire_cells_t *cells);
+/* 1 with the next cell, 0 at the end of the line, -1 for a malformed one. */
+int bssh_wire_next_cell(bssh_wire_cells_t *cells, bssh_screen_cell_t *cell);
 
 #ifdef __cplusplus
 }

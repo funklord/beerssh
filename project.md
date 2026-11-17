@@ -1521,13 +1521,62 @@ cells and continuations, and the screen after a resize that grows;
 `screen-model.toml` breaks three parts of it and each fails. **Order, decided
 from this section's own rule:** a keyframe at the log's end skips the held bytes
 before it, so it is an improvement only once those lines can be sent as history
--- "latest first, every line's final text arrives later". Until then a gap
-replays from the oldest byte held. **Not yet:** a frame for history lines and the
-client putting them into its scrollback; the keyframe on a gap; the primary
-screen under an alternate one; the client's own rewrap of its scrollback on a
-narrower resize, which the model does not copy; answering terminal queries from
-the server during a replay. Nothing observes the host's feeding until a frame
-does.
+-- "latest first, every line's final text arrives later".
+
+**The keyframe on a gap [BUILT 2026-11-17]:** a client whose place went past
+the log is no longer sent the bytes from the oldest held. Those bytes were
+written for a screen the client does not have, so drawing them drew nonsense
+under an "N lines lost" marker. Instead the client gets three frames
+(`frame.situ` 13 to 16):
+1. a `keyframe` header;
+2. every history line it lacks, oldest first, into its scrollback;
+3. the `repaint` of the screen as it is now, in parts.
+
+After the last part of the repaint, the client stands at the offset that
+repaint stands for, and output carries on from there. Lines it lacks that
+went past the server's 2,000 show as *[earlier lines lost]* in the scrollback.
+
+**Which lines it lacks** is the one new question. The model marks each line
+as it goes off the top, with the offset at the end of the line of output being
+written then: the model is fed a line at a time, so a line wrapped off part-way
+is marked late, never early. A client is therefore sent a line it had sooner
+than missing one; the client drops a number it has seen.
+
+**Old and new ends both still work.** The client asks with a frame of its own
+(13) ahead of the attach. An older host skips that frame as it skips any kind
+it does not know, and replays as before. A newer host given no such frame does
+the same.
+
+A history line is sent as cells in style runs:
+- the attributes and both colours, with "the theme's default" kept apart;
+- then each character with a bit for double width.
+
+So the client converts a cell by the rule it reads its own with, through
+`convert_cell`.
+
+**The tests:**
+- `session_host_test::a_client_that_takes_keyframes_is_sent_the_screen_and_the_lines_it_missed`
+  runs a real host over 200,000 lines with a 4,096-byte log. It checks 2,000
+  consecutive lines with the screen's top row following the last, and no gap.
+- `emulator_test::the_servers_history_says_which_lines_a_client_lacks`
+  checks the marks.
+- Further tests cover the frames, the client's order, a malformed line (refused
+  whole), and the session's scrollback.
+- `make fuzz-session` reads the new frames.
+- `tool/sabotage/keyframe.toml` breaks nine parts, and each fails.
+
+**Not yet:**
+- The primary screen under an alternate one.
+- Modes the repaint does not carry: application cursor keys, bracketed paste
+  and mouse reporting stay whatever the client last had.
+- Which screen rows continue the row above.
+- History before the screen when the log does hold the bytes, which is Live
+  mode's "latest first" proper. Today a keyframe answers only a gap.
+- The client's own rewrap of its scrollback on a narrower resize, which the
+  model does not copy.
+- A client that resized itself while away has already pushed its stale screen,
+  so some of those lines arrive twice.
+- Answering terminal queries from the server during a replay.
 
 **BeerSSH uses it over SSH, per host, off by default**: *Keep the shell on the
 server*, `resume_session`. Off because the probe is a round trip on every

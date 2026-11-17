@@ -85,6 +85,6 @@ expect = "the_servers_history_agrees_with_the_clients_scrollback"
 [[sabotage]]
 name = "the history forgets which lines wrapped"
 file = "src/session/screen_model.c"
-find = "\thistory_line_t line = { NULL, 0, continuation ? 1 : 0 };"
-replace = "\thistory_line_t line = { NULL, 0, 0 };"
+find = "\thistory_line_t line = { NULL, 0, continuation ? 1 : 0, model->pushing_at };"
+replace = "\thistory_line_t line = { NULL, 0, 0, model->pushing_at };"
 expect = "the_servers_history_agrees_with_the_clients_scrollback"

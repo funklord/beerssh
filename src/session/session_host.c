@@ -58,7 +58,23 @@ typedef struct host {
 	 * and nothing else.
 	 */
 	bssh_screen_model_t *screen;
+
+	/*
+	 * A keyframe in place of a replay (sec 5.6), for a client that asked: the
+	 * header, then history from `history_next`, then the repaint in parts.
+	 */
+	int keyframes;        /* this link's client takes them */
+	int keyframe_step;    /* KEYFRAME_* */
+	uint64_t history_next;
+	int history_lost;
+	uint8_t *repaint;
+	size_t repaint_len;
+	size_t repaint_done;
+	uint64_t repaint_offset;
+	uint64_t repaint_lines;
 } host_t;
+
+enum { KEYFRAME_NONE, KEYFRAME_HEADER, KEYFRAME_HISTORY, KEYFRAME_REPAINT };
 
 static int64_t now_ms(void) {
 	struct timespec at;
@@ -95,8 +111,16 @@ static int listen_on(const char *path) {
 	return fd;
 }
 
+static void end_keyframe(host_t *host) {
+	free(host->repaint);
+	host->repaint = NULL;
+	host->keyframe_step = KEYFRAME_NONE;
+}
+
 static void drop_client(host_t *host) {
 	if (host->client >= 0) close(host->client);
+	host->keyframes = 0;
+	end_keyframe(host);
 	host->client = -1;
 	host->hello_due = 0;
 	host->attached = 0;
@@ -157,6 +181,7 @@ static int handle_frame(host_t *host, const bssh_wire_frame_t *frame) {
 	case BSSH_WIRE_ATTACH:
 		if (bssh_wire_read_attach(frame, &offset, &columns, &rows)) return -1;
 		host->attached = 1;
+		end_keyframe(host);
 
 		/*
 		 * An offset this session never reached means the one the client knew
@@ -170,6 +195,9 @@ static int handle_frame(host_t *host, const bssh_wire_frame_t *frame) {
 		host->caught_up_due = 1;
 		bssh_output_log_ack(&host->log, host->sent);
 		set_size(host, columns, rows);
+		return 0;
+	case BSSH_WIRE_KEYFRAMES:
+		host->keyframes = 1;
 		return 0;
 	case BSSH_WIRE_HANGUP:
 		host->hung_up = 1;
@@ -244,6 +272,76 @@ static void drain_and_drop(host_t *host) {
 	drop_client(host);
 }
 
+/*
+ * What the client lacks went past the log: the lines it missed and then the
+ * screen, rather than bytes from the oldest held, which would draw on a screen
+ * they were not written for. 0 when there is no keyframe to give.
+ */
+static int start_keyframe(host_t *host) {
+	if (!host->keyframes || !host->screen) return 0;
+
+	host->history_lost = !bssh_screen_model_history_after(host->screen, host->sent, &host->history_next);
+	host->keyframe_step = KEYFRAME_HEADER;
+	return 1;
+}
+
+static void fill_keyframe(host_t *host) {
+	if (host->keyframe_step == KEYFRAME_HEADER) {
+		host->out_used = bssh_wire_put_keyframe(host->out, sizeof(host->out), host->history_next,
+		                                        host->history_lost);
+		host->keyframe_step = KEYFRAME_HISTORY;
+		return;
+	}
+
+	if (host->keyframe_step == KEYFRAME_HISTORY) {
+		uint64_t first = 0, count = 0;
+		bssh_screen_model_history(host->screen, &first, &count);
+
+		/* Gone past the limit while earlier lines went out: the client says so. */
+		if (host->history_next < first) host->history_next = first;
+		if (host->history_next < first + count) {
+			int continuation = 0;
+			const int width = bssh_screen_model_history_line(host->screen, host->history_next, NULL, 0,
+			                                                 &continuation);
+			bssh_screen_cell_t *cells = width > 0 ? malloc((size_t)width * sizeof(*cells)) : NULL;
+			const int have = cells ? bssh_screen_model_history_line(host->screen, host->history_next, cells,
+			                                                        width, &continuation)
+			                       : 0;
+			host->out_used = bssh_wire_put_history(host->out, sizeof(host->out), host->history_next,
+			                                       continuation, cells, have > 0 ? have : 0);
+			free(cells);
+			++host->history_next;
+			return;
+		}
+
+		/* The screen now, standing for every byte the model has taken. */
+		host->repaint_len = bssh_screen_model_repaint(host->screen, NULL, 0);
+		host->repaint = malloc(host->repaint_len ? host->repaint_len : 1);
+		if (!host->repaint) {
+			/* No room to draw it: the bytes still held are the next best. */
+			end_keyframe(host);
+			host->sent = host->log.start;
+			return;
+		}
+		bssh_screen_model_repaint(host->screen, host->repaint, host->repaint_len);
+		host->repaint_done = 0;
+		host->repaint_offset = bssh_screen_model_offset(host->screen);
+		/* The few bytes the model holds back are never a newline. */
+		host->repaint_lines = host->log.end_line;
+		host->keyframe_step = KEYFRAME_REPAINT;
+	}
+
+	size_t taken = 0;
+	host->out_used = bssh_wire_put_repaint(host->out, sizeof(host->out), host->repaint_offset,
+	                                       host->repaint_lines, 1, host->repaint + host->repaint_done,
+	                                       host->repaint_len - host->repaint_done, &taken);
+	host->repaint_done += taken;
+	if (host->repaint_done == host->repaint_len) {
+		host->sent = host->repaint_offset;
+		end_keyframe(host);
+	}
+}
+
 static void fill_out(host_t *host) {
 	if (host->out_used) return;
 	if (host->hello_due) {
@@ -259,12 +357,19 @@ static void fill_out(host_t *host) {
 		return;
 	}
 
+	if (host->keyframe_step) {
+		fill_keyframe(host);
+		return;
+	}
+
 	uint8_t chunk[CHUNK];
 	size_t len = 0;
 	const bssh_output_log_answer_t answer =
 	        bssh_output_log_read(&host->log, host->sent, chunk, sizeof(chunk), &len);
 
-	if (answer == BSSH_OUTPUT_LOG_GONE) {
+	if (answer == BSSH_OUTPUT_LOG_GONE && start_keyframe(host)) {
+		fill_keyframe(host);
+	} else if (answer == BSSH_OUTPUT_LOG_GONE) {
 		host->out_used = bssh_wire_put_lost(host->out, sizeof(host->out), host->log.start,
 		                                    host->log.start_line);
 		host->sent = host->log.start;
@@ -394,7 +499,7 @@ int bssh_session_host_run(const bssh_session_host_options_t *options) {
 			fds[count].fd = host->client;
 			fds[count].events = 0;
 			if (host->in_used < sizeof(host->in)) fds[count].events |= POLLIN;
-			if (host->out_used || host->hello_due || host->caught_up_due
+			if (host->out_used || host->hello_due || host->caught_up_due || host->keyframe_step
 			    || (host->attached && host->sent < host->log.end)
 			    || (host->attached && host->pty < 0))
 				fds[count].events |= POLLOUT;

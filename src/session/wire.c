@@ -193,3 +193,237 @@ int bssh_wire_read_mode(const bssh_wire_frame_t *frame, uint8_t *mode) {
 	*mode = situ_bssh_frame_mode_mode_get(view);
 	return 0;
 }
+
+size_t bssh_wire_put_keyframe(uint8_t *out, size_t capacity, uint64_t from, int lost) {
+	uint8_t body[11];
+	const uint32_t len = situ_varint_put(body, 10, from);
+
+	body[len] = lost ? 1 : 0;
+	return bssh_wire_put(out, capacity, BSSH_WIRE_KEYFRAME, body, len + 1);
+}
+
+/* A body being written: 0 once anything has not fitted. */
+typedef struct writer {
+	uint8_t *at;
+	size_t left;
+	int full;
+} writer_t;
+
+static void write_bytes(writer_t *writer, const void *bytes, size_t len) {
+	if (writer->full || len > writer->left) {
+		writer->full = 1;
+		return;
+	}
+	memcpy(writer->at, bytes, len);
+	writer->at += len;
+	writer->left -= len;
+}
+
+static void write_varint(writer_t *writer, uint64_t value) {
+	uint8_t bytes[10];
+	write_bytes(writer, bytes, situ_varint_put(bytes, sizeof(bytes), value));
+}
+
+static void write_color(writer_t *writer, const bssh_screen_color_t *color) {
+	uint8_t bytes[4] = { color->kind, 0, 0, 0 };
+	size_t len = 1;
+
+	if (color->kind == BSSH_SCREEN_COLOR_INDEXED) {
+		bytes[1] = color->index;
+		len = 2;
+	} else if (color->kind == BSSH_SCREEN_COLOR_RGB) {
+		bytes[1] = color->red;
+		bytes[2] = color->green;
+		bytes[3] = color->blue;
+		len = 4;
+	} else {
+		bytes[0] = BSSH_SCREEN_COLOR_DEFAULT;
+	}
+	write_bytes(writer, bytes, len);
+}
+
+static int same_style(const bssh_screen_cell_t *a, const bssh_screen_cell_t *b) {
+	return a->attrs == b->attrs && !memcmp(&a->fg, &b->fg, sizeof(a->fg))
+	       && !memcmp(&a->bg, &b->bg, sizeof(a->bg));
+}
+
+static int far_half(const bssh_screen_cell_t *cell) {
+	return cell->chars[0] == 0xFFFFFFFFu;
+}
+
+static uint64_t cell_code(const bssh_screen_cell_t *cell) {
+	const uint32_t ch = cell->chars[0] > 0x10FFFF ? 0xFFFD : cell->chars[0];
+	return ((uint64_t)ch << 1) | (cell->width == 2);
+}
+
+size_t bssh_wire_put_history(uint8_t *out, size_t capacity, uint64_t number, int continuation,
+                             const bssh_screen_cell_t *cells, int count) {
+	/* Room for a kind and the longest length, and the body is built in place. */
+	if (capacity < 4) return 0;
+	uint8_t *body = out + 4;
+	const size_t room = capacity - 4 < BSSH_WIRE_BODY_MAX ? capacity - 4 : BSSH_WIRE_BODY_MAX;
+	writer_t writer = { body, room, 0 };
+
+	write_varint(&writer, number);
+	const uint8_t flag = continuation ? 1 : 0;
+	write_bytes(&writer, &flag, 1);
+	if (writer.full) return 0;
+
+	for (int i = 0; i < count;) {
+		if (far_half(&cells[i])) {
+			++i;
+			continue;
+		}
+		/* A run: every cell in this style, the far halves between them skipped. */
+		uint64_t run = 0;
+		int end = i;
+		while (end < count && (far_half(&cells[end]) || same_style(&cells[end], &cells[i]))) {
+			run += !far_half(&cells[end]);
+			++end;
+		}
+
+		writer_t trial = writer;
+		const uint8_t attrs = cells[i].attrs & 0x7F;
+		write_bytes(&trial, &attrs, 1);
+		write_color(&trial, &cells[i].fg);
+		write_color(&trial, &cells[i].bg);
+		write_varint(&trial, run);
+		for (int j = i; j < end; ++j)
+			if (!far_half(&cells[j])) write_varint(&trial, cell_code(&cells[j]));
+		/* What does not fit is left off whole, so a line never ends mid-run. */
+		if (trial.full) break;
+		writer = trial;
+		i = end;
+	}
+
+	const size_t body_len = (size_t)(writer.at - body);
+	uint8_t length[4];
+	const uint32_t length_len = situ_varint_put(length, sizeof(length), body_len);
+	out[0] = BSSH_WIRE_HISTORY;
+	memcpy(out + 1, length, length_len);
+	memmove(out + 1 + length_len, body, body_len);
+	return 1 + length_len + body_len;
+}
+
+size_t bssh_wire_put_repaint(uint8_t *out, size_t capacity, uint64_t offset, uint64_t lines, int last,
+                             const uint8_t *bytes, size_t len, size_t *taken) {
+	uint8_t head[21];
+	uint32_t head_len = situ_varint_put(head, 10, offset);
+	head_len += situ_varint_put(head + head_len, 10, lines);
+
+	*taken = 0;
+	if (capacity < 4 + head_len + 1) return 0;
+	size_t room = capacity - 4 - head_len - 1;
+	if (room > BSSH_WIRE_BODY_MAX - head_len - 1) room = BSSH_WIRE_BODY_MAX - head_len - 1;
+	const size_t piece = len < room ? len : room;
+
+	/* The last part only if it is all of what is left. */
+	head[head_len] = last && piece == len ? 1 : 0;
+	const size_t body_len = head_len + 1 + piece;
+	const uint32_t length_len = situ_varint_put(out + 1, 3, body_len);
+	out[0] = BSSH_WIRE_REPAINT;
+	memcpy(out + 1 + length_len, head, head_len + 1);
+	if (piece) memcpy(out + 1 + length_len + head_len + 1, bytes, piece);
+	*taken = piece;
+	return 1 + length_len + body_len;
+}
+
+int bssh_wire_read_keyframe(const bssh_wire_frame_t *frame, uint64_t *from, int *lost) {
+	situ_msg_t msg;
+	situ_view_t view;
+
+	if (body_message(frame, &msg)) return -1;
+	if (situ_bssh_frame_keyframe_view(&msg, 0, frame->body_len, &view) != SITU_OK) return -1;
+	if (situ_bssh_frame_keyframe_validate(view) != SITU_OK) return -1;
+	if (situ_bssh_frame_keyframe_from_get(view, from) != SITU_OK) return -1;
+	*lost = situ_bssh_frame_keyframe_lost_get(view);
+	return 0;
+}
+
+int bssh_wire_read_repaint(const bssh_wire_frame_t *frame, uint64_t *offset, uint64_t *lines, int *last,
+                           const uint8_t **bytes, uint32_t *len) {
+	situ_msg_t msg;
+	situ_view_t view;
+
+	if (body_message(frame, &msg)) return -1;
+	if (situ_bssh_frame_repaint_view(&msg, 0, frame->body_len, &view) != SITU_OK) return -1;
+	if (situ_bssh_frame_repaint_validate(view) != SITU_OK) return -1;
+	if (situ_bssh_frame_repaint_offset_get(view, offset) != SITU_OK) return -1;
+	if (situ_bssh_frame_repaint_lines_get(view, lines) != SITU_OK) return -1;
+	*last = situ_bssh_frame_repaint_last_get(view);
+
+	const uint32_t head = situ_bssh_frame_repaint_last_offset(view) + 1;
+	if (head > frame->body_len) return -1;
+	*bytes = frame->body + head;
+	*len = frame->body_len - head;
+	return 0;
+}
+
+int bssh_wire_read_history(const bssh_wire_frame_t *frame, uint64_t *number, int *continuation,
+                           bssh_wire_cells_t *cells) {
+	situ_msg_t msg;
+	situ_view_t view;
+
+	if (body_message(frame, &msg)) return -1;
+	if (situ_bssh_frame_history_view(&msg, 0, frame->body_len, &view) != SITU_OK) return -1;
+	if (situ_bssh_frame_history_validate(view) != SITU_OK) return -1;
+	if (situ_bssh_frame_history_number_get(view, number) != SITU_OK) return -1;
+	*continuation = situ_bssh_frame_history_continuation_get(view);
+
+	const uint32_t head = situ_bssh_frame_history_continuation_offset(view) + 1;
+	if (head > frame->body_len) return -1;
+	memset(cells, 0, sizeof(*cells));
+	cells->at = frame->body + head;
+	cells->end = frame->body + frame->body_len;
+	return 0;
+}
+
+static int read_varint(bssh_wire_cells_t *cells, uint64_t *value) {
+	const uint32_t used = situ_varint_get(cells->at, (uint32_t)(cells->end - cells->at), 10u, value);
+
+	if (!used || used != situ_varint_len(*value)) return -1;
+	cells->at += used;
+	return 0;
+}
+
+static int read_color(bssh_wire_cells_t *cells, bssh_screen_color_t *color) {
+	memset(color, 0, sizeof(*color));
+	if (cells->at == cells->end) return -1;
+	color->kind = *cells->at++;
+	if (color->kind == BSSH_SCREEN_COLOR_DEFAULT) return 0;
+	if (color->kind == BSSH_SCREEN_COLOR_INDEXED) {
+		if (cells->end - cells->at < 1) return -1;
+		color->index = *cells->at++;
+		return 0;
+	}
+	if (color->kind != BSSH_SCREEN_COLOR_RGB || cells->end - cells->at < 3) return -1;
+	color->red = cells->at[0];
+	color->green = cells->at[1];
+	color->blue = cells->at[2];
+	cells->at += 3;
+	return 0;
+}
+
+int bssh_wire_next_cell(bssh_wire_cells_t *cells, bssh_screen_cell_t *cell) {
+	if (!cells->left) {
+		if (cells->at == cells->end) return 0;
+
+		bssh_screen_cell_t style;
+		memset(&style, 0, sizeof(style));
+		style.attrs = *cells->at++;
+		if (style.attrs & 0x80) return -1;
+		if (read_color(cells, &style.fg) || read_color(cells, &style.bg)) return -1;
+		if (read_varint(cells, &cells->left) || !cells->left) return -1;
+		cells->style = style;
+	}
+
+	uint64_t code = 0;
+	if (read_varint(cells, &code)) return -1;
+	if ((code >> 1) > 0x10FFFF) return -1;
+
+	*cell = cells->style;
+	cell->chars[0] = (uint32_t)(code >> 1);
+	cell->width = (code & 1) ? 2 : 1;
+	--cells->left;
+	return 1;
+}

@@ -613,7 +613,7 @@ void bssh_session::answer_resume_probe(const QByteArray &output) {
 
 	if (!m_resume_client) {
 		m_resume_client = std::make_shared<bssh_session_client_t>();
-		bssh_session_client_events_t events;
+		bssh_session_client_events_t events = {};
 		events.context = this;
 		events.output = [](void *self, const uint8_t *bytes, size_t len) {
 			static_cast<bssh_session *>(self)->m_emulator->feed(
@@ -637,6 +637,27 @@ void bssh_session::answer_resume_probe(const QByteArray &output) {
 		events.caught_up = [](void *self) {
 			static_cast<bssh_session *>(self)->m_resume_replaying = false;
 		};
+
+		/* What scrolled off while away, into the scrollback where it belongs. */
+		events.history = [](void *self, bssh_wire_cells_t *cells, int continuation) {
+			QList<bssh_screen_cell_t> line;
+			bssh_screen_cell_t cell;
+			while (bssh_wire_next_cell(cells, &cell) > 0) line.append(cell);
+			static_cast<bssh_session *>(self)->m_emulator->push_history(line.constData(), int(line.size()),
+			                                                             continuation != 0);
+		};
+		events.history_lost = [](void *self, uint64_t lines) {
+			const QString text = lines == 0   ? QStringLiteral("[earlier lines lost]")
+			                     : lines == 1 ? QStringLiteral("[1 line lost]")
+			                                  : QStringLiteral("[%1 lines lost]").arg(lines);
+			QList<bssh_cell_t> line;
+			for (const char32_t ch : text.toUcs4()) {
+				bssh_cell_t cell;
+				cell.ch = ch;
+				line.append(cell);
+			}
+			static_cast<bssh_session *>(self)->m_emulator->push_history(line, false);
+		};
 		bssh_session_client_init(m_resume_client.get(), &events);
 	}
 	bssh_session_client_reset_link(m_resume_client.get());
@@ -657,7 +678,14 @@ void bssh_session::answer_resume_probe(const QByteArray &output) {
 	m_sent_cols = m_cols;
 	m_sent_rows = m_rows;
 
+	/*
+	 * Ahead of the attach, so a gap is answered with the screen and the
+	 * lines missed rather than a replay of what is left. A host that
+	 * predates them skips the frame, as it skips any kind it does not know.
+	 */
 	uint8_t frame[32];
+	m_transport->send(QByteArray(reinterpret_cast<const char *>(frame),
+	                             int(bssh_session_client_put_keyframes(frame, sizeof(frame)))));
 	m_transport->send(QByteArray(reinterpret_cast<const char *>(frame),
 	                             int(bssh_wire_put_attach(frame, sizeof(frame), m_resume_client->next,
 	                                                      uint16_t(m_cols), uint16_t(m_rows)))));

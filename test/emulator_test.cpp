@@ -647,6 +647,54 @@ QString history_difference(const bssh_emulator &client, const bssh_screen_model_
 
 } /* namespace */
 
+void emulator_test::the_servers_history_says_which_lines_a_client_lacks() {
+	bssh_screen_model_t *model = bssh_screen_model_new(4, 20);
+	QVERIFY(model);
+	bssh_screen_model_set_history_limit(model, 8);
+
+	/*
+	 * Line n written, and where the output stood after it. Four rows, so the
+	 * first line goes off the top as the fifth line's newline is written.
+	 */
+	QList<uint64_t> after;
+	after.append(0);
+	for (int n = 1; n <= 20; ++n) {
+		const QByteArray line = QByteArray::number(n) + "\r\n";
+		bssh_screen_model_feed(model, reinterpret_cast<const uint8_t *>(line.constData()), size_t(line.size()));
+		after.append(bssh_screen_model_offset(model));
+	}
+
+	uint64_t first = 0, count = 0;
+	bssh_screen_model_history(model, &first, &count);
+	QCOMPARE(first, uint64_t(9));
+	QCOMPARE(count, uint64_t(8));
+
+	/*
+	 * A client that has seen up to line n holds every line pushed by then:
+	 * n - 3 of them once there are more than three. It lacks the rest, and
+	 * once that reaches back past what is kept, how many is not known.
+	 */
+	for (int n = 0; n <= 20; ++n) {
+		uint64_t from = 0;
+		const int known = bssh_screen_model_history_after(model, after.at(n), &from);
+		const uint64_t pushed = n > 3 ? uint64_t(n - 3) : 0;
+		QCOMPARE(from, qMax(pushed, first));
+		QCOMPARE(known, pushed >= first ? 1 : 0);
+	}
+
+	/* Part-way along a line: what its newline pushes is still lacked. */
+	uint64_t from = 0;
+	QVERIFY(bssh_screen_model_history_after(model, after.at(15) + 1, &from));
+	QCOMPARE(from, uint64_t(12));
+
+	/* A held UTF-8 lead is not yet on the screen, so not yet past it. */
+	const uint8_t lead = 0xE4;
+	const uint64_t before = bssh_screen_model_offset(model);
+	bssh_screen_model_feed(model, &lead, 1);
+	QCOMPARE(bssh_screen_model_offset(model), before);
+	bssh_screen_model_free(model);
+}
+
 void emulator_test::the_servers_history_agrees_with_the_clients_scrollback() {
 	/*
 	 * The lines that scroll off the top (sec 5.6's history stream): kept by

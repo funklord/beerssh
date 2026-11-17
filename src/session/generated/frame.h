@@ -196,7 +196,7 @@ static inline situ_err_t situ_bssh_frame_required(const uint8_t *data, uint32_t 
 	}
 	if (situ_bssh_frame_length_len(view) == 0u) {
 		/* bssh_frame.length: mid-varint, so one more byte and ask again. */
-		*need = situ_need_u32(have, 1u);
+		*need = situ_need_u32(at, (have > pos ? have - pos : 0u) + 1u);
 		/* ... and never below the total the walk has
 		 * already accounted. The two are different
 		 * quantities and neither bounds the other, so
@@ -439,7 +439,7 @@ static inline situ_err_t situ_bssh_frame_attach_required(const uint8_t *data, ui
 	}
 	if (situ_bssh_frame_attach_offset_len(view) == 0u) {
 		/* bssh_frame_attach.offset: mid-varint, so one more byte and ask again. */
-		*need = situ_need_u32(have, 1u);
+		*need = situ_need_u32(at, (have > pos ? have - pos : 0u) + 1u);
 		/* ... and never below the total the walk has
 		 * already accounted. The two are different
 		 * quantities and neither bounds the other, so
@@ -663,7 +663,7 @@ static inline situ_err_t situ_bssh_frame_offset_required(const uint8_t *data, ui
 	}
 	if (situ_bssh_frame_offset_offset_len(view) == 0u) {
 		/* bssh_frame_offset.offset: mid-varint, so one more byte and ask again. */
-		*need = situ_need_u32(have, 1u);
+		*need = situ_need_u32(at, (have > pos ? have - pos : 0u) + 1u);
 		/* ... and never below the total the walk has
 		 * already accounted. The two are different
 		 * quantities and neither bounds the other, so
@@ -901,7 +901,7 @@ static inline situ_err_t situ_bssh_frame_lost_required(const uint8_t *data, uint
 	}
 	if (situ_bssh_frame_lost_offset_len(view) == 0u) {
 		/* bssh_frame_lost.offset: mid-varint, so one more byte and ask again. */
-		*need = situ_need_u32(have, 1u);
+		*need = situ_need_u32(at, (have > pos ? have - pos : 0u) + 1u);
 		/* ... and never below the total the walk has
 		 * already accounted. The two are different
 		 * quantities and neither bounds the other, so
@@ -927,7 +927,7 @@ static inline situ_err_t situ_bssh_frame_lost_required(const uint8_t *data, uint
 	}
 	if (situ_bssh_frame_lost_lines_len(view) == 0u) {
 		/* bssh_frame_lost.lines: mid-varint, so one more byte and ask again. */
-		*need = situ_need_u32(have, 1u);
+		*need = situ_need_u32(at, (have > pos ? have - pos : 0u) + 1u);
 		/* ... and never below the total the walk has
 		 * already accounted. The two are different
 		 * quantities and neither bounds the other, so
@@ -1078,6 +1078,720 @@ situ_err_t situ_bssh_frame_mode_validate(situ_view_t view);
  */
 situ_err_t situ_bssh_frame_mode_check(situ_view_t view, uint32_t *which);
 #define SITU_BSSH_FRAME_MODE_MODE_CHECK 0u
+
+/* ---- struct bssh_frame_keyframe ---- */
+
+#define SITU_BSSH_FRAME_KEYFRAME_SIZE_MIN   2u
+#define SITU_BSSH_FRAME_KEYFRAME_SIZE_MAX   11u
+
+/* INVALIDATION: nothing invalidates a bssh_frame_keyframe view.
+ * Every member has a fixed size, so no write can move another.
+ */
+/** Acquire a view. This struct is a frame: its extent depends on the
+ * data, so the caller supplies the length they have and the bounds
+ * check is made against that. The fields at a static offset are then
+ * constant offsets from the base; the rest resolve through their own
+ * offset functions below.
+ */
+static inline situ_err_t situ_bssh_frame_keyframe_view(const situ_msg_t *msg, uint32_t offset, uint32_t length,
+		situ_view_t *out)
+{
+	if (length < SITU_BSSH_FRAME_KEYFRAME_SIZE_MIN) {
+		return SITU_ERR_BOUNDS;
+	}
+
+	return situ_view_at(msg, offset, length, out);
+}
+
+/* bssh_frame_keyframe.from : bssh_varint  at AbsoluteStatic(0x00)
+ * size=Bounded(1, 10) align=Unaligned repr=ValueConverted atomic=NonAtomic mutate=InPlaceSlack
+ */
+/** `from` is a `bssh_varint`: 1 to 10 bytes, and how
+ * many is in the bytes themselves.
+ *
+ * SITU_OK            decoded; *out is the value
+ * SITU_ERR_BOUNDS    the frame ends mid-value, or it is longer than
+ * the 10 bytes this type allows
+ * SITU_ERR_CONSTRAINT a non-minimal encoding, which `minimal` refuses
+ */
+static inline situ_err_t situ_bssh_frame_keyframe_from_get(situ_view_t view, uint64_t *out)
+{
+	uint32_t at = 0u;
+	uint64_t raw = 0;
+	uint32_t used;
+
+	if (at >= view.limit) {
+		return SITU_ERR_BOUNDS;
+	}
+
+	used = situ_varint_get(situ_base(view) + at, situ_remaining_u32(view.limit, at), 10u, &raw);
+	if (used == 0u) {
+		return SITU_ERR_BOUNDS;
+	}
+
+	/* `minimal` is declared, so a padded encoding is a different
+	 * encoding of the same value and this schema does not admit
+	 * one. Without the check `canonical` would be a claim nothing
+	 * enforced. */
+	if (used != situ_varint_len(raw)) {
+		return SITU_ERR_CONSTRAINT;
+	}
+
+	*out = raw;
+	return SITU_OK;
+}
+
+/** The same value, read where an error cannot be returned: the
+ * length arithmetic downstream of this field is not fallible, and
+ * making it so would put an error path in every accessor after it.
+ *
+ * `validate` is what makes this safe -- an unvalidated frame reads
+ * zero, which is the bargain every other accessor makes with the
+ * bounds check it did not do.
+ */
+static inline uint64_t situ_bssh_frame_keyframe_from_value(situ_view_t view)
+{
+	uint64_t value = 0;
+
+	(void)situ_bssh_frame_keyframe_from_get(view, &value);
+	return value;
+}
+
+/** How many bytes `from` occupies. Zero where it cannot be
+ * read at all, which keeps every offset derived from it inside the
+ * frame -- a width guessed at the maximum would push them past the end.
+ * A caller who needs to tell the two apart asks `_get`.
+ */
+static inline uint32_t situ_bssh_frame_keyframe_from_len(situ_view_t view)
+{
+	uint32_t at = 0u;
+	uint64_t raw = 0;
+
+	if (at >= view.limit) {
+		return 0u;
+	}
+	return situ_varint_get(situ_base(view) + at, situ_remaining_u32(view.limit, at), 10u, &raw);
+}
+
+#define SITU_BSSH_FRAME_KEYFRAME_LOST_VALUE_MAX 1u
+
+/** bssh_frame_keyframe.lost : u8  at Dynamic
+ * size=Fixed(1) align=Unaligned repr=MemoryIdentical atomic=AtomicWord mutate=InPlaceFixed
+ */
+static inline uint32_t situ_bssh_frame_keyframe_lost_offset(situ_view_t view)
+{
+	uint32_t offset = 0u;
+	offset = situ_advance_u32(offset, (situ_bssh_frame_keyframe_from_len(view)), view.limit);
+
+	return offset;
+}
+/** Zero where the member does not fit the view: its offset is a sum of
+ * lengths the message chose, so the frame is not known to hold it, and
+ * `validate` reports such a message as malformed (26.27).
+ */
+static inline uint8_t situ_bssh_frame_keyframe_lost_get(situ_view_t view)
+{
+	return situ_in_bounds(view, situ_bssh_frame_keyframe_lost_offset(view), 1u)
+		? (uint8_t)((uint8_t)((situ_base(view) + situ_bssh_frame_keyframe_lost_offset(view)))[0u])
+		: (uint8_t)0;
+}
+/** The returned pointer is invalidated by any write that changes
+ * the length of what precedes this field; see the INVALIDATION
+ * note on this struct's view accessor.
+ */
+static inline uint8_t *situ_bssh_frame_keyframe_lost_ptr(situ_view_t view)
+{
+	return (uint8_t *)(situ_base(view) + situ_bssh_frame_keyframe_lost_offset(view));
+}
+/** Does nothing where the member does not fit the view: its offset is a
+ * sum of lengths the message chose, and writing past the frame is
+ * somebody else's data. `validate` reports such a message (26.27).
+ */
+static inline void situ_bssh_frame_keyframe_lost_set(situ_view_t view, uint8_t value)
+{
+	if (situ_in_bounds(view, situ_bssh_frame_keyframe_lost_offset(view), 1u)) {
+		((situ_base(view) + situ_bssh_frame_keyframe_lost_offset(view)))[0u] = (uint8_t)value;
+	}
+}
+
+/** How many bytes a whole `bssh_frame_keyframe` needs, given `have` of them.
+ *
+ * SITU_OK            a complete one is present; *need is its length
+ * SITU_ERR_TRUNCATED not yet; *need is a lower bound on the total
+ *
+ * For framing a stream: read, ask, read the difference, ask again. The
+ * length fields are read only once the bytes holding them have arrived,
+ * which is the case every hand-written version of this gets wrong.
+ */
+static inline situ_err_t situ_bssh_frame_keyframe_required(const uint8_t *data, uint32_t have, uint32_t *need)
+{
+	uint32_t at = 1u;
+	uint32_t pos = 0u;
+	situ_view_t view;
+
+	/* A view over what has arrived, so every length expression below
+	 * reads through the same bounds the accessors do. */
+	view.base       = (uint8_t *)(uintptr_t)(const void *)data;
+	view.limit      = have;
+	view.generation = 0u;
+	view.owner      = NULL;
+
+	/* bssh_frame_keyframe.from: reading its length means reading bytes that
+	 * have to be here first. */
+	if (have < pos) {
+		*need = at;
+		return SITU_ERR_TRUNCATED;
+	}
+	if (situ_bssh_frame_keyframe_from_len(view) == 0u) {
+		/* bssh_frame_keyframe.from: mid-varint, so one more byte and ask again. */
+		*need = situ_need_u32(at, (have > pos ? have - pos : 0u) + 1u);
+		/* ... and never below the total the walk has
+		 * already accounted. The two are different
+		 * quantities and neither bounds the other, so
+		 * `framed`'s six fell to five the moment its
+		 * fourth byte arrived (26.726). */
+		if (*need < at) {
+			*need = at;
+		}
+		return SITU_ERR_TRUNCATED;
+	}
+	{
+		const uint32_t len = situ_bssh_frame_keyframe_from_len(view);
+
+		at = situ_need_u32(at, len);
+	}
+
+	*need = at;
+	return have >= at ? SITU_OK : SITU_ERR_TRUNCATED;
+}
+
+/** Check every constraint this schema states: [must_eq], [max],
+ * [min], and the reserved-bit policy. Called on parse under
+ * SITU_CHECKED, and available explicitly in any build.
+ */
+situ_err_t situ_bssh_frame_keyframe_validate(situ_view_t view);
+
+/** The same walk, naming the member that refused. `*which` is one
+ * of the ids below on a refusal and 0xFFFFFFFF when nothing
+ * refused -- it is written either way, so a caller must not
+ * expect its own value to survive the call. NULL asks for
+ * the verdict alone. The id is the contract and the name is
+ * a macro, so nothing here costs a string (0051).
+ */
+situ_err_t situ_bssh_frame_keyframe_check(situ_view_t view, uint32_t *which);
+#define SITU_BSSH_FRAME_KEYFRAME_FROM_CHECK 0u
+#define SITU_BSSH_FRAME_KEYFRAME_LOST_CHECK 1u
+
+/* ---- struct bssh_frame_history ---- */
+
+#define SITU_BSSH_FRAME_HISTORY_SIZE_MIN   2u
+#define SITU_BSSH_FRAME_HISTORY_SIZE_MAX   11u
+
+/* INVALIDATION: nothing invalidates a bssh_frame_history view.
+ * Every member has a fixed size, so no write can move another.
+ */
+/** Acquire a view. This struct is a frame: its extent depends on the
+ * data, so the caller supplies the length they have and the bounds
+ * check is made against that. The fields at a static offset are then
+ * constant offsets from the base; the rest resolve through their own
+ * offset functions below.
+ */
+static inline situ_err_t situ_bssh_frame_history_view(const situ_msg_t *msg, uint32_t offset, uint32_t length,
+		situ_view_t *out)
+{
+	if (length < SITU_BSSH_FRAME_HISTORY_SIZE_MIN) {
+		return SITU_ERR_BOUNDS;
+	}
+
+	return situ_view_at(msg, offset, length, out);
+}
+
+/* bssh_frame_history.number : bssh_varint  at AbsoluteStatic(0x00)
+ * size=Bounded(1, 10) align=Unaligned repr=ValueConverted atomic=NonAtomic mutate=InPlaceSlack
+ */
+/** `number` is a `bssh_varint`: 1 to 10 bytes, and how
+ * many is in the bytes themselves.
+ *
+ * SITU_OK            decoded; *out is the value
+ * SITU_ERR_BOUNDS    the frame ends mid-value, or it is longer than
+ * the 10 bytes this type allows
+ * SITU_ERR_CONSTRAINT a non-minimal encoding, which `minimal` refuses
+ */
+static inline situ_err_t situ_bssh_frame_history_number_get(situ_view_t view, uint64_t *out)
+{
+	uint32_t at = 0u;
+	uint64_t raw = 0;
+	uint32_t used;
+
+	if (at >= view.limit) {
+		return SITU_ERR_BOUNDS;
+	}
+
+	used = situ_varint_get(situ_base(view) + at, situ_remaining_u32(view.limit, at), 10u, &raw);
+	if (used == 0u) {
+		return SITU_ERR_BOUNDS;
+	}
+
+	/* `minimal` is declared, so a padded encoding is a different
+	 * encoding of the same value and this schema does not admit
+	 * one. Without the check `canonical` would be a claim nothing
+	 * enforced. */
+	if (used != situ_varint_len(raw)) {
+		return SITU_ERR_CONSTRAINT;
+	}
+
+	*out = raw;
+	return SITU_OK;
+}
+
+/** The same value, read where an error cannot be returned: the
+ * length arithmetic downstream of this field is not fallible, and
+ * making it so would put an error path in every accessor after it.
+ *
+ * `validate` is what makes this safe -- an unvalidated frame reads
+ * zero, which is the bargain every other accessor makes with the
+ * bounds check it did not do.
+ */
+static inline uint64_t situ_bssh_frame_history_number_value(situ_view_t view)
+{
+	uint64_t value = 0;
+
+	(void)situ_bssh_frame_history_number_get(view, &value);
+	return value;
+}
+
+/** How many bytes `number` occupies. Zero where it cannot be
+ * read at all, which keeps every offset derived from it inside the
+ * frame -- a width guessed at the maximum would push them past the end.
+ * A caller who needs to tell the two apart asks `_get`.
+ */
+static inline uint32_t situ_bssh_frame_history_number_len(situ_view_t view)
+{
+	uint32_t at = 0u;
+	uint64_t raw = 0;
+
+	if (at >= view.limit) {
+		return 0u;
+	}
+	return situ_varint_get(situ_base(view) + at, situ_remaining_u32(view.limit, at), 10u, &raw);
+}
+
+#define SITU_BSSH_FRAME_HISTORY_CONTINUATION_VALUE_MAX 1u
+
+/** bssh_frame_history.continuation : u8  at Dynamic
+ * size=Fixed(1) align=Unaligned repr=MemoryIdentical atomic=AtomicWord mutate=InPlaceFixed
+ */
+static inline uint32_t situ_bssh_frame_history_continuation_offset(situ_view_t view)
+{
+	uint32_t offset = 0u;
+	offset = situ_advance_u32(offset, (situ_bssh_frame_history_number_len(view)), view.limit);
+
+	return offset;
+}
+/** Zero where the member does not fit the view: its offset is a sum of
+ * lengths the message chose, so the frame is not known to hold it, and
+ * `validate` reports such a message as malformed (26.27).
+ */
+static inline uint8_t situ_bssh_frame_history_continuation_get(situ_view_t view)
+{
+	return situ_in_bounds(view, situ_bssh_frame_history_continuation_offset(view), 1u)
+		? (uint8_t)((uint8_t)((situ_base(view) + situ_bssh_frame_history_continuation_offset(view)))[0u])
+		: (uint8_t)0;
+}
+/** The returned pointer is invalidated by any write that changes
+ * the length of what precedes this field; see the INVALIDATION
+ * note on this struct's view accessor.
+ */
+static inline uint8_t *situ_bssh_frame_history_continuation_ptr(situ_view_t view)
+{
+	return (uint8_t *)(situ_base(view) + situ_bssh_frame_history_continuation_offset(view));
+}
+/** Does nothing where the member does not fit the view: its offset is a
+ * sum of lengths the message chose, and writing past the frame is
+ * somebody else's data. `validate` reports such a message (26.27).
+ */
+static inline void situ_bssh_frame_history_continuation_set(situ_view_t view, uint8_t value)
+{
+	if (situ_in_bounds(view, situ_bssh_frame_history_continuation_offset(view), 1u)) {
+		((situ_base(view) + situ_bssh_frame_history_continuation_offset(view)))[0u] = (uint8_t)value;
+	}
+}
+
+/** How many bytes a whole `bssh_frame_history` needs, given `have` of them.
+ *
+ * SITU_OK            a complete one is present; *need is its length
+ * SITU_ERR_TRUNCATED not yet; *need is a lower bound on the total
+ *
+ * For framing a stream: read, ask, read the difference, ask again. The
+ * length fields are read only once the bytes holding them have arrived,
+ * which is the case every hand-written version of this gets wrong.
+ */
+static inline situ_err_t situ_bssh_frame_history_required(const uint8_t *data, uint32_t have, uint32_t *need)
+{
+	uint32_t at = 1u;
+	uint32_t pos = 0u;
+	situ_view_t view;
+
+	/* A view over what has arrived, so every length expression below
+	 * reads through the same bounds the accessors do. */
+	view.base       = (uint8_t *)(uintptr_t)(const void *)data;
+	view.limit      = have;
+	view.generation = 0u;
+	view.owner      = NULL;
+
+	/* bssh_frame_history.number: reading its length means reading bytes that
+	 * have to be here first. */
+	if (have < pos) {
+		*need = at;
+		return SITU_ERR_TRUNCATED;
+	}
+	if (situ_bssh_frame_history_number_len(view) == 0u) {
+		/* bssh_frame_history.number: mid-varint, so one more byte and ask again. */
+		*need = situ_need_u32(at, (have > pos ? have - pos : 0u) + 1u);
+		/* ... and never below the total the walk has
+		 * already accounted. The two are different
+		 * quantities and neither bounds the other, so
+		 * `framed`'s six fell to five the moment its
+		 * fourth byte arrived (26.726). */
+		if (*need < at) {
+			*need = at;
+		}
+		return SITU_ERR_TRUNCATED;
+	}
+	{
+		const uint32_t len = situ_bssh_frame_history_number_len(view);
+
+		at = situ_need_u32(at, len);
+	}
+
+	*need = at;
+	return have >= at ? SITU_OK : SITU_ERR_TRUNCATED;
+}
+
+/** Check every constraint this schema states: [must_eq], [max],
+ * [min], and the reserved-bit policy. Called on parse under
+ * SITU_CHECKED, and available explicitly in any build.
+ */
+situ_err_t situ_bssh_frame_history_validate(situ_view_t view);
+
+/** The same walk, naming the member that refused. `*which` is one
+ * of the ids below on a refusal and 0xFFFFFFFF when nothing
+ * refused -- it is written either way, so a caller must not
+ * expect its own value to survive the call. NULL asks for
+ * the verdict alone. The id is the contract and the name is
+ * a macro, so nothing here costs a string (0051).
+ */
+situ_err_t situ_bssh_frame_history_check(situ_view_t view, uint32_t *which);
+#define SITU_BSSH_FRAME_HISTORY_NUMBER_CHECK 0u
+#define SITU_BSSH_FRAME_HISTORY_CONTINUATION_CHECK 1u
+
+/* ---- struct bssh_frame_repaint ---- */
+
+#define SITU_BSSH_FRAME_REPAINT_SIZE_MIN   3u
+#define SITU_BSSH_FRAME_REPAINT_SIZE_MAX   21u
+
+/* INVALIDATION: nothing invalidates a bssh_frame_repaint view.
+ * Every member has a fixed size, so no write can move another.
+ */
+/** Acquire a view. This struct is a frame: its extent depends on the
+ * data, so the caller supplies the length they have and the bounds
+ * check is made against that. The fields at a static offset are then
+ * constant offsets from the base; the rest resolve through their own
+ * offset functions below.
+ */
+static inline situ_err_t situ_bssh_frame_repaint_view(const situ_msg_t *msg, uint32_t offset, uint32_t length,
+		situ_view_t *out)
+{
+	if (length < SITU_BSSH_FRAME_REPAINT_SIZE_MIN) {
+		return SITU_ERR_BOUNDS;
+	}
+
+	return situ_view_at(msg, offset, length, out);
+}
+
+/* bssh_frame_repaint.offset : bssh_varint  at AbsoluteStatic(0x00)
+ * size=Bounded(1, 10) align=Unaligned repr=ValueConverted atomic=NonAtomic mutate=InPlaceSlack
+ */
+/** `offset` is a `bssh_varint`: 1 to 10 bytes, and how
+ * many is in the bytes themselves.
+ *
+ * SITU_OK            decoded; *out is the value
+ * SITU_ERR_BOUNDS    the frame ends mid-value, or it is longer than
+ * the 10 bytes this type allows
+ * SITU_ERR_CONSTRAINT a non-minimal encoding, which `minimal` refuses
+ */
+static inline situ_err_t situ_bssh_frame_repaint_offset_get(situ_view_t view, uint64_t *out)
+{
+	uint32_t at = 0u;
+	uint64_t raw = 0;
+	uint32_t used;
+
+	if (at >= view.limit) {
+		return SITU_ERR_BOUNDS;
+	}
+
+	used = situ_varint_get(situ_base(view) + at, situ_remaining_u32(view.limit, at), 10u, &raw);
+	if (used == 0u) {
+		return SITU_ERR_BOUNDS;
+	}
+
+	/* `minimal` is declared, so a padded encoding is a different
+	 * encoding of the same value and this schema does not admit
+	 * one. Without the check `canonical` would be a claim nothing
+	 * enforced. */
+	if (used != situ_varint_len(raw)) {
+		return SITU_ERR_CONSTRAINT;
+	}
+
+	*out = raw;
+	return SITU_OK;
+}
+
+/** The same value, read where an error cannot be returned: the
+ * length arithmetic downstream of this field is not fallible, and
+ * making it so would put an error path in every accessor after it.
+ *
+ * `validate` is what makes this safe -- an unvalidated frame reads
+ * zero, which is the bargain every other accessor makes with the
+ * bounds check it did not do.
+ */
+static inline uint64_t situ_bssh_frame_repaint_offset_value(situ_view_t view)
+{
+	uint64_t value = 0;
+
+	(void)situ_bssh_frame_repaint_offset_get(view, &value);
+	return value;
+}
+
+/** How many bytes `offset` occupies. Zero where it cannot be
+ * read at all, which keeps every offset derived from it inside the
+ * frame -- a width guessed at the maximum would push them past the end.
+ * A caller who needs to tell the two apart asks `_get`.
+ */
+static inline uint32_t situ_bssh_frame_repaint_offset_len(situ_view_t view)
+{
+	uint32_t at = 0u;
+	uint64_t raw = 0;
+
+	if (at >= view.limit) {
+		return 0u;
+	}
+	return situ_varint_get(situ_base(view) + at, situ_remaining_u32(view.limit, at), 10u, &raw);
+}
+
+/** bssh_frame_repaint.lines : bssh_varint  at Dynamic
+ * size=Bounded(1, 10) align=Unaligned repr=ValueConverted atomic=NonAtomic mutate=InPlaceSlack
+ */
+static inline uint32_t situ_bssh_frame_repaint_lines_offset(situ_view_t view)
+{
+	uint32_t offset = 0u;
+	offset = situ_advance_u32(offset, (situ_bssh_frame_repaint_offset_len(view)), view.limit);
+
+	return offset;
+}
+/** `lines` is a `bssh_varint`: 1 to 10 bytes, and how
+ * many is in the bytes themselves.
+ *
+ * SITU_OK            decoded; *out is the value
+ * SITU_ERR_BOUNDS    the frame ends mid-value, or it is longer than
+ * the 10 bytes this type allows
+ * SITU_ERR_CONSTRAINT a non-minimal encoding, which `minimal` refuses
+ */
+static inline situ_err_t situ_bssh_frame_repaint_lines_get(situ_view_t view, uint64_t *out)
+{
+	uint32_t at = situ_bssh_frame_repaint_lines_offset(view);
+	uint64_t raw = 0;
+	uint32_t used;
+
+	if (at >= view.limit) {
+		return SITU_ERR_BOUNDS;
+	}
+
+	used = situ_varint_get(situ_base(view) + at, situ_remaining_u32(view.limit, at), 10u, &raw);
+	if (used == 0u) {
+		return SITU_ERR_BOUNDS;
+	}
+
+	/* `minimal` is declared, so a padded encoding is a different
+	 * encoding of the same value and this schema does not admit
+	 * one. Without the check `canonical` would be a claim nothing
+	 * enforced. */
+	if (used != situ_varint_len(raw)) {
+		return SITU_ERR_CONSTRAINT;
+	}
+
+	*out = raw;
+	return SITU_OK;
+}
+
+/** The same value, read where an error cannot be returned: the
+ * length arithmetic downstream of this field is not fallible, and
+ * making it so would put an error path in every accessor after it.
+ *
+ * `validate` is what makes this safe -- an unvalidated frame reads
+ * zero, which is the bargain every other accessor makes with the
+ * bounds check it did not do.
+ */
+static inline uint64_t situ_bssh_frame_repaint_lines_value(situ_view_t view)
+{
+	uint64_t value = 0;
+
+	(void)situ_bssh_frame_repaint_lines_get(view, &value);
+	return value;
+}
+
+/** How many bytes `lines` occupies. Zero where it cannot be
+ * read at all, which keeps every offset derived from it inside the
+ * frame -- a width guessed at the maximum would push them past the end.
+ * A caller who needs to tell the two apart asks `_get`.
+ */
+static inline uint32_t situ_bssh_frame_repaint_lines_len(situ_view_t view)
+{
+	uint32_t at = situ_bssh_frame_repaint_lines_offset(view);
+	uint64_t raw = 0;
+
+	if (at >= view.limit) {
+		return 0u;
+	}
+	return situ_varint_get(situ_base(view) + at, situ_remaining_u32(view.limit, at), 10u, &raw);
+}
+
+#define SITU_BSSH_FRAME_REPAINT_LAST_VALUE_MAX 1u
+
+/** bssh_frame_repaint.last : u8  at Dynamic
+ * size=Fixed(1) align=Unaligned repr=MemoryIdentical atomic=AtomicWord mutate=InPlaceFixed
+ */
+static inline uint32_t situ_bssh_frame_repaint_last_offset(situ_view_t view)
+{
+	uint32_t offset = 0u;
+	offset = situ_advance_u32(offset, (situ_bssh_frame_repaint_offset_len(view)), view.limit);
+	offset = situ_advance_u32(offset, (situ_bssh_frame_repaint_lines_len(view)), view.limit);
+
+	return offset;
+}
+/** Zero where the member does not fit the view: its offset is a sum of
+ * lengths the message chose, so the frame is not known to hold it, and
+ * `validate` reports such a message as malformed (26.27).
+ */
+static inline uint8_t situ_bssh_frame_repaint_last_get(situ_view_t view)
+{
+	return situ_in_bounds(view, situ_bssh_frame_repaint_last_offset(view), 1u)
+		? (uint8_t)((uint8_t)((situ_base(view) + situ_bssh_frame_repaint_last_offset(view)))[0u])
+		: (uint8_t)0;
+}
+/** The returned pointer is invalidated by any write that changes
+ * the length of what precedes this field; see the INVALIDATION
+ * note on this struct's view accessor.
+ */
+static inline uint8_t *situ_bssh_frame_repaint_last_ptr(situ_view_t view)
+{
+	return (uint8_t *)(situ_base(view) + situ_bssh_frame_repaint_last_offset(view));
+}
+/** Does nothing where the member does not fit the view: its offset is a
+ * sum of lengths the message chose, and writing past the frame is
+ * somebody else's data. `validate` reports such a message (26.27).
+ */
+static inline void situ_bssh_frame_repaint_last_set(situ_view_t view, uint8_t value)
+{
+	if (situ_in_bounds(view, situ_bssh_frame_repaint_last_offset(view), 1u)) {
+		((situ_base(view) + situ_bssh_frame_repaint_last_offset(view)))[0u] = (uint8_t)value;
+	}
+}
+
+/** How many bytes a whole `bssh_frame_repaint` needs, given `have` of them.
+ *
+ * SITU_OK            a complete one is present; *need is its length
+ * SITU_ERR_TRUNCATED not yet; *need is a lower bound on the total
+ *
+ * For framing a stream: read, ask, read the difference, ask again. The
+ * length fields are read only once the bytes holding them have arrived,
+ * which is the case every hand-written version of this gets wrong.
+ */
+static inline situ_err_t situ_bssh_frame_repaint_required(const uint8_t *data, uint32_t have, uint32_t *need)
+{
+	uint32_t at = 1u;
+	uint32_t pos = 0u;
+	situ_view_t view;
+
+	/* A view over what has arrived, so every length expression below
+	 * reads through the same bounds the accessors do. */
+	view.base       = (uint8_t *)(uintptr_t)(const void *)data;
+	view.limit      = have;
+	view.generation = 0u;
+	view.owner      = NULL;
+
+	/* bssh_frame_repaint.offset: reading its length means reading bytes that
+	 * have to be here first. */
+	if (have < pos) {
+		*need = at;
+		return SITU_ERR_TRUNCATED;
+	}
+	if (situ_bssh_frame_repaint_offset_len(view) == 0u) {
+		/* bssh_frame_repaint.offset: mid-varint, so one more byte and ask again. */
+		*need = situ_need_u32(at, (have > pos ? have - pos : 0u) + 1u);
+		/* ... and never below the total the walk has
+		 * already accounted. The two are different
+		 * quantities and neither bounds the other, so
+		 * `framed`'s six fell to five the moment its
+		 * fourth byte arrived (26.726). */
+		if (*need < at) {
+			*need = at;
+		}
+		return SITU_ERR_TRUNCATED;
+	}
+	{
+		const uint32_t len = situ_bssh_frame_repaint_offset_len(view);
+
+		at = situ_need_u32(at, len);
+		pos = situ_need_u32(pos, len);
+	}
+
+	/* bssh_frame_repaint.lines: reading its length means reading bytes that
+	 * have to be here first. */
+	if (have < pos) {
+		*need = at;
+		return SITU_ERR_TRUNCATED;
+	}
+	if (situ_bssh_frame_repaint_lines_len(view) == 0u) {
+		/* bssh_frame_repaint.lines: mid-varint, so one more byte and ask again. */
+		*need = situ_need_u32(at, (have > pos ? have - pos : 0u) + 1u);
+		/* ... and never below the total the walk has
+		 * already accounted. The two are different
+		 * quantities and neither bounds the other, so
+		 * `framed`'s six fell to five the moment its
+		 * fourth byte arrived (26.726). */
+		if (*need < at) {
+			*need = at;
+		}
+		return SITU_ERR_TRUNCATED;
+	}
+	{
+		const uint32_t len = situ_bssh_frame_repaint_lines_len(view);
+
+		at = situ_need_u32(at, len);
+	}
+
+	*need = at;
+	return have >= at ? SITU_OK : SITU_ERR_TRUNCATED;
+}
+
+/** Check every constraint this schema states: [must_eq], [max],
+ * [min], and the reserved-bit policy. Called on parse under
+ * SITU_CHECKED, and available explicitly in any build.
+ */
+situ_err_t situ_bssh_frame_repaint_validate(situ_view_t view);
+
+/** The same walk, naming the member that refused. `*which` is one
+ * of the ids below on a refusal and 0xFFFFFFFF when nothing
+ * refused -- it is written either way, so a caller must not
+ * expect its own value to survive the call. NULL asks for
+ * the verdict alone. The id is the contract and the name is
+ * a macro, so nothing here costs a string (0051).
+ */
+situ_err_t situ_bssh_frame_repaint_check(situ_view_t view, uint32_t *which);
+#define SITU_BSSH_FRAME_REPAINT_OFFSET_CHECK 0u
+#define SITU_BSSH_FRAME_REPAINT_LINES_CHECK 1u
+#define SITU_BSSH_FRAME_REPAINT_LAST_CHECK 2u
 
 #ifdef __cplusplus
 }

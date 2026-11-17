@@ -83,8 +83,8 @@ expect = "marks_coalesce_and_lose_only_the_oldest_timing"
 [[sabotage]]
 name = "lines are counted after they are overwritten"
 file = "src/session/output_log.c"
-find = "\tlog->start_line += lines_pushed_out(log, data, taken);\n\n\t/* Only the tail of a write larger than the whole log can be kept. */\n\tconst size_t kept = taken < log->capacity ? taken : log->capacity;\n\tcopy_in(log, log->end + (taken - kept), data + (taken - kept), kept);\n"
-replace = "\n\t/* Only the tail of a write larger than the whole log can be kept. */\n\tconst size_t kept = taken < log->capacity ? taken : log->capacity;\n\tcopy_in(log, log->end + (taken - kept), data + (taken - kept), kept);\n\tlog->start_line += lines_pushed_out(log, data, taken);\n"
+find = "\tlog->start_line += lines_pushed_out(log, data, taken);\n\tlog->end_line += count_lines(data, taken);\n\n\t/* Only the tail of a write larger than the whole log can be kept. */\n\tconst size_t kept = taken < log->capacity ? taken : log->capacity;\n\tcopy_in(log, log->end + (taken - kept), data + (taken - kept), kept);\n"
+replace = "\tlog->end_line += count_lines(data, taken);\n\n\t/* Only the tail of a write larger than the whole log can be kept. */\n\tconst size_t kept = taken < log->capacity ? taken : log->capacity;\n\tcopy_in(log, log->end + (taken - kept), data + (taken - kept), kept);\n\tlog->start_line += lines_pushed_out(log, data, taken);\n"
 expect = "the_log_knows_the_line_it_starts_at"
 
 [[sabotage]]

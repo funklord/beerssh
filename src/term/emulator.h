@@ -375,6 +375,15 @@ public:
 	void restore_history(const bssh_scrollback &kept);
 
 	/*
+	 * One line onto the bottom of the history, as though it had scrolled
+	 * off the top: what a kept session's host sends of the lines a client
+	 * missed (sec 5.6). The second takes the host's cells, converted by the
+	 * rule this terminal's own are.
+	 */
+	void push_history(const QList<bssh_cell_t> &line, bool continuation);
+	void push_history(const struct bssh_screen_cell *cells, int count, bool continuation);
+
+	/*
 	 * Drop the history, announcing it (sec 6.4). The REMOTE can already
 	 * ask for this -- ED 3 is what `clear` sends -- and nothing local
 	 * could, so a user who wanted their scrollback gone had to hope the

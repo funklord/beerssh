@@ -11,6 +11,8 @@ typedef struct history_line {
 	bssh_screen_cell_t *cells;
 	int width;
 	int continuation;
+	/* Fed no later than this offset: what a client at it already has. */
+	uint64_t at;
 } history_line_t;
 
 struct bssh_screen_model {
@@ -22,6 +24,9 @@ struct bssh_screen_model {
 	size_t oldest;
 	size_t kept;
 	uint64_t gone;   /* lines dropped off the front: the oldest kept's number */
+	uint64_t gone_at;   /* `at` of the newest line dropped */
+	uint64_t fed;       /* bytes given to feed, held ones included */
+	uint64_t pushing_at;   /* `at` for a line pushed now */
 	int cursor_visible;
 	int alternate;
 	/* The end of the last read, held until the next completes it. */
@@ -125,9 +130,7 @@ void bssh_screen_model_free(bssh_screen_model_t *model) {
 	free(model);
 }
 
-void bssh_screen_model_feed(bssh_screen_model_t *model, const uint8_t *bytes, size_t length) {
-	if (!model || !bytes || length == 0) return;
-
+static void feed_piece(bssh_screen_model_t *model, const uint8_t *bytes, size_t length) {
 	/* What was held, completed from the front of this read. */
 	while (model->held_length > 0 && length > 0) {
 		model->held[model->held_length++] = *bytes++;
@@ -146,8 +149,52 @@ void bssh_screen_model_feed(bssh_screen_model_t *model, const uint8_t *bytes, si
 	model->held_length = hold;
 }
 
+/*
+ * A line at a time, so each line pushed off the top knows how far the bytes
+ * had got: up to the end of the line being written, which a client at that
+ * offset has seen. Never earlier than the truth -- a line pushed by a wrap
+ * part-way along is marked at the line's end -- so a client coming back is
+ * sent a line it had sooner than missing one it did not.
+ */
+void bssh_screen_model_feed(bssh_screen_model_t *model, const uint8_t *bytes, size_t length) {
+	if (!model || !bytes || length == 0) return;
+
+	while (length > 0) {
+		const uint8_t *newline = memchr(bytes, '\n', length);
+		const size_t piece = newline ? (size_t)(newline - bytes) + 1 : length;
+
+		model->pushing_at = model->fed + piece;
+		feed_piece(model, bytes, piece);
+		model->fed += piece;
+		bytes += piece;
+		length -= piece;
+	}
+}
+
+uint64_t bssh_screen_model_offset(const bssh_screen_model_t *model) {
+	return model ? model->fed - model->held_length : 0;
+}
+
+int bssh_screen_model_history_after(const bssh_screen_model_t *model, uint64_t offset, uint64_t *from) {
+	if (!model) {
+		if (from) *from = 0;
+		return 1;
+	}
+	/* The marks only grow, so the first line past `offset` is found halving. */
+	size_t low = 0, high = model->kept;
+	while (low < high) {
+		const size_t middle = low + (high - low) / 2;
+		if (model->history[(model->oldest + middle) % model->limit].at <= offset) low = middle + 1;
+		else high = middle;
+	}
+	if (from) *from = model->gone + low;
+	return low > 0 || model->gone == 0 || model->gone_at <= offset;
+}
+
 void bssh_screen_model_resize(bssh_screen_model_t *model, int rows, int columns) {
 	if (!model || rows < 1 || columns < 1) return;
+	/* What a resize pushes, a client at the bytes so far has not seen. */
+	model->pushing_at = model->fed;
 	vterm_set_size(model->vt, rows, columns);
 }
 
@@ -224,6 +271,7 @@ static void trim(history_line_t *line) {
 }
 
 static void drop_oldest(bssh_screen_model_t *model) {
+	model->gone_at = model->history[model->oldest].at;
 	free(model->history[model->oldest].cells);
 	model->history[model->oldest].cells = NULL;
 	model->oldest = (model->oldest + 1) % model->limit;
@@ -234,6 +282,7 @@ static void drop_oldest(bssh_screen_model_t *model) {
 static int on_pushline4(int cols, const VTermScreenCell *cells, bool continuation, void *user) {
 	bssh_screen_model_t *model = user;
 	if (model->limit == 0) {
+		model->gone_at = model->pushing_at;
 		++model->gone;
 		return 1;
 	}
@@ -247,7 +296,7 @@ static int on_pushline4(int cols, const VTermScreenCell *cells, bool continuatio
 		trim(&model->history[(model->oldest + model->kept - 1) % model->limit]);
 	if (model->kept == model->limit) drop_oldest(model);
 
-	history_line_t line = { NULL, 0, continuation ? 1 : 0 };
+	history_line_t line = { NULL, 0, continuation ? 1 : 0, model->pushing_at };
 	if (cols > 0) line.cells = malloc((size_t)cols * sizeof *line.cells);
 	if (line.cells) {
 		for (int col = 0; col < cols; ++col) convert(&cells[col], &line.cells[col]);

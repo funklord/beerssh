@@ -510,8 +510,8 @@ expect = "the_client_is_told_what_a_lost_frame_took"
 [[sabotage]]
 name = "the client forgets the line after a hole"
 file = "src/session/session_client.c"
-find = "\t\tclient->line = lines;\n"
-replace = ""
+find = "missing);\n\t\tclient->next = offset;\n\t\tclient->line = lines;\n"
+replace = "missing);\n\t\tclient->next = offset;\n"
 expect = "the_client_is_told_what_a_lost_frame_took"
 
 [[sabotage]]

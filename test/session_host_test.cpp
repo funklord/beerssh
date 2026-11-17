@@ -499,10 +499,12 @@ struct received_t {
 	int restarts = 0;
 	int caught_up = 0;
 	int32_t status = 0;
+	QList<QByteArray> history;     /* each line's text, a '+' ahead of a continuation */
+	QList<uint64_t> history_lost;
 	bssh_session_client_t client;
 
 	received_t() {
-		bssh_session_client_events_t events;
+		bssh_session_client_events_t events = {};
 		events.context = this;
 		events.output = [](void *self, const uint8_t *bytes, size_t len) {
 			static_cast<received_t *>(self)->text.append(reinterpret_cast<const char *>(bytes), int(len));
@@ -520,6 +522,16 @@ struct received_t {
 		};
 		events.restarted = [](void *self) { ++static_cast<received_t *>(self)->restarts; };
 		events.caught_up = [](void *self) { ++static_cast<received_t *>(self)->caught_up; };
+		events.history = [](void *self, bssh_wire_cells_t *cells, int continuation) {
+			QByteArray text = continuation ? "+" : "";
+			bssh_screen_cell_t cell;
+			while (bssh_wire_next_cell(cells, &cell) > 0)
+				text += QString(QChar::fromUcs4(cell.chars[0] ? cell.chars[0] : U' ')).toUtf8();
+			static_cast<received_t *>(self)->history.append(text);
+		};
+		events.history_lost = [](void *self, uint64_t lines) {
+			static_cast<received_t *>(self)->history_lost.append(lines);
+		};
 		bssh_session_client_init(&client, &events);
 		hello();
 	}
@@ -678,6 +690,222 @@ void session_host_test::the_client_refuses_a_peer_not_speaking_the_protocol() {
 	QCOMPARE(bssh_session_client_feed(&received.client, hello, len - 1), 0);
 	QCOMPARE(bssh_session_client_feed(&received.client, hello + len - 1, 1), 0);
 	QCOMPARE(received.client.said_hello, 1);
+}
+
+void session_host_test::a_client_that_takes_keyframes_is_sent_the_screen_and_the_lines_it_missed() {
+	QTemporaryDir scratch;
+	const QByteArray marker = (scratch.path() + QStringLiteral("/done")).toUtf8();
+	const QByteArray command = "seq 1 200000; echo finished; touch " + marker + "; read wait";
+	host_process_t host(command.constData(), 4096);
+
+	/* Nobody attached, so the log runs on past its 4096 bytes. */
+	QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(QString::fromUtf8(marker)), 20000);
+
+	/*
+	 * seq blocks on a full pty, so up to a pty buffer of it may still be on
+	 * its way into the host when the marker appears. Left to arrive during
+	 * the keyframe it is more history, sent and counted -- correct, and not
+	 * the case this test pins down.
+	 */
+	QTest::qSleep(300);
+	client_t link;
+	QVERIFY(link.connect_to(host.path));
+	uint8_t frame[32];
+	link.send_raw(frame, bssh_session_client_put_keyframes(frame, sizeof(frame)));
+	link.attach(0);
+
+	received_t received;
+	bssh_session_client_reset_link(&received.client);
+	QElapsedTimer timer;
+	timer.start();
+	while (!received.caught_up && timer.elapsed() < 10000) {
+		pollfd one = { link.fd, POLLIN, 0 };
+		if (poll(&one, 1, 100) <= 0) continue;
+
+		uint8_t chunk[65536];
+		const ssize_t got = read(link.fd, chunk, sizeof(chunk));
+		QVERIFY(got > 0);
+		QCOMPARE(bssh_session_client_feed(&received.client, chunk, size_t(got)), 0);
+	}
+	QCOMPARE(received.caught_up, 1);
+
+	/* Not a replay from the oldest byte held: no gap, and the place is past it all. */
+	QVERIFY(received.gaps.isEmpty());
+	QVERIFY(received.client.next > 1000000);
+
+	/* Lines went past the server's limit too, and it says so without a count. */
+	QCOMPARE(received.history_lost, QList<uint64_t>{ 0 });
+
+	/* The history it still held, in order and every one of them. */
+	QVERIFY(received.history.size() >= BSSH_SCREEN_HISTORY_LINES);
+	for (int i = 1; i < received.history.size(); ++i)
+		QCOMPARE(received.history.at(i).toULongLong(), received.history.at(i - 1).toULongLong() + 1);
+
+	/*
+	 * And then the screen, and whatever the host had still to read when the
+	 * test saw the program finish, which scrolls on from it: read in order,
+	 * the history, what scrolled off here and the screen are one count, to
+	 * the last line seq wrote.
+	 */
+	bssh_emulator terminal(80, 24);
+	terminal.feed(received.text);
+	QStringList lines;
+	for (const QByteArray &line : received.history) lines.append(QString::fromUtf8(line));
+	for (int i = 0; i < terminal.scrollback().count(); ++i) {
+		QString text;
+		for (const bssh_cell_t &cell : terminal.scrollback().line(i)) text += QChar::fromUcs4(cell.ch);
+		lines.append(text);
+	}
+	lines += terminal.screen().to_text().split(QLatin1Char('\n'));
+	quint64 last = 0;
+	for (const QString &line : lines) {
+		bool number = false;
+		const quint64 value = line.trimmed().toULongLong(&number);
+		if (!number) continue;
+		if (last) QCOMPARE(value, last + 1);
+		last = value;
+	}
+	QCOMPARE(last, quint64(200000));
+	QVERIFY2(terminal.screen().to_text().contains(QStringLiteral("finished")),
+	         qPrintable(terminal.screen().to_text()));
+}
+
+void session_host_test::a_history_line_round_trips_with_its_styles() {
+	bssh_screen_cell_t cells[6];
+	memset(cells, 0, sizeof(cells));
+	for (bssh_screen_cell_t &cell : cells) cell.width = 1;
+	cells[0].chars[0] = 'a';
+	cells[0].attrs = BSSH_SCREEN_BOLD | BSSH_SCREEN_DIM;
+	cells[0].fg.kind = BSSH_SCREEN_COLOR_INDEXED;
+	cells[0].fg.index = 9;
+	cells[1].chars[0] = 0x4E2D; /* a wide character, and its far half */
+	cells[1].width = 2;
+	cells[2].chars[0] = 0xFFFFFFFFu;
+	cells[3].chars[0] = 0; /* never written */
+	cells[4].chars[0] = 'z';
+	cells[4].bg.kind = BSSH_SCREEN_COLOR_RGB;
+	cells[4].bg.red = 1;
+	cells[4].bg.green = 2;
+	cells[4].bg.blue = 3;
+	cells[5].chars[0] = 0x1F600;
+	cells[5].attrs = BSSH_SCREEN_UNDERLINE;
+
+	uint8_t out[256];
+	const size_t len = bssh_wire_put_history(out, sizeof(out), 123456, 1, cells, 6);
+	QVERIFY(len > 0);
+
+	bssh_wire_frame_t frame;
+	uint32_t used = 0;
+	QCOMPARE(bssh_wire_take(out, uint32_t(len), &frame, &used), 1);
+	QCOMPARE(size_t(used), len);
+	QCOMPARE(int(frame.kind), int(BSSH_WIRE_HISTORY));
+
+	uint64_t number = 0;
+	int continuation = 0;
+	bssh_wire_cells_t reader;
+	QCOMPARE(bssh_wire_read_history(&frame, &number, &continuation, &reader), 0);
+	QCOMPARE(number, uint64_t(123456));
+	QCOMPARE(continuation, 1);
+
+	/* Every cell but the far half, which the width stands for. */
+	const int expected[] = { 0, 1, 3, 4, 5 };
+	for (int at : expected) {
+		bssh_screen_cell_t cell;
+		QCOMPARE(bssh_wire_next_cell(&reader, &cell), 1);
+		QCOMPARE(cell.chars[0], cells[at].chars[0]);
+		QCOMPARE(int(cell.width), int(cells[at].width));
+		QCOMPARE(int(cell.attrs), int(cells[at].attrs));
+		QVERIFY(!memcmp(&cell.fg, &cells[at].fg, sizeof(cell.fg)));
+		QVERIFY(!memcmp(&cell.bg, &cells[at].bg, sizeof(cell.bg)));
+	}
+	bssh_screen_cell_t cell;
+	QCOMPARE(bssh_wire_next_cell(&reader, &cell), 0);
+
+	/* Too little room for the line: what fits goes, whole runs only, and reads back. */
+	const size_t short_len = bssh_wire_put_history(out, 20, 7, 0, cells, 6);
+	QVERIFY(short_len > 0 && short_len <= 20);
+	QCOMPARE(bssh_wire_take(out, uint32_t(short_len), &frame, &used), 1);
+	QCOMPARE(bssh_wire_read_history(&frame, &number, &continuation, &reader), 0);
+	int read = 0;
+	int step;
+	while ((step = bssh_wire_next_cell(&reader, &cell)) > 0) ++read;
+	QCOMPARE(step, 0);
+	QVERIFY(read > 0 && read < 5);
+}
+
+void session_host_test::a_malformed_history_line_is_refused() {
+	/* A number, no continuation, and then one run's bytes. */
+	auto first_cell = [](const QByteArray &run) {
+		QByteArray body("\x05\x00", 2);
+		body += run;
+		uint8_t out[64];
+		const size_t len = bssh_wire_put(out, sizeof(out), BSSH_WIRE_HISTORY, body.constData(), size_t(body.size()));
+		bssh_wire_frame_t frame;
+		uint32_t used = 0;
+		if (bssh_wire_take(out, uint32_t(len), &frame, &used) != 1) return -9;
+		uint64_t number = 0;
+		int continuation = 0;
+		bssh_wire_cells_t reader;
+		if (bssh_wire_read_history(&frame, &number, &continuation, &reader)) return -8;
+		bssh_screen_cell_t cell;
+		return bssh_wire_next_cell(&reader, &cell);
+	};
+
+	QCOMPARE(first_cell(QByteArray("\x00\x00\x00\x01\x82\x01", 6)), 1);  /* 'A', for a start */
+	QCOMPARE(first_cell(QByteArray("\x80\x00\x00\x01\x82\x01", 6)), -1); /* the top attribute bit */
+	QCOMPARE(first_cell(QByteArray("\x00\x03\x00\x01\x82\x01", 6)), -1); /* a colour kind nobody knows */
+	QCOMPARE(first_cell(QByteArray("\x00\x00\x00\x00\x82\x01", 6)), -1); /* a run of nothing */
+	QCOMPARE(first_cell(QByteArray("\x00\x00\x00\x01", 4)), -1);         /* a run with no cell */
+	QCOMPARE(first_cell(QByteArray("\x00\x02\x01", 3)), -1);             /* a colour cut short */
+	QCOMPARE(first_cell(QByteArray("\x00\x00\x00\x01\x80\x80\x88\x01", 8)), -1); /* past U+10FFFF */
+
+	/* And the client refuses such a line whole, rather than half of it. */
+	received_t received;
+	QByteArray body("\x05\x00\x00\x00\x00\x02\x82\x01", 8);
+	uint8_t out[64];
+	const size_t len = bssh_wire_put(out, sizeof(out), BSSH_WIRE_HISTORY, body.constData(), size_t(body.size()));
+	QCOMPARE(bssh_session_client_feed(&received.client, out, len), -1);
+	QVERIFY(received.history.isEmpty());
+}
+
+void session_host_test::the_client_takes_history_in_order_and_says_what_went() {
+	received_t received;
+	received.output(0, "old\n");
+	uint8_t out[256];
+	auto feed = [&](size_t len) { return bssh_session_client_feed(&received.client, out, len); };
+	auto line = [&](uint64_t number, char ch) {
+		bssh_screen_cell_t cell;
+		memset(&cell, 0, sizeof(cell));
+		cell.chars[0] = uint32_t(ch);
+		cell.width = 1;
+		return bssh_wire_put_history(out, sizeof(out), number, 0, &cell, 1);
+	};
+
+	QCOMPARE(feed(bssh_wire_put_keyframe(out, sizeof(out), 10, 0)), 0);
+	QCOMPARE(feed(line(10, 'a')), 0);
+	QCOMPARE(feed(line(10, 'a')), 0); /* sent twice: taken once */
+	QCOMPARE(feed(line(13, 'd')), 0); /* two went between */
+	QCOMPARE(received.history, (QList<QByteArray>{ "a", "d" }));
+	QCOMPARE(received.history_lost, QList<uint64_t>{ 2 });
+
+	/* The screen, in parts: the place moves only with the last. */
+	size_t taken = 0;
+	const uint8_t *paint = reinterpret_cast<const uint8_t *>("NOW");
+	QCOMPARE(feed(bssh_wire_put_repaint(out, sizeof(out), 900, 40, 0, paint, 2, &taken)), 0);
+	QCOMPARE(received.client.next, uint64_t(4));
+	QCOMPARE(feed(bssh_wire_put_repaint(out, sizeof(out), 900, 40, 1, paint + 2, 1, &taken)), 0);
+	QCOMPARE(received.client.next, uint64_t(900));
+	QCOMPARE(received.client.line, uint64_t(40));
+	QCOMPARE(received.text, QByteArray("old\nNOW"));
+	QVERIFY(received.gaps.isEmpty());
+
+	/* Output from there joins up. */
+	received.output(900, "next");
+	QCOMPARE(received.text, QByteArray("old\nNOWnext"));
+
+	/* A keyframe saying lines went before it says so, count unknown. */
+	QCOMPARE(feed(bssh_wire_put_keyframe(out, sizeof(out), 50, 1)), 0);
+	QCOMPARE(received.history_lost, (QList<uint64_t>{ 2, 0 }));
 }
 
 void session_host_test::a_client_and_a_real_host_agree_from_the_first_byte() {
@@ -839,18 +1067,22 @@ struct kept_t {
 		}
 	}
 
-	/* The attach frame's offset, which it writes first. */
+	/* The attach frame's offset: the first of its kind the client wrote. */
 	uint64_t attached_at() const {
 		QByteArray bytes = fake()->written();
-		bssh_wire_frame_t frame;
-		uint32_t used = 0;
-		uint64_t offset = 0;
-		uint16_t columns = 0;
-		uint16_t rows = 0;
-		if (bssh_wire_take(reinterpret_cast<uint8_t *>(bytes.data()), uint32_t(bytes.size()), &frame, &used) != 1
-		    || frame.kind != BSSH_WIRE_ATTACH || bssh_wire_read_attach(&frame, &offset, &columns, &rows))
-			return UINT64_MAX;
-		return offset;
+		for (;;) {
+			bssh_wire_frame_t frame;
+			uint32_t used = 0;
+			uint64_t offset = 0;
+			uint16_t columns = 0;
+			uint16_t rows = 0;
+			if (bssh_wire_take(reinterpret_cast<uint8_t *>(bytes.data()), uint32_t(bytes.size()), &frame,
+			                   &used) != 1)
+				return UINT64_MAX;
+			if (frame.kind == BSSH_WIRE_ATTACH)
+				return bssh_wire_read_attach(&frame, &offset, &columns, &rows) ? UINT64_MAX : offset;
+			bytes.remove(0, int(used));
+		}
 	}
 };
 
@@ -883,6 +1115,65 @@ void session_host_test::a_kept_session_shows_a_hole_as_lines() {
 	/* A full-screen program writes no newlines, and bytes are all there is. */
 	kept.host_says(lost(1200, 38));
 	QVERIFY2(kept.screen().contains(QStringLiteral("[100 bytes lost]")), qPrintable(kept.screen()));
+}
+
+void session_host_test::a_kept_session_puts_the_lines_it_missed_into_its_scrollback() {
+	kept_t kept;
+	kept.answer_probe();
+
+	/* It asks for keyframes, ahead of the attach that a gap answers. */
+	const QList<int> kinds = kept.kinds_written();
+	QVERIFY(kinds.indexOf(BSSH_WIRE_KEYFRAMES) >= 0);
+	QVERIFY(kinds.indexOf(BSSH_WIRE_KEYFRAMES) < kinds.indexOf(BSSH_WIRE_ATTACH));
+
+	uint8_t out[256];
+	auto frame = [&](size_t len) { return QByteArray(reinterpret_cast<const char *>(out), int(len)); };
+	auto line = [&](uint64_t number, const char *text, int continuation) {
+		bssh_screen_cell_t cells[16];
+		memset(cells, 0, sizeof(cells));
+		const int count = int(strlen(text));
+		for (int i = 0; i < count; ++i) {
+			cells[i].chars[0] = uint32_t(text[i]);
+			cells[i].width = 1;
+		}
+		cells[0].fg.kind = BSSH_SCREEN_COLOR_INDEXED;
+		cells[0].fg.index = 2;
+		return frame(bssh_wire_put_history(out, sizeof(out), number, continuation, cells, count));
+	};
+
+	kept.host_says(kept.hello() + kept.output(0, "before\r\n"));
+	const int had = kept.session->emulator()->scrollback().count();
+	size_t taken = 0;
+	const char *paint = "\x1b[H\x1b[2Jthe-screen-now";
+	kept.host_says(frame(bssh_wire_put_keyframe(out, sizeof(out), 5, 1)) + line(5, "five", 0)
+	               + line(6, "six", 1)
+	               + frame(bssh_wire_put_repaint(out, sizeof(out), 9000, 100, 1,
+	                                             reinterpret_cast<const uint8_t *>(paint), strlen(paint),
+	                                             &taken)));
+
+	const bssh_scrollback &history = kept.session->emulator()->scrollback();
+	auto text_of = [&](int index) {
+		QString text;
+		for (const bssh_cell_t &cell : history.line(index)) text += QChar::fromUcs4(cell.ch);
+		return text.trimmed();
+	};
+	QCOMPARE(history.count(), had + 3);
+	QCOMPARE(text_of(had), QStringLiteral("[earlier lines lost]"));
+	QCOMPARE(text_of(had + 1), QStringLiteral("five"));
+	QCOMPARE(text_of(had + 2), QStringLiteral("six"));
+	QVERIFY(history.is_continuation(had + 2));
+
+	/* Its colour is the host's, by the rule this terminal reads its own with. */
+	QCOMPARE(int(history.line(had + 1).first().fg.kind), int(bssh_color_t::INDEXED));
+	QCOMPARE(int(history.line(had + 1).first().fg.index), 2);
+
+	QVERIFY2(kept.screen().contains(QStringLiteral("the-screen-now")), qPrintable(kept.screen()));
+	QVERIFY(!kept.screen().contains(QStringLiteral("before")));
+
+	/* And output from where the screen stands joins up, with no hole drawn. */
+	kept.host_says(kept.output(9000, " and-after"));
+	QVERIFY2(kept.screen().contains(QStringLiteral("the-screen-now and-after")), qPrintable(kept.screen()));
+	QVERIFY(!kept.screen().contains(QStringLiteral("lost]")));
 }
 
 void session_host_test::a_host_without_the_program_gets_a_plain_shell() {

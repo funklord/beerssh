@@ -29,6 +29,11 @@ varint_type bssh_varint {
 //  10 restarted host: not the session asked for; a new one, from this offset
 //  11 hangup   client: the user closed it, end the program
 //  12 caught_up host: what was written before this attach has all been sent
+//  13 keyframes client: this client takes 14 to 16 in place of 7 and a replay
+//  14 keyframe host: what follows replaces the screen, the history first
+//  15 history  host: one line that scrolled off the top, by number
+//  16 repaint  host: part of the screen as a terminal draws it, standing for
+//              everything before an offset
 
 struct bssh_frame {
 	u8           kind;
@@ -62,4 +67,37 @@ struct bssh_frame_exited {
 
 struct bssh_frame_mode {
 	u8  mode [max = 2];  // 0 live, 1 eventual, 2 serial
+}
+
+// What was lost is not replayed from the oldest byte held, which would draw
+// onto a screen that is not the one those bytes were written for. The client
+// is sent the lines it lacks, from `from`, and then the screen as it is now.
+// `lost` says that lines before `from` went past the server's limit as well,
+// how many being unknown.
+struct bssh_frame_keyframe {
+	bssh_varint  from;
+	u8           lost [max = 1];
+}
+
+// A history line's number and whether it continues the line above. The rest
+// of the body is the line's cells, as runs in one style:
+//   u8 attributes (BSSH_SCREEN_BOLD and the rest; the top bit is zero)
+//   colour foreground, colour background: u8 kind, then nothing for the
+//     default, one byte for a palette index, three for red, green and blue
+//   varint count, at least one
+//   count varints: a character shifted left one, the low bit set when it is
+//     two cells wide; 0 for a cell never written
+// The far half of a wide character is not sent: the width says it is there.
+struct bssh_frame_history {
+	bssh_varint  number;
+	u8           continuation [max = 1];
+}
+
+// The rest of the body is repaint bytes, fed to the client's emulator as they
+// come. The last part says so, and the client then stands at `offset`, with
+// `lines` newlines before it.
+struct bssh_frame_repaint {
+	bssh_varint  offset;
+	bssh_varint  lines;
+	u8           last [max = 1];
 }
