@@ -42,7 +42,8 @@
 class app_data_redirect {
 public:
 	explicit app_data_redirect(const QTemporaryDir &dir)
-	        : m_had(qEnvironmentVariableIsSet("XDG_DATA_HOME")), m_old(qgetenv("XDG_DATA_HOME")) {
+	        : m_had(qEnvironmentVariableIsSet("XDG_DATA_HOME")), m_old(qgetenv("XDG_DATA_HOME")),
+	          m_test_mode(QStandardPaths::isTestModeEnabled()) {
 #if defined(Q_OS_MACOS) || defined(Q_OS_WIN)
 		/*
 		 * Windows reads no XDG_DATA_HOME either: its first suite run put
@@ -70,7 +71,8 @@ public:
 #if defined(Q_OS_MACOS) || defined(Q_OS_WIN)
 		QFile::remove(path);
 		QFile::remove(path + QStringLiteral(".lock"));
-		QStandardPaths::setTestModeEnabled(false);
+		/* As found: on Windows the whole suite runs in test mode (main.cpp). */
+		QStandardPaths::setTestModeEnabled(m_test_mode);
 #endif
 		if (m_had) qputenv("XDG_DATA_HOME", m_old);
 		else qunsetenv("XDG_DATA_HOME");
@@ -84,6 +86,7 @@ public:
 private:
 	bool m_had;
 	QByteArray m_old;
+	bool m_test_mode;
 };
 
 void secret_store_test::initTestCase() {

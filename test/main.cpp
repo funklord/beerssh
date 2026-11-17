@@ -3,6 +3,7 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QTemporaryDir>
+#include <QStandardPaths>
 #include <QThread>
 #include <QtTest>
 
@@ -440,8 +441,28 @@ int main(int argc, char *argv[]) {
 		qputenv("XDG_DATA_HOME", (sandbox.path() + QStringLiteral("/data")).toUtf8());
 	}
 
+#ifdef _WIN32
+	/*
+	 * Out of the account's own AppData, which on Windows no environment
+	 * variable moves: the HOME and XDG_* sandbox above means nothing
+	 * there, and the first runs put the suite's secret store in the
+	 * runner's real one -- on a developer's machine, their own. Test mode
+	 * puts every writable location under a qttest folder instead, in
+	 * this process and in the writers it starts. A store a killed run
+	 * left there is removed by name, or the next run's passphrase meets
+	 * it.
+	 */
+	QStandardPaths::setTestModeEnabled(true);
+#endif
 	bssh_drop_theme_when_offscreen();
 	QApplication app(argc, argv);
+#ifdef _WIN32
+	if (!qEnvironmentVariableIsSet("BSSH_TEST_STORE_WRITER")) {
+		const QString data = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+		QFile::remove(data + QStringLiteral("/secrets.enc"));
+		QFile::remove(data + QStringLiteral("/secrets.enc.lock"));
+	}
+#endif
 
 #ifndef _WIN32
 	if (qEnvironmentVariableIsSet("BSSH_TEST_PTY_HOST")) {

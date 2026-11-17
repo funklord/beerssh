@@ -820,9 +820,18 @@ void session_registry_test::a_store_view_touches_nothing_of_the_users() {
 	const QString shared = home + QStringLiteral("/.ssh/beerssh_hosts");
 	const bool shared_before = QFile::exists(shared);
 
+	/*
+	 * Left as found: on Windows the whole suite runs in test mode
+	 * (test/main.cpp), and turning it off here sent every later class to
+	 * the account's real AppData. Off for the call itself, since the
+	 * guard measures the real paths before it moves, as the app does
+	 * when it starts.
+	 */
 	struct leave_test_mode_t {
-		~leave_test_mode_t() { QStandardPaths::setTestModeEnabled(false); }
+		bool was = QStandardPaths::isTestModeEnabled();
+		~leave_test_mode_t() { QStandardPaths::setTestModeEnabled(was); }
 	} leave;
+	QStandardPaths::setTestModeEnabled(false);
 #ifdef Q_OS_MACOS
 	/*
 	 * Qt's test mode leaves ~/Library/Preferences where it is on macOS, so
