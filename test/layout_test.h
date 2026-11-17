@@ -90,6 +90,7 @@ private slots:
 	void every_key_a_shell_uses_reaches_the_remote();
 	void a_bare_alt_tap_does_not_take_the_next_key();
 	void tab_in_a_grid_stays_in_its_pane();
+	void equal_shares_are_within_a_cell_of_each_other();
 	void hidden_bars_are_reached_from_the_corner();
 	void the_drum_steps_with_the_wheel_and_a_drag_and_wraps();
 

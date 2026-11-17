@@ -17026,3 +17026,36 @@ void layout_test::tab_in_a_grid_stays_in_its_pane() {
 		QVERIFY2(reached == 1, qPrintable(QStringLiteral("%1 reached %2 sessions").arg(QString::fromLatin1(press.bytes.toHex())).arg(reached)));
 	}
 }
+
+/*
+ * Equalizing, as arithmetic: every total, two to four panes, cells of 6
+ * to 20 px. The shares add up to the total, every one but the last is
+ * whole cells, and none is more than a cell from another. Its first
+ * version left the last of three a cell and a half from the rest, which
+ * the grid test saw only with the cell at 10 px (2026-11-17).
+ */
+void layout_test::equal_shares_are_within_a_cell_of_each_other() {
+	QStringList wrong;
+	for (int cell = 6; cell <= 20; ++cell) {
+		for (int count = 2; count <= 4; ++count) {
+			for (int total = count * cell; total <= count * cell + 60 * cell; ++total) {
+				int out[4] = {};
+				QVERIFY(bssh_equal_pane_extents(total, count, cell, out));
+				int sum = 0, least = out[0], most = out[0];
+				bool whole = true;
+				for (int i = 0; i < count; ++i) {
+					sum += out[i];
+					least = qMin(least, out[i]);
+					most = qMax(most, out[i]);
+					if (i < count - 1 && out[i] % cell != 0) whole = false;
+				}
+				if (sum != total || !whole || most - least > cell) {
+					wrong << QStringLiteral("%1 in %2 at %3px: %4..%5").arg(total).arg(count).arg(cell).arg(least).arg(most);
+				}
+			}
+		}
+	}
+	QVERIFY2(wrong.isEmpty(), qPrintable(wrong.mid(0, 5).join(QStringLiteral("; "))));
+	int out[3] = {};
+	QVERIFY2(!bssh_equal_pane_extents(20, 3, 9, out), "a share under one cell is left to the caller");
+}

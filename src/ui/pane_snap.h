@@ -26,16 +26,28 @@ static const int BSSH_COLUMN_SNAP_RADIUS = 8;
 static const int BSSH_MAX_COLUMN_SNAP_RADIUS = 20;
 
 /*
- * The whole-cell extent nearest an even share of `total` among `count`
- * panes, for equalizing. Not bssh_snap_pane_extent of the share, which
- * rounds down: the last pane then took what every other one gave up, and
- * two panes ended up to two cells apart instead of at most one.
+ * Equal shares of `total` among `count` panes, in whole cells: the cells
+ * that do not divide evenly go one each to the first panes, never the
+ * last, and the last takes the pixels left over, so no two panes are more
+ * than one cell apart. Written into `out[0..count)`. False where a share
+ * would be under a cell, which leaves the caller its own snap.
+ *
+ * Its first version rounded one share to the nearest cell and gave the
+ * last pane the rest, which is a cell and a half apart in a row of three
+ * (2026-11-17, a 10px cell). Before that, every share was rounded DOWN
+ * and the last pane was nearly two cells wider than the first.
  */
-inline int bssh_equal_pane_extent(int total, int count, int cell) {
-	if (count < 1) return total;
-	if (cell <= 1) return total / count;
-	const int columns = (total + count * cell / 2) / (count * cell);
-	return (columns < 1 ? 1 : columns) * cell;
+inline bool bssh_equal_pane_extents(int total, int count, int cell, int *out) {
+	if (count < 1 || cell <= 1) return false;
+	const int cells = total / cell;
+	const int base = cells / count;
+	if (base < 1) return false;
+	const int extra = cells % count;
+	const int leftover = total - cells * cell;
+	for (int i = 0; i < count; ++i) out[i] = base * cell;
+	for (int i = 0; i < extra; ++i) out[i] += cell;
+	out[count - 1] += leftover;
+	return true;
 }
 
 /* Round a pane's extent down to whole character cells (sec 8.3), never

@@ -15765,9 +15765,21 @@ without an icon is defective, so there is a plain one meant to be replaced.
   uneven before its double-click, and a row divider moved alone regroups
   every row rather than breaking at its column. Not the widget style:
   forcing Fusion changed neither. Both drive the divider with
-  `drag_handle`'s synthetic mouse events, which is what they share; a
-  larger font on Linux did not reproduce either, so the wider cell is
-  not, on that evidence, the cause.
+  `drag_handle`'s synthetic mouse events. **Measured on the Windows job
+  (a diagnostic branch, 2026-11-17):** each 50 px step of the pointer
+  moved the divider 25-28 px there and 46-54 px on Linux, from the same
+  handle at the same place with the same sizes; and the middle pane
+  stopped near 300 px there and went to 189 here. **Not the wider cell:**
+  zooming these views to a 14 px cell on Linux moves the divider the full
+  distance and lets the middle pane reach 196 px. (An earlier note here
+  said a larger font did not reproduce it; that run set the default font
+  size, which never reaches these bare containers, and its cell stayed at
+  9 px -- it tested nothing.) What halves the movement on Windows is open.
+  The same zoom sweep found the first version of the equalize fix leaving
+  the last of three panes a cell and a half from the rest at a 10 px cell:
+  `bssh_equal_pane_extents` now shares out whole cells evenly, and
+  `equal_shares_are_within_a_cell_of_each_other` checks every total from
+  two to four panes and 6 to 20 px cells.
   **And host saves failing now and then on Windows:** three in two CI
   runs, in different tests, each passing on a rerun. QSettings renames a
   temporary over the file, which fails there while another process has
