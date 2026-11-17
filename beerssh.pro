@@ -273,16 +273,16 @@ android {
 !android:!macx:!win32: LIBS += -lutil
 
 # Windows (sec 1, best-effort) has no forkpty and no SCM_RIGHTS: the local
-# shell and the session handoff between processes are left out there, each
-# replaced by a version that says so (ssh/no_local_shell.cpp, and the
-# Windows half of model/handoff_point.cpp). Headers with them: moc would
-# otherwise write code for a class nobody compiled.
+# shell is ConPTY there (ssh/conpty_session.cpp), and the session handoff
+# between processes is left out, the Windows half of
+# model/handoff_point.cpp saying so. Headers with them: moc would otherwise
+# write code for a class nobody compiled.
 win32 {
     # One build, in build/ as everywhere else, not release/ and debug/.
     CONFIG -= debug_and_release debug_and_release_target
     SOURCES -= src/ssh/pty_session.cpp src/model/handoff_wire.cpp
     HEADERS -= src/ssh/pty_session.h src/model/handoff_wire.h
-    SOURCES += src/ssh/no_local_shell.cpp
+    SOURCES += src/ssh/conpty_session.cpp
 }
 
 LIBS += $$BSSH_VTERM_LIB

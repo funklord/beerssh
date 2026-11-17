@@ -53,6 +53,8 @@
 #include "input_router_test.h"
 #ifndef _WIN32
 #include "pty_session_test.h"
+#else
+#include "conpty_test.h"
 #endif
 #include "layout_test.h"
 #include "font_catalog_test.h"
@@ -585,6 +587,8 @@ int main(int argc, char *argv[]) {
 #ifndef _WIN32
 	failures += run_test<pty_session_test>(argc, argv);
 	failures += run_test<handoff_test>(argc, argv);
+#else
+	failures += run_test<conpty_test>(argc, argv);
 #endif
 	failures += run_test<input_router_test>(argc, argv);
 	failures += run_test<layout_test>(argc, argv);

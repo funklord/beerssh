@@ -369,5 +369,6 @@ win32 {
         ../src/sshd/sshd_platform.h ../src/sshd/sshd_control.h \
         ../src/sshd/sshd_demo.h ../src/sshd/sshd_keeper.h \
         ../src/sshd/sshd_remote.h ../src/sshd/sshd_window.h
-    SOURCES += ../src/ssh/no_local_shell.cpp
+    SOURCES += ../src/ssh/conpty_session.cpp conpty_test.cpp
+    HEADERS += conpty_test.h
 }
