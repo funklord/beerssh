@@ -1,4 +1,5 @@
 #include <QApplication>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QTemporaryDir>
@@ -323,8 +324,28 @@ static int run_test(int argc, char *argv[]) {
 	const int failed = QTest::qExec(&instance, argc, argv);
 	for (size_t i = 0; i < sizeof(fatal) / sizeof(fatal[0]); ++i) sigaction(fatal[i], &before[i], nullptr);
 #else
-	/* No sigaction on Windows, and QtTest's handler there is not a signal handler. */
-	const int failed = QTest::qExec(&instance, argc, argv);
+	/*
+	 * No sigaction on Windows. And QtTest's report did not reach a piped
+	 * stdout there -- the first runs printed only what tests write
+	 * themselves -- so each class reports to a file, copied out after.
+	 */
+	const QString report = QDir::temp().filePath(
+	        QString::fromLatin1(instance.metaObject()->className()) + QStringLiteral(".txt"));
+	QByteArray report_arg = (report + QStringLiteral(",txt")).toLocal8Bit();
+	QList<char *> with_report;
+	for (int i = 0; i < argc; ++i) with_report.append(argv[i]);
+	char o_flag[] = "-o";
+	with_report.append(o_flag);
+	with_report.append(report_arg.data());
+	const int failed = QTest::qExec(&instance, int(with_report.size()), with_report.data());
+	QFile report_file(report);
+	if (report_file.open(QIODevice::ReadOnly)) {
+		const QByteArray text = report_file.readAll();
+		std::fwrite(text.constData(), 1, size_t(text.size()), stdout);
+		std::fflush(stdout);
+		report_file.close();
+		report_file.remove();
+	}
 #endif
 
 	watchdog_leave();
