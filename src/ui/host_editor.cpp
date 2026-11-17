@@ -225,9 +225,20 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 	}
 
 	/* A phone is where a connection drops, so this is where it matters most. */
-	body->addWidget(new QLabel(QStringLiteral("Keep the shell on the server"), this));
+	QLabel *resume_label = new QLabel(QStringLiteral("Keep the shell on the server"), this);
+	body->addWidget(resume_label);
 	m_resume_session = new QComboBox(this);
 	bssh_fill_resume_choice(m_resume_session);
+	/*
+	 * Named by the question rather than by its current answer: a screen
+	 * reader had "Default (on)" here and, under Qt 6.12 on the Windows
+	 * job, "empty" (2026-11-17). The buddy for Alt+letter and Windows'
+	 * name; the accessible name as well, since Linux names a combo box
+	 * by a label relation this Qt did not report for a buddy alone. The
+	 * session dialog's form row names its copy by itself.
+	 */
+	resume_label->setBuddy(m_resume_session);
+	m_resume_session->setAccessibleName(resume_label->text());
 	m_resume_session->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
 	body->addWidget(m_resume_session);
 	body->addWidget(bssh_wrapped_note(

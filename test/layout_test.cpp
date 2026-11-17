@@ -15195,6 +15195,23 @@ QString unnamed_controls(const QString &surface, QWidget *root, int *counted) {
 		 */
 		const QString name = a->text(QAccessible::Name).trimmed();
 
+		/*
+		 * A combo box needs a label of its own or an accessible name:
+		 * its Name on Linux is always its current choice -- Qt names it
+		 * there through the label relation instead -- and on Windows it
+		 * is the buddy's text or nothing. The host editor's
+		 * resume_session had neither, said "empty" on the Windows job
+		 * and passed here on its value (2026-11-17).
+		 */
+		if (qobject_cast<QComboBox *>(w)) {
+			if (w->accessibleName().trimmed().isEmpty() && a->relations(QAccessible::Label).isEmpty()) {
+				anonymous.append(QStringLiteral("%1 (QComboBox) has no label and no name")
+				                         .arg(w->objectName().isEmpty() ? QStringLiteral("unnamed")
+				                                                        : w->objectName()));
+			}
+			continue;
+		}
+
 		bool describes = name.size() > 1;
 		if (describes) {
 			describes = false;
@@ -15223,9 +15240,6 @@ QString unnamed_controls(const QString &surface, QWidget *root, int *counted) {
 } /* namespace */
 
 void layout_test::every_touch_surface_names_its_controls() {
-#ifdef Q_OS_WIN
-	QSKIP("open on Windows (project.md sec 12.2): the host editor's resume_session combo box announces \"empty\"");
-#endif
 	const forced_touch_t arrangement(1);
 
 	QTemporaryDir dir;

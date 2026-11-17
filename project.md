@@ -15754,13 +15754,20 @@ without an icon is defective, so there is a plain one meant to be replaced.
   the colours never reaching the emulator after a settings change, since
   both sides were black under the default scheme; it changes to a white
   scheme once the view exists now, and that edit fails it.
-  **Three layout tests fail on Windows alone and are skipped there, OPEN
+  And the host editor's `resume_session` combo box had no name: the
+  label above it was not its buddy, so a screen reader had its value,
+  "Default (on)", on Linux, and "empty" under Qt 6.12 on Windows, where a
+  combo box's name is its buddy's text or nothing. It has the question as
+  its accessible name now, and `every_touch_surface_names_its_controls`
+  requires a combo box to have a name or a label relation, not a value.
+  **Two layout tests fail on Windows alone and are skipped there, OPEN
   and not explained** -- each QSKIP names its symptom: a grid row is not
-  uneven before its double-click; a row divider moved alone regroups every
-  row rather than breaking at its column; and the host editor's
-  `resume_session` combo box announces "empty". Not the widget style:
-  forcing Fusion changed none of them. The wider cell, filling panes to
-  their minimum sizes sooner, is the lead for the first two.
+  uneven before its double-click, and a row divider moved alone regroups
+  every row rather than breaking at its column. Not the widget style:
+  forcing Fusion changed neither. The wider cell, filling panes to their
+  minimum sizes sooner, is the lead. **And one intermittent:**
+  `a_host_remembers_its_zoom` failed once on the Windows job, the host
+  list's save returning 0, and passed on the rerun; why is not known.
   **The local shell is ConPTY** (`ssh/conpty_session.cpp`): the profile's
   shell as a command line, else `%COMSPEC%`; a reader thread for the
   output pipe and a writer thread with a queue, since both calls block;
