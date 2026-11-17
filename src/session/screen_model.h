@@ -16,9 +16,10 @@
  * entry (bssh_color_t says why). The client converts one with the rule it
  * already uses for its own cells.
  *
- * Not modelled yet: history. Lines scrolled off the top are dropped here, so
- * a resize that would pull lines back down from the scrollback reflows
- * differently from the client's screen. The history stream is the next part.
+ * History is kept too: the lines scrolled off the top, numbered from the
+ * start of the session and each marked if it continues the one above, up to
+ * a limit -- what a client that missed them is to be sent, and what a resize
+ * that grows the screen pulls back down, as the client's does.
  *
  * Plain C with no Qt, like the rest of src/session.
  */
@@ -96,6 +97,24 @@ int bssh_screen_model_alternate(const bssh_screen_model_t *model);
  * by).
  */
 size_t bssh_screen_model_repaint(const bssh_screen_model_t *model, uint8_t *out, size_t capacity);
+
+/*
+ * The history: lines `first` up to `first + count`, numbered from the start of
+ * the session, so a line keeps its number however many have gone since. The
+ * oldest go first past the limit (default BSSH_SCREEN_HISTORY_LINES); 0 keeps
+ * none, though the numbering still counts every line that went past.
+ */
+#define BSSH_SCREEN_HISTORY_LINES 2000
+void bssh_screen_model_set_history_limit(bssh_screen_model_t *model, size_t lines);
+void bssh_screen_model_history(const bssh_screen_model_t *model, uint64_t *first, uint64_t *count);
+/*
+ * Line `number`'s cells into `out`, at most `capacity` of them, and whether it
+ * continues the line above. Returns how many cells it has -- trailing blanks
+ * left off once the next line shows it ended, as the client keeps them -- or
+ * -1 when the line is not held.
+ */
+int bssh_screen_model_history_line(const bssh_screen_model_t *model, uint64_t number,
+                                   bssh_screen_cell_t *out, int capacity, int *continuation);
 
 #ifdef __cplusplus
 }

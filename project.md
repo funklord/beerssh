@@ -1507,13 +1507,27 @@ feeding it to the emulator it already has, so no frame of ours has to describe a
 cell and the client needs no new code to draw one; mosh's choice too, for the
 same reason. `a_repaint_draws_the_servers_screen_on_a_fresh_client` feeds a fresh
 client only the repaint and compares; `tool/sabotage/screen-model.toml` breaks
-seven parts of the two and each fails. **Not yet:** the history stream, so a
-resize that would pull lines back down from the scrollback differs; the primary
-screen under an alternate one, and which rows continue the row above, which the
-repaint does not carry; sending it -- a frame kind, and a gap where the bytes it
-stands for were skipped -- and until that exists nothing observes the host's
-feeding, so that wiring is unguarded; and answering terminal queries from the
-server during a replay.
+seven parts of the two and each fails.
+**And the history, the server's half** (the same day): the lines that scroll
+off the top, numbered from the start of the session, each marked if it continues
+the one above, up to 2,000 by default -- and given back when the screen grows,
+as the client's are. They are the client's own scrollback line for line, which
+took matching three rules it had and the model had not: trailing blanks are
+dropped only once the next line shows the line ended (blanks at a wrap are
+text), the blank rule is `bssh_scrollback::is_blank`'s, and a line given back
+carries only its base character, since that is all the client keeps of one.
+`the_servers_history_agrees_with_the_clients_scrollback` compares numbering,
+cells and continuations, and the screen after a resize that grows;
+`screen-model.toml` breaks three parts of it and each fails. **Order, decided
+from this section's own rule:** a keyframe at the log's end skips the held bytes
+before it, so it is an improvement only once those lines can be sent as history
+-- "latest first, every line's final text arrives later". Until then a gap
+replays from the oldest byte held. **Not yet:** a frame for history lines and the
+client putting them into its scrollback; the keyframe on a gap; the primary
+screen under an alternate one; the client's own rewrap of its scrollback on a
+narrower resize, which the model does not copy; answering terminal queries from
+the server during a replay. Nothing observes the host's feeding until a frame
+does.
 
 **BeerSSH uses it over SSH, per host, off by default**: *Keep the shell on the
 server*, `resume_session`. Off because the probe is a round trip on every

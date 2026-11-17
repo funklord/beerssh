@@ -59,6 +59,7 @@ private slots:
 	void sgr_sets_colour_and_attributes();
 	void the_servers_screen_agrees_with_the_clients();
 	void a_repaint_draws_the_servers_screen_on_a_fresh_client();
+	void the_servers_history_agrees_with_the_clients_scrollback();
 	void wide_characters_take_two_cells();
 	void utf8_split_across_chunks_still_composes();
 	void device_status_report_produces_a_reply();

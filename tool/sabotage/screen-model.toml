@@ -60,3 +60,31 @@ file = "src/session/screen_model.c"
 find = "\t\t\t\tput_text(&sink, \"\\x1b[X\");\n"
 replace = "\t\t\t\t;\n"
 expect = "a_repaint_draws_the_servers_screen_on_a_fresh_client"
+
+# The history (the lines scrolled off the top), which must be the client's
+# scrollback line for line.
+
+# Trailing blanks dropped at once, before the next line shows whether this
+# one wrapped: blanks at a wrap are text.
+[[sabotage]]
+name = "the history trims a line that wrapped"
+file = "src/session/screen_model.c"
+find = "\tif (!continuation && model->kept)\n"
+replace = "\tif (model->kept)\n"
+expect = "the_servers_history_agrees_with_the_clients_scrollback"
+
+# A screen that grows pulls nothing back down, where the client's does.
+[[sabotage]]
+name = "the history gives no line back when the screen grows"
+file = "src/session/screen_model.c"
+find = "\tif (model->kept == 0) return 0;\n\tconst size_t slot"
+replace = "\treturn 0;\n\tconst size_t slot"
+expect = "the_servers_history_agrees_with_the_clients_scrollback"
+
+# Which lines continue the one above, forgotten.
+[[sabotage]]
+name = "the history forgets which lines wrapped"
+file = "src/session/screen_model.c"
+find = "\thistory_line_t line = { NULL, 0, continuation ? 1 : 0 };"
+replace = "\thistory_line_t line = { NULL, 0, 0 };"
+expect = "the_servers_history_agrees_with_the_clients_scrollback"

@@ -6,9 +6,22 @@
 
 #include <vterm.h>
 
+/* A line gone off the top, trailing blanks left off. */
+typedef struct history_line {
+	bssh_screen_cell_t *cells;
+	int width;
+	int continuation;
+} history_line_t;
+
 struct bssh_screen_model {
 	VTerm *vt;
 	VTermScreen *screen;
+	/* A ring of `limit` slots; `kept` of them used, the oldest at `oldest`. */
+	history_line_t *history;
+	size_t limit;
+	size_t oldest;
+	size_t kept;
+	uint64_t gone;   /* lines dropped off the front: the oldest kept's number */
 	int cursor_visible;
 	int alternate;
 	/* The end of the last read, held until the next completes it. */
@@ -51,8 +64,18 @@ static int on_settermprop(VTermProp prop, VTermValue *value, void *user) {
 	return 1;
 }
 
+static void drop_oldest(bssh_screen_model_t *model);
+static int on_pushline4(int cols, const VTermScreenCell *cells, bool continuation, void *user);
+static int on_pushline(int cols, const VTermScreenCell *cells, void *user);
+static int on_popline4(int cols, VTermScreenCell *cells, bool *continuation, void *user);
+static int on_popline(int cols, VTermScreenCell *cells, void *user);
+
 static const VTermScreenCallbacks callbacks = {
 	.settermprop = on_settermprop,
+	.sb_pushline = on_pushline,
+	.sb_popline = on_popline,
+	.sb_pushline4 = on_pushline4,
+	.sb_popline4 = on_popline4,
 };
 
 /*
@@ -78,12 +101,14 @@ bssh_screen_model_t *bssh_screen_model_new(int rows, int columns) {
 		return NULL;
 	}
 	model->cursor_visible = 1;
+	bssh_screen_model_set_history_limit(model, BSSH_SCREEN_HISTORY_LINES);
 
 	/* As the client's emulator sets it up (src/term/emulator_vterm.cpp),
 	 * so a byte means the same at both ends. */
 	vterm_set_utf8(model->vt, 1);
 	model->screen = vterm_obtain_screen(model->vt);
 	vterm_screen_set_callbacks(model->screen, &callbacks, model);
+	vterm_screen_callbacks_has_pushline4(model->screen);
 	vterm_screen_enable_reflow(model->screen, true);
 	vterm_screen_set_damage_merge(model->screen, VTERM_DAMAGE_ROW);
 	vterm_screen_enable_altscreen(model->screen, 1);
@@ -94,6 +119,8 @@ bssh_screen_model_t *bssh_screen_model_new(int rows, int columns) {
 
 void bssh_screen_model_free(bssh_screen_model_t *model) {
 	if (!model) return;
+	while (model->kept) drop_oldest(model);
+	free(model->history);
 	vterm_free(model->vt);
 	free(model);
 }
@@ -148,19 +175,9 @@ static bssh_screen_color_t color_of(const VTermColor *color) {
 	return out;
 }
 
-int bssh_screen_model_cell(const bssh_screen_model_t *model, int row, int column, bssh_screen_cell_t *out) {
-	if (!out) return 0;
+static void convert(const VTermScreenCell *source, bssh_screen_cell_t *out) {
+	const VTermScreenCell cell = *source;
 	memset(out, 0, sizeof *out);
-	out->width = 1;
-	if (!model) return 0;
-	int rows = 0, columns = 0;
-	vterm_get_size(model->vt, &rows, &columns);
-	if (row < 0 || row >= rows || column < 0 || column >= columns) return 0;
-
-	VTermPos pos = { .row = row, .col = column };
-	VTermScreenCell cell;
-	if (!vterm_screen_get_cell(model->screen, pos, &cell)) return 0;
-
 	for (int i = 0; i < BSSH_SCREEN_CELL_CHARS && i < VTERM_MAX_CHARS_PER_CELL; ++i) {
 		out->chars[i] = cell.chars[i];
 		if (!cell.chars[i]) break;
@@ -177,7 +194,148 @@ int bssh_screen_model_cell(const bssh_screen_model_t *model, int row, int column
 	out->attrs = attrs;
 	out->fg = color_of(&cell.fg);
 	out->bg = color_of(&cell.bg);
+}
+
+int bssh_screen_model_cell(const bssh_screen_model_t *model, int row, int column, bssh_screen_cell_t *out) {
+	if (!out) return 0;
+	memset(out, 0, sizeof *out);
+	out->width = 1;
+	if (!model) return 0;
+	int rows = 0, columns = 0;
+	vterm_get_size(model->vt, &rows, &columns);
+	if (row < 0 || row >= rows || column < 0 || column >= columns) return 0;
+
+	VTermPos pos = { .row = row, .col = column };
+	VTermScreenCell cell;
+	if (!vterm_screen_get_cell(model->screen, pos, &cell)) return 0;
+	convert(&cell, out);
 	return 1;
+}
+
+/* Blank as the client's scrollback trims (bssh_scrollback::is_blank): a
+ * space or nothing, one cell wide, no attribute, both colours the theme's. */
+static int blank(const bssh_screen_cell_t *cell) {
+	return (cell->chars[0] == 0 || cell->chars[0] == ' ') && cell->width == 1 && cell->attrs == 0
+	       && cell->fg.kind == BSSH_SCREEN_COLOR_DEFAULT && cell->bg.kind == BSSH_SCREEN_COLOR_DEFAULT;
+}
+
+static void trim(history_line_t *line) {
+	while (line->width > 0 && blank(&line->cells[line->width - 1])) --line->width;
+}
+
+static void drop_oldest(bssh_screen_model_t *model) {
+	free(model->history[model->oldest].cells);
+	model->history[model->oldest].cells = NULL;
+	model->oldest = (model->oldest + 1) % model->limit;
+	--model->kept;
+	++model->gone;
+}
+
+static int on_pushline4(int cols, const VTermScreenCell *cells, bool continuation, void *user) {
+	bssh_screen_model_t *model = user;
+	if (model->limit == 0) {
+		++model->gone;
+		return 1;
+	}
+	/*
+	 * The line before is trimmed once this one shows it ended there, as the
+	 * client's scrollback does: blanks at the end of a line that wrapped
+	 * are text ("ls -l " wrapped is not "ls -l"), so a line is trimmed only
+	 * when the next does not continue it, and the newest not yet.
+	 */
+	if (!continuation && model->kept)
+		trim(&model->history[(model->oldest + model->kept - 1) % model->limit]);
+	if (model->kept == model->limit) drop_oldest(model);
+
+	history_line_t line = { NULL, 0, continuation ? 1 : 0 };
+	if (cols > 0) line.cells = malloc((size_t)cols * sizeof *line.cells);
+	if (line.cells) {
+		for (int col = 0; col < cols; ++col) convert(&cells[col], &line.cells[col]);
+		line.width = cols;
+	}
+	/* Out of memory: the line is kept empty, so the numbering still holds. */
+	model->history[(model->oldest + model->kept) % model->limit] = line;
+	++model->kept;
+	return 1;
+}
+
+static int on_pushline(int cols, const VTermScreenCell *cells, void *user) {
+	return on_pushline4(cols, cells, false, user);
+}
+
+/*
+ * A resize that grows the screen takes the newest line back down, as the
+ * client's does (its pop_line): the base character only, since that is all
+ * the client keeps of a line it scrolled away, and the two screens have to
+ * agree after the pop as before it.
+ */
+static int on_popline4(int cols, VTermScreenCell *cells, bool *continuation, void *user) {
+	bssh_screen_model_t *model = user;
+	if (model->kept == 0) return 0;
+	const size_t slot = (model->oldest + model->kept - 1) % model->limit;
+	history_line_t line = model->history[slot];
+	--model->kept;
+
+	VTermColor default_fg, default_bg;
+	vterm_state_get_default_colors(vterm_obtain_state(model->vt), &default_fg, &default_bg);
+	for (int col = 0; col < cols; ++col) {
+		VTermScreenCell *to = &cells[col];
+		memset(to, 0, sizeof *to);
+		to->width = 1;
+		to->fg = default_fg;
+		to->bg = default_bg;
+		if (col >= line.width || !line.cells) continue;
+		const bssh_screen_cell_t *from = &line.cells[col];
+		to->chars[0] = from->chars[0];
+		to->width = from->width ? from->width : 1;
+		if (from->fg.kind == BSSH_SCREEN_COLOR_INDEXED) vterm_color_indexed(&to->fg, from->fg.index);
+		else if (from->fg.kind == BSSH_SCREEN_COLOR_RGB)
+			vterm_color_rgb(&to->fg, from->fg.red, from->fg.green, from->fg.blue);
+		if (from->bg.kind == BSSH_SCREEN_COLOR_INDEXED) vterm_color_indexed(&to->bg, from->bg.index);
+		else if (from->bg.kind == BSSH_SCREEN_COLOR_RGB)
+			vterm_color_rgb(&to->bg, from->bg.red, from->bg.green, from->bg.blue);
+		to->attrs.bold = !!(from->attrs & BSSH_SCREEN_BOLD);
+		to->attrs.italic = !!(from->attrs & BSSH_SCREEN_ITALIC);
+		to->attrs.underline = !!(from->attrs & BSSH_SCREEN_UNDERLINE);
+		to->attrs.reverse = !!(from->attrs & BSSH_SCREEN_REVERSE);
+		to->attrs.blink = !!(from->attrs & BSSH_SCREEN_BLINK);
+		to->attrs.strike = !!(from->attrs & BSSH_SCREEN_STRIKE);
+		to->attrs.dim = !!(from->attrs & BSSH_SCREEN_DIM);
+	}
+	if (continuation) *continuation = line.continuation != 0;
+	free(line.cells);
+	return 1;
+}
+
+static int on_popline(int cols, VTermScreenCell *cells, void *user) {
+	return on_popline4(cols, cells, NULL, user);
+}
+
+void bssh_screen_model_set_history_limit(bssh_screen_model_t *model, size_t lines) {
+	if (!model) return;
+	while (model->kept > lines) drop_oldest(model);
+	history_line_t *ring = lines ? calloc(lines, sizeof *ring) : NULL;
+	if (lines && !ring) return; /* keep the old ring rather than none */
+	for (size_t i = 0; i < model->kept; ++i) ring[i] = model->history[(model->oldest + i) % model->limit];
+	free(model->history);
+	model->history = ring;
+	model->limit = lines;
+	model->oldest = 0;
+}
+
+void bssh_screen_model_history(const bssh_screen_model_t *model, uint64_t *first, uint64_t *count) {
+	if (first) *first = model ? model->gone : 0;
+	if (count) *count = model ? model->kept : 0;
+}
+
+int bssh_screen_model_history_line(const bssh_screen_model_t *model, uint64_t number,
+                                   bssh_screen_cell_t *out, int capacity, int *continuation) {
+	if (!model || number < model->gone || number - model->gone >= model->kept) return -1;
+	const history_line_t *line = &model->history[(model->oldest + (size_t)(number - model->gone)) % model->limit];
+	const int copy = line->width < capacity ? line->width : capacity;
+	if (out && copy > 0) memcpy(out, line->cells, (size_t)copy * sizeof *out);
+	if (continuation) *continuation = line->continuation;
+	return line->width;
 }
 
 void bssh_screen_model_cursor(const bssh_screen_model_t *model, int *row, int *column, int *visible) {

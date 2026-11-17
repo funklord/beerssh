@@ -611,6 +611,84 @@ void emulator_test::the_servers_screen_agrees_with_the_clients() {
 	}
 }
 
+namespace {
+
+/* Where the server's history and the client's scrollback differ, as the first
+ * line that does; empty when they agree. */
+QString history_difference(const bssh_emulator &client, const bssh_screen_model_t *server) {
+	const bssh_scrollback &mine = client.scrollback();
+	uint64_t first = 0, count = 0;
+	bssh_screen_model_history(server, &first, &count);
+	if (first + count != uint64_t(mine.base()) + uint64_t(mine.count()))
+		return QStringLiteral("%1 lines gone past against %2").arg(first + count).arg(mine.base() + mine.count());
+	if (count != uint64_t(mine.count()))
+		return QStringLiteral("%1 lines held against %2").arg(count).arg(mine.count());
+	QVector<bssh_screen_cell_t> cells(1024);
+	for (int i = 0; i < mine.count(); ++i) {
+		int continuation = 0;
+		const int width = bssh_screen_model_history_line(server, first + uint64_t(i), cells.data(), cells.size(),
+		                                                 &continuation);
+		const QList<bssh_cell_t> &line = mine.line(i);
+		if (width != line.size() || bool(continuation) != mine.is_continuation(i))
+			return QStringLiteral("line %1: %2 cells%3 against %4%5").arg(i).arg(width)
+			        .arg(continuation ? "+" : "").arg(line.size()).arg(mine.is_continuation(i) ? "+" : "");
+		for (int col = 0; col < width; ++col) {
+			const bssh_screen_cell_t &theirs = cells.at(col);
+			const bssh_cell_t &ours = line.at(col);
+			if (ours.width == 0) continue;
+			const char32_t ch = theirs.chars[0] ? char32_t(theirs.chars[0]) : U' ';
+			if (ch != ours.ch || theirs.width != ours.width)
+				return QStringLiteral("line %1 col %2: U+%3 against U+%4").arg(i).arg(col)
+				        .arg(uint(ch), 0, 16).arg(uint(ours.ch), 0, 16);
+		}
+	}
+	return QString();
+}
+
+} /* namespace */
+
+void emulator_test::the_servers_history_agrees_with_the_clients_scrollback() {
+	/*
+	 * The lines that scroll off the top (sec 5.6's history stream): kept by
+	 * the server, numbered from the start of the session, to be sent to a
+	 * client that missed them. They must be the client's own scrollback,
+	 * line for line -- the same numbers, the same cells, the same lines
+	 * marked as continuing the one above, trailing blanks dropped the same
+	 * way -- and a resize that grows the screen must pull the same lines
+	 * back down at both ends, which is what the screen check after it says.
+	 */
+	QByteArray output;
+	for (int i = 0; i < 60; ++i) {
+		output += QByteArray("line ") + QByteArray::number(i);
+		if (i % 7 == 0) output += " \x1b[1;32mgreen\x1b[0m";
+		if (i % 5 == 0) output += QByteArray(70, 'w'); /* wraps at 40 */
+		if (i % 9 == 0) output += "  trailing   ";
+		if (i % 11 == 0) output += " \xe4\xb8\xad";
+		/* Blanks right where it wraps: text, not trailing ("ls -l " wrapped). */
+		if (i % 13 == 0) output += QByteArray(30, 'x') + "        then more";
+		output += "\r\n";
+	}
+	bssh_emulator client(40, 10);
+	bssh_screen_model_t *server = bssh_screen_model_new(10, 40);
+	QVERIFY(server);
+	client.feed(output);
+	bssh_screen_model_feed(server, reinterpret_cast<const uint8_t *>(output.constData()), size_t(output.size()));
+	QString difference = history_difference(client, server);
+	QVERIFY2(difference.isEmpty(), qPrintable(difference));
+	QVERIFY(client.scrollback().count() > 50);
+
+	/* Shorter, then taller again: the second pulls lines back down. */
+	client.resize(40, 6);
+	bssh_screen_model_resize(server, 6, 40);
+	client.resize(40, 14);
+	bssh_screen_model_resize(server, 14, 40);
+	difference = screen_difference(client, server);
+	QVERIFY2(difference.isEmpty(), qPrintable(QStringLiteral("screen after growing: %1").arg(difference)));
+	difference = history_difference(client, server);
+	QVERIFY2(difference.isEmpty(), qPrintable(QStringLiteral("history after growing: %1").arg(difference)));
+	bssh_screen_model_free(server);
+}
+
 void emulator_test::a_repaint_draws_the_servers_screen_on_a_fresh_client() {
 	/*
 	 * The keyframe (sec 5.6): the server's screen written as the bytes a
