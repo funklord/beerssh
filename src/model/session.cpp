@@ -492,6 +492,10 @@ void bssh_session::wire_transport() {
 		    || state == bssh_ssh_session::FAILED)
 			m_asking = false;
 
+		/* A kept session's screen stops following the host here. */
+		if (state == bssh_ssh_session::DISCONNECTED || state == bssh_ssh_session::FAILED)
+			m_resume_flowing = false;
+
 		if (state == bssh_ssh_session::CONNECTED) {
 			/*
 			 * Reached without a password ever being asked for means the
@@ -616,8 +620,11 @@ void bssh_session::answer_resume_probe(const QByteArray &output) {
 		bssh_session_client_events_t events = {};
 		events.context = this;
 		events.output = [](void *self, const uint8_t *bytes, size_t len) {
-			static_cast<bssh_session *>(self)->m_emulator->feed(
-			        QByteArray(reinterpret_cast<const char *>(bytes), int(len)));
+			bssh_session *session = static_cast<bssh_session *>(self);
+			session->m_resume_flowing = true;
+			session->m_away_history_kept = false;
+			session->m_away_history.clear();
+			session->m_emulator->feed(QByteArray(reinterpret_cast<const char *>(bytes), int(len)));
 		};
 		events.gap = [](void *self, uint64_t count, uint64_t lines) {
 			const QString lost = lines == 1 ? QStringLiteral("1 line")
@@ -646,6 +653,19 @@ void bssh_session::answer_resume_probe(const QByteArray &output) {
 			static_cast<bssh_session *>(self)->m_emulator->push_history(line.constData(), int(line.size()),
 			                                                             continuation != 0);
 		};
+		/*
+		 * A resize while away pushed and pulled rows the host never moved, and
+		 * the host is about to send its own: the history goes back to how it
+		 * stood first, or the rows the resize pushed arrive twice.
+		 */
+		events.keyframe = [](void *self) {
+			bssh_session *session = static_cast<bssh_session *>(self);
+			session->m_resume_flowing = true;
+			if (!session->m_away_history_kept) return;
+			session->m_emulator->replace_history(session->m_away_history);
+			session->m_away_history_kept = false;
+			session->m_away_history.clear();
+		};
 		events.history_lost = [](void *self, uint64_t lines) {
 			const QString text = lines == 0   ? QStringLiteral("[earlier lines lost]")
 			                     : lines == 1 ? QStringLiteral("[1 line lost]")
@@ -661,6 +681,7 @@ void bssh_session::answer_resume_probe(const QByteArray &output) {
 		bssh_session_client_init(m_resume_client.get(), &events);
 	}
 	bssh_session_client_reset_link(m_resume_client.get());
+	m_resume_flowing = false;
 
 	/*
 	 * From the start of the log, for a name a saved layout gave back: the shell
@@ -933,8 +954,15 @@ void bssh_session::resize(int cols, int rows) {
 	/* Held, the screen waits too (below), and takes the size it settles at
 	 * when the hold is released. */
 	if (m_size_holds) return;
+	keep_history_while_away();
 	m_emulator->resize(cols, rows);
 	send_size();
+}
+
+void bssh_session::keep_history_while_away() {
+	if (m_away_history_kept || m_resume_flowing || !m_resume_client || !m_resume_client->next) return;
+	m_away_history = m_emulator->scrollback();
+	m_away_history_kept = true;
 }
 
 /*
@@ -958,8 +986,10 @@ void bssh_session::hold_size(bool held) {
 	m_size_holds = qMax(0, m_size_holds + (held ? 1 : -1));
 	if (m_size_holds) return;
 	const bssh_screen &screen = m_emulator->screen();
-	if (m_cols > 0 && m_rows > 0 && (screen.cols() != m_cols || screen.rows() != m_rows))
+	if (m_cols > 0 && m_rows > 0 && (screen.cols() != m_cols || screen.rows() != m_rows)) {
+		keep_history_while_away();
 		m_emulator->resize(m_cols, m_rows);
+	}
 	send_size();
 }
 

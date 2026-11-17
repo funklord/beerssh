@@ -1240,6 +1240,99 @@ void session_host_test::a_kept_session_puts_the_lines_it_missed_into_its_scrollb
 	QVERIFY(!kept.screen().contains(QStringLiteral("lost]")));
 }
 
+void session_host_test::a_resize_while_away_does_not_bring_lines_back_twice() {
+	/*
+	 * A phone turned while its link was down: the terminal narrows on its
+	 * own, and its reflow pushes rows of the screen it had into its history.
+	 * The host, told the new size at the attach, reflows its copy too and
+	 * sends what went off the top -- those rows among them. Taken on top of
+	 * the client's own, they would read twice. The host here is the real
+	 * screen model, fed what the client was fed.
+	 */
+	kept_t kept;
+	kept.answer_probe();
+	kept.session->resize(80, 24);
+	QByteArray written;
+	for (int i = 1; i <= 40; ++i)
+		written += "line " + QByteArray::number(i) + " " + QByteArray(i % 2 ? 50 : 8, 'x') + "\r\n";
+	bssh_screen_model_t *host = bssh_screen_model_new(24, 80);
+	QVERIFY(host);
+	bssh_screen_model_feed(host, reinterpret_cast<const uint8_t *>(written.constData()), size_t(written.size()));
+	uint8_t big[8192];
+	kept.host_says(kept.hello()
+	               + QByteArray(reinterpret_cast<const char *>(big),
+	                            int(bssh_wire_put_output(big, sizeof(big), 0,
+	                                                     reinterpret_cast<const uint8_t *>(written.constData()),
+	                                                     size_t(written.size())))));
+	QVERIFY(kept.screen().contains(QStringLiteral("line 40")));
+	const uint64_t at = uint64_t(written.size());
+
+	kept.fake()->simulate_connection_lost();
+	kept.session->resize(40, 24); /* turned, while away */
+	kept.session->reconnect();
+	kept.fake()->simulate_key_auth_success();
+	kept.answer_probe();
+
+	/* The attach tells the host the size, and it answers with a keyframe. */
+	bssh_screen_model_resize(host, 24, 40);
+	uint64_t from = 0, first = 0, count = 0;
+	const int known = bssh_screen_model_history_after(host, at, &from);
+	bssh_screen_model_history(host, &first, &count);
+	QByteArray frames = kept.hello();
+	uint8_t out[4096];
+	frames += QByteArray(reinterpret_cast<const char *>(out), int(bssh_wire_put_keyframe(out, sizeof(out), from, !known)));
+	bssh_screen_cell_t cells[256];
+	for (uint64_t n = from; n < first + count; ++n) {
+		int continuation = 0;
+		const int width = bssh_screen_model_history_line(host, n, cells, 256, &continuation);
+		frames += QByteArray(reinterpret_cast<const char *>(out),
+		                     int(bssh_wire_put_history(out, sizeof(out), n, continuation, cells, width)));
+	}
+	const size_t length = bssh_screen_model_repaint(host, nullptr, 0);
+	QByteArray repaint(int(length), Qt::Uninitialized);
+	bssh_screen_model_repaint(host, reinterpret_cast<uint8_t *>(repaint.data()), length);
+	size_t taken = 0;
+	frames += QByteArray(reinterpret_cast<const char *>(out),
+	                     int(bssh_wire_put_repaint(out, sizeof(out), at, 40, 1,
+	                                               reinterpret_cast<const uint8_t *>(repaint.constData()),
+	                                               size_t(repaint.size()), &taken)));
+	QCOMPARE(taken, size_t(repaint.size()));
+	kept.host_says(frames);
+
+	/* Line by line, joined where a row continues the one above: once each, in order. */
+	auto logical = [](QStringList rows, QList<bool> continues) {
+		QStringList lines;
+		for (int i = 0; i < rows.size(); ++i) {
+			if (continues.at(i) && !lines.isEmpty()) lines.last() += rows.at(i);
+			else lines.append(rows.at(i));
+		}
+		for (QString &line : lines) line = line.trimmed();
+		return lines;
+	};
+	const bssh_scrollback &mine = kept.session->emulator()->scrollback();
+	QStringList rows;
+	QList<bool> continues;
+	for (int i = 0; i < mine.count(); ++i) {
+		QString text;
+		for (const bssh_cell_t &cell : mine.line(i)) if (cell.width) text += QChar::fromUcs4(cell.ch);
+		rows << text;
+		continues << mine.is_continuation(i);
+	}
+	QStringList theirs_rows;
+	QList<bool> theirs_continues;
+	for (uint64_t n = first; n < first + count; ++n) {
+		int continuation = 0;
+		const int width = bssh_screen_model_history_line(host, n, cells, 256, &continuation);
+		QString text;
+		for (int c = 0; c < width; ++c)
+			if (cells[c].chars[0] != 0xFFFFFFFFu) text += QChar::fromUcs4(cells[c].chars[0] ? cells[c].chars[0] : U' ');
+		theirs_rows << text;
+		theirs_continues << (continuation != 0);
+	}
+	QCOMPARE(logical(rows, continues), logical(theirs_rows, theirs_continues));
+	bssh_screen_model_free(host);
+}
+
 void session_host_test::a_host_without_the_program_gets_a_plain_shell() {
 	kept_t kept;
 

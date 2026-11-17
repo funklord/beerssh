@@ -26,6 +26,7 @@ private slots:
 	void a_malformed_history_line_is_refused();
 	void the_client_takes_history_in_order_and_says_what_went();
 	void a_kept_session_puts_the_lines_it_missed_into_its_scrollback();
+	void a_resize_while_away_does_not_bring_lines_back_twice();
 	void a_faithful_mode_pauses_the_program_and_loses_nothing();
 	void a_second_client_replaces_the_first();
 	void a_program_ending_is_reported_and_ends_the_host();

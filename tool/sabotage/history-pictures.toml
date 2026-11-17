@@ -17,8 +17,8 @@
 [[sabotage]]
 name = "dropping the history leaves its pictures decoded"
 file = "src/term/emulator_vterm.cpp"
-find = "\tm_private->images.drop_above_the_fold();"
-replace = ""
+find = "\tm_private->scrollback.clear();\n\n\t/*\n\t * And the pictures that were in it."
+replace = "\tm_private->scrollback.clear();\n\treturn;\n\n\t/*\n\t * And the pictures that were in it."
 expect = "dropping_the_history_drops_the_pictures_in_it"
 
 # And the other way: the above-the-fold test goes, so the drop takes the

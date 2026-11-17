@@ -12,6 +12,7 @@
 #include "model/multiplexer.h"
 #include "model/profile.h"
 #include "ssh/ssh_session.h"
+#include "term/scrollback.h"
 
 class bssh_emulator;
 class bssh_input_router;
@@ -511,6 +512,18 @@ private:
 	QByteArray m_resume_name;
 	bool m_resume_restored = false;
 	bool m_resume_replaying = false;
+
+	/*
+	 * The history as it stood when this kept session's screen stopped
+	 * following the host: taken at the first resize after a link went,
+	 * since a resize pushes and pulls rows the host never moved. A keyframe
+	 * puts it back before the host's own lines go in; output on a replay
+	 * means the screen follows from where it is, and it is dropped.
+	 */
+	bool m_resume_flowing = false;
+	bool m_away_history_kept = false;
+	bssh_scrollback m_away_history;
+	void keep_history_while_away();
 	bool m_keep_every_update = false;
 	void send_output_mode();
 

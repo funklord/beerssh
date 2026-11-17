@@ -381,6 +381,14 @@ public:
 	 * rule this terminal's own are.
 	 */
 	void push_history(const QList<bssh_cell_t> &line, bool continuation);
+
+	/*
+	 * The history as it was, `kept`, in place of what it is now, rewrapped
+	 * to this terminal's width: for a history this terminal's own resize
+	 * changed while the host was not there to agree (sec 5.6). Pictures
+	 * scrolled off go, having been placed against the history replaced.
+	 */
+	void replace_history(const bssh_scrollback &kept);
 	void push_history(const struct bssh_screen_cell *cells, int count, bool continuation);
 
 	/*

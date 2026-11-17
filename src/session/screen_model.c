@@ -199,8 +199,14 @@ int bssh_screen_model_history_after(const bssh_screen_model_t *model, uint64_t o
 
 void bssh_screen_model_resize(bssh_screen_model_t *model, int rows, int columns) {
 	if (!model || rows < 1 || columns < 1) return;
-	/* What a resize pushes, a client at the bytes so far has not seen. */
-	model->pushing_at = model->fed;
+	/*
+	 * What a resize pushes, a client at the bytes so far has not seen: it is
+	 * marked past them. A client that resized with the host while attached
+	 * pushed the same lines itself, and one coming back puts its history
+	 * back as it stood (bssh_emulator::replace_history) -- so a line twice
+	 * at worst, never one missing.
+	 */
+	model->pushing_at = model->fed + 1;
 	vterm_set_size(model->vt, rows, columns);
 }
 

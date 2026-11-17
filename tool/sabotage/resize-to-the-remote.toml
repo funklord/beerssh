@@ -47,7 +47,7 @@ expect = "a_resized_pane_tells_the_remote_its_size"
 [[sabotage]]
 name = "a held size still narrows the screen"
 file = "src/model/session.cpp"
-find = "\tif (m_size_holds) return;\n\tm_emulator->resize(cols, rows);\n"
+find = "\tif (m_size_holds) return;\n\tkeep_history_while_away();\n\tm_emulator->resize(cols, rows);\n"
 replace = "\tm_emulator->resize(cols, rows);\n"
 expect = "a_held_size_keeps_the_cursors_line"
 
@@ -55,6 +55,6 @@ expect = "a_held_size_keeps_the_cursors_line"
 [[sabotage]]
 name = "a released hold leaves the screen at its old size"
 file = "src/model/session.cpp"
-find = "\t\tm_emulator->resize(m_cols, m_rows);\n\tsend_size();\n"
-replace = "\tsend_size();\n"
+find = "\t\tm_emulator->resize(m_cols, m_rows);\n\t}\n\tsend_size();\n"
+replace = "\t}\n\tsend_size();\n"
 expect = "a_held_size_keeps_the_cursors_line"

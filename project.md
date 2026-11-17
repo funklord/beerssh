@@ -1650,11 +1650,32 @@ the client's scrollback is filled from the bottom. Sending the screen first
 and the history above it after would need the scrollback to take lines in
 front of the ones it has.
 
+**And a terminal resized while away** (the same day). A phone turned while
+its link was down narrows on its own, and its reflow pushes rows of the
+screen it had into its history. The host, told the new size at the attach,
+reflows its copy too and sends what went off the top, those rows among
+them. Measured with the model and a client fed the same bytes: 3 lines read
+twice out of 36.
+
+So the session keeps its history at the first resize after a link goes. A
+keyframe puts that history back, rewrapped to the new width, before the
+host's lines go in. A replay instead drops the kept copy, since the screen
+then follows from where it is.
+
+The model now marks the lines a resize pushes one past the bytes so far,
+rather than at them. The client has either pushed them itself, having
+resized with the host while attached, or has just put its history back. So
+a line is sent twice at worst, and never missing.
+
+`session_host_test::a_resize_while_away_does_not_bring_lines_back_twice`
+drives a kept session with the real model as the host. It compares the
+client's history with the host's line by line, with wrapped rows joined.
+Three sabotages fail it. Pictures that had scrolled off go when the history
+is put back, having been placed against the history replaced.
+
 **Not yet:**
 - The client's own rewrap of its scrollback on a narrower resize, which the
   model does not copy.
-- A client that resized itself while away has already pushed its stale screen,
-  so some of those lines arrive twice.
 - Answering terminal queries from the server during a replay.
 
 **BeerSSH uses it over SSH, per host, off by default**: *Keep the shell on the

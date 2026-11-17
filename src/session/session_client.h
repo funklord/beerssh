@@ -57,6 +57,9 @@ typedef struct bssh_session_client_events {
 	 */
 	void (*history)(void *context, bssh_wire_cells_t *cells, int continuation);
 	void (*history_lost)(void *context, uint64_t lines);
+	/* A keyframe begins: the history and the screen that follow replace what
+	 * the client has drawn since its place, `next`. */
+	void (*keyframe)(void *context);
 } bssh_session_client_events_t;
 
 typedef struct bssh_session_client {

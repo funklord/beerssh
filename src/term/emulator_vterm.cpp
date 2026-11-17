@@ -2595,6 +2595,18 @@ void bssh_emulator::restore_history(const bssh_scrollback &kept) {
 		m_private->scrollback.push(kept.line(i), kept.is_continuation(i));
 }
 
+void bssh_emulator::replace_history(const bssh_scrollback &kept) {
+	const int limit = m_private->scrollback.max_lines();
+	m_private->scrollback = kept;
+	m_private->scrollback.set_max_lines(limit);
+	m_private->scrollback.rewrap(m_private->screen.cols());
+
+	const int pictures = m_private->images.count();
+	m_private->images.drop_above_the_fold();
+	if (m_private->images.count() != pictures) emit images_changed();
+	emit scrollback_changed();
+}
+
 void bssh_emulator::push_history(const QList<bssh_cell_t> &line, bool continuation) {
 	m_private->scrollback.push(line, continuation);
 

@@ -62,6 +62,7 @@ static int take_keyframe(bssh_session_client_t *client, const bssh_wire_frame_t 
 
 	if (bssh_wire_read_keyframe(frame, &from, &lost)) return -1;
 	client->history_next = from;
+	if (client->events.keyframe) client->events.keyframe(client->events.context);
 	if (lost && client->events.history_lost) client->events.history_lost(client->events.context, 0);
 	return 0;
 }

@@ -107,3 +107,26 @@ file = "src/model/session.cpp"
 find = "\tsend_output_mode();\n\tm_transport->send(QByteArray(reinterpret_cast<const char *>(frame),\n\t                             int(bssh_wire_put_attach(frame, sizeof(frame), m_resume_client->next,\n\t                                                      uint16_t(m_cols), uint16_t(m_rows)))));\n"
 replace = "\tm_transport->send(QByteArray(reinterpret_cast<const char *>(frame),\n\t                             int(bssh_wire_put_attach(frame, sizeof(frame), m_resume_client->next,\n\t                                                      uint16_t(m_cols), uint16_t(m_rows)))));\n\tsend_output_mode();\n"
 expect = "a_kept_session_puts_the_lines_it_missed_into_its_scrollback"
+
+# A terminal resized while its link was down, then given a keyframe
+# (a_resize_while_away_does_not_bring_lines_back_twice).
+[[sabotage]]
+name = "the history a resize while away changed is not put back"
+file = "src/model/session.cpp"
+find = "\t\t\tif (!session->m_away_history_kept) return;\n"
+replace = "\t\t\treturn;\n"
+expect = "a_resize_while_away_does_not_bring_lines_back_twice"
+
+[[sabotage]]
+name = "the history is not kept at a resize while away"
+file = "src/model/session.cpp"
+find = "\tm_away_history = m_emulator->scrollback();\n\tm_away_history_kept = true;\n"
+replace = "\tm_away_history = m_emulator->scrollback();\n"
+expect = "a_resize_while_away_does_not_bring_lines_back_twice"
+
+[[sabotage]]
+name = "lines a resize pushes are taken as already seen"
+file = "src/session/screen_model.c"
+find = "\tmodel->pushing_at = model->fed + 1;\n"
+replace = "\tmodel->pushing_at = model->fed;\n"
+expect = "a_resize_while_away_does_not_bring_lines_back_twice"
