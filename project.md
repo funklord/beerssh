@@ -15742,18 +15742,25 @@ without an icon is defective, so there is a plain one meant to be replaced.
   the whole test binary now runs in Qt's test mode there; the owner-only
   checks read POSIX mode bits, which Windows has not, and are left to
   POSIX.
-  **Five layout tests fail on Windows alone and are skipped there, OPEN
-  and not explained** -- each QSKIP names its symptom: the background a
-  view paints is not the one it reports (black reported, `d9d9d9` read at
-  the centre; with a light theme, white reported and `262626` read); a
-  divider's double-click equalize leaves panes 16 px apart with a 14 px
-  cell; a grid row is not uneven before its double-click; a row divider
-  moved alone regroups every row rather than breaking at its column; and
-  the host editor's `resume_session` combo box announces "empty". Not the
-  widget style: forcing Fusion, which Linux's offscreen run gets, changed
-  none of them. One lead, untested: the cell is 14 px wide there, wider
-  than on Linux, so panes fill to their minimum sizes sooner and a centre
-  pixel may not be where the grid is.
+  **Windows' 14 px cell -- wider than Linux's 9 -- found two faults.**
+  A double-click equalize rounded the first pane DOWN to whole cells and
+  gave the rest to the last, so two panes ended up to two cells apart (16
+  px with a 14 px cell); that held on Linux too at some widths, and
+  `a_divider_equalizes_on_a_double_click` now sweeps two cells' worth of
+  widths, which failed at seven of them before `bssh_equal_pane_extent`.
+  And `what_the_terminal_reports_is_what_it_paints` read one centre pixel,
+  which on Windows was a glyph's ink; it takes the commonest colour of a
+  grid now -- and it could not fail for the edit its sabotage spec names,
+  the colours never reaching the emulator after a settings change, since
+  both sides were black under the default scheme; it changes to a white
+  scheme once the view exists now, and that edit fails it.
+  **Three layout tests fail on Windows alone and are skipped there, OPEN
+  and not explained** -- each QSKIP names its symptom: a grid row is not
+  uneven before its double-click; a row divider moved alone regroups every
+  row rather than breaking at its column; and the host editor's
+  `resume_session` combo box announces "empty". Not the widget style:
+  forcing Fusion changed none of them. The wider cell, filling panes to
+  their minimum sizes sooner, is the lead for the first two.
   **The local shell is ConPTY** (`ssh/conpty_session.cpp`): the profile's
   shell as a command line, else `%COMSPEC%`; a reader thread for the
   output pipe and a writer thread with a queue, since both calls block;

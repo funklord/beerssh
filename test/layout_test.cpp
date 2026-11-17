@@ -82,6 +82,7 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QMenu>
+#include <QHash>
 #include <QMenuBar>
 #include <QStyleFactory>
 #include <QMessageBox>
@@ -11961,10 +11962,8 @@ void layout_test::narrowing_a_window_turns_its_extra_panes_into_tabs() {
 }
 
 void layout_test::what_the_terminal_reports_is_what_it_paints() {
-#ifdef Q_OS_WIN
-	QSKIP("open on Windows (project.md sec 12.2): the painted background is not the reported one (black reported, d9d9d9 read; white reported, 262626 read)");
-#endif
 	const bssh_factory_reset_t factory_reset;
+	const setting_left_as_found_t scheme_left(QStringLiteral("defaults/colour_scheme"));
 	/*
 	 * sec 7.1's colour and metric answers, asserted as a RELATIONSHIP
 	 * between what this terminal says and what it actually draws --
@@ -12016,6 +12015,17 @@ void layout_test::what_the_terminal_reports_is_what_it_paints() {
 		bssh_terminal_view *view = window.panes()->focused_view();
 		QVERIFY(view);
 
+		/*
+		 * The scheme changed AFTER the view exists, to white. The first
+		 * wiring sets the colours once; what keeps them right is the
+		 * settings_changed path, and with the default scheme both sides
+		 * were black, so that path missing passed this test
+		 * (tool/sabotage/report-matches-paint.toml, found 2026-11-17).
+		 */
+		bssh_app_settings().set_default_colour_scheme(QStringLiteral("black-on-white"));
+		QCoreApplication::processEvents();
+		QTRY_COMPARE(view->terminal_background(), QColor(Qt::white));
+
 		const auto ask = [&](const QByteArray &query) {
 			fake->clear_written();
 			session->emulator()->feed(query);
@@ -12046,7 +12056,28 @@ void layout_test::what_the_terminal_reports_is_what_it_paints() {
 		 * and it is clear of the cursor at row 0 and of anything the
 		 * session has printed.
 		 */
-		const QColor corner = painted.pixelColor(painted.width() / 2, painted.height() / 2);
+		/*
+		 * And not ONE pixel, either: on Windows, with a 14px cell, the
+		 * exact centre was the ink of a glyph, 262626 against a
+		 * reported and painted white (2026-11-17). The commonest colour
+		 * of a 7 by 7 grid across the middle is the background; the
+		 * grid stops at seven eighths, clear of the scrollbar.
+		 */
+		QHash<QRgb, int> votes;
+		for (int i = 1; i < 8; ++i) {
+			for (int j = 1; j < 8; ++j) {
+				++votes[painted.pixel(painted.width() * i / 8, painted.height() * j / 8)];
+			}
+		}
+		QRgb commonest = 0;
+		int most = 0;
+		for (auto it = votes.cbegin(); it != votes.cend(); ++it) {
+			if (it.value() > most) {
+				most = it.value();
+				commonest = it.key();
+			}
+		}
+		const QColor corner(commonest);
 
 		const QByteArray expected_bg = QByteArrayLiteral("\x1b]11;rgb:")
 		        + QByteArray::number((corner.red() << 8) | corner.red(), 16)
