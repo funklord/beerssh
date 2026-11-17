@@ -1714,6 +1714,19 @@ are drawn, but they make no answer, ring no bell and write no clipboard. A
 key pressed is never fed, so typing still goes. The session turns the switch
 on for what the host sends from an attach until it says it has caught up.
 
+**And the server answers what nobody watches.** The model's libvterm makes
+the answer a terminal would send. The host writes it to the program for
+bytes no client will answer: those read while nobody is attached, and those
+that will arrive as a backlog, before the host says it has caught up. For
+bytes that a client attached and caught up receives live, the host leaves
+the answer to the client. The answers queue behind any input part-written
+to the pty, never inside it, and input waits behind them.
+`session_host_test::a_question_nobody_watches_is_answered_by_the_server`
+covers both cases with a real program asking where its cursor is. Asked
+with nobody attached, it gets `ESC [1;1R`. Asked while a live client is
+attached, it gets nothing, because the test's client answers nothing. Two
+sabotages fail it.
+
 `session_host_test::a_backlog_is_drawn_but_not_answered` asks two
 questions, because device attributes are answered by the emulator's own
 `reply()` and the cursor's place by libvterm. It checks both, the bell, a
@@ -1723,9 +1736,10 @@ fail it.
 **Not yet:**
 - The model's own rewrap of its history on a narrower resize. A client's
   wrapping of what it is sent covers it, so only the numbering differs.
-- Answering terminal queries from the server during a replay. A program
-  that asks while nobody watches is not answered, and waits until it gives
-  up.
+- Answers the client's own code makes beyond libvterm's, such as its
+  identity replies and the kitty keyboard state. The server's screen is
+  plain patched libvterm with no such fallbacks, so a question only BeerSSH
+  answers goes unanswered while nobody watches.
 
 **BeerSSH uses it over SSH, per host, off by default**: *Keep the shell on the
 server*, `resume_session`. Off because the probe is a round trip on every

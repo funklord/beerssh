@@ -59,6 +59,11 @@ typedef struct host {
 	size_t to_program_used;
 	size_t to_program_done;
 
+	/* The screen's answers to questions nobody was watching, for the program:
+	 * behind any input part-written, never inside it. */
+	uint8_t answers[512];
+	size_t answers_used;
+
 	int told_exit;
 
 	/*
@@ -183,6 +188,14 @@ static void flush_to_program(host_t *host) {
 	}
 	host->to_program_used = 0;
 	host->to_program_done = 0;
+
+	while (host->answers_used && host->pty >= 0) {
+		const ssize_t wrote = write(host->pty, host->answers, host->answers_used);
+		if (wrote <= 0) return;
+		memmove(host->answers, host->answers + wrote, host->answers_used - (size_t)wrote);
+		host->answers_used -= (size_t)wrote;
+	}
+	if (host->pty < 0) host->answers_used = 0;
 }
 
 static int handle_frame(host_t *host, const bssh_wire_frame_t *frame) {
@@ -260,7 +273,8 @@ static void read_client(host_t *host) {
 }
 
 static void take_frames(host_t *host) {
-	while (host->client >= 0 && !host->to_program_used) {
+	/* Input waits behind the screen's answers, which were made first. */
+	while (host->client >= 0 && !host->to_program_used && !host->answers_used) {
 		bssh_wire_frame_t frame;
 		uint32_t used = 0;
 		const int taken = bssh_wire_take(host->in, host->in_used, &frame, &used);
@@ -473,7 +487,19 @@ static void read_program(host_t *host) {
 	}
 	if (got > 0) {
 		bssh_output_log_append(&host->log, chunk, (size_t)got, (uint64_t)now_ms());
+
+		/*
+		 * A client answers only what it receives live, after the host has
+		 * said it has caught up: what is read now reaches it then only if it
+		 * is attached and caught up already. Anything else -- nobody there,
+		 * or bytes that will arrive as backlog -- the screen answers here.
+		 */
+		const int watched = host->client >= 0 && host->attached && !host->caught_up_due;
+		bssh_screen_model_set_answering(host->screen, !watched);
 		bssh_screen_model_feed(host->screen, chunk, (size_t)got);
+		host->answers_used += bssh_screen_model_take_answers(host->screen, host->answers + host->answers_used,
+		                                                     sizeof(host->answers) - host->answers_used);
+		if (host->answers_used) flush_to_program(host);
 	}
 }
 
@@ -544,7 +570,7 @@ int bssh_session_host_run(const bssh_session_host_options_t *options) {
 			fds[count].fd = host->pty;
 			fds[count].events = 0;
 			if (log_room(host)) fds[count].events |= POLLIN;
-			if (host->to_program_used) fds[count].events |= POLLOUT;
+			if (host->to_program_used || host->answers_used) fds[count].events |= POLLOUT;
 
 			/*
 			 * Paused: a faithful log with no room. Left in the set, a program

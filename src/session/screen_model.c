@@ -38,6 +38,10 @@ struct bssh_screen_model {
 	/* The end of the last read, held until the next completes it. */
 	uint8_t held[4];
 	size_t held_length;
+	/* What the terminal said back while answering was on. */
+	int answering;
+	uint8_t answers[512];
+	size_t answers_used;
 };
 
 static int utf8_sequence_length(uint8_t byte) {
@@ -91,16 +95,21 @@ static const VTermScreenCallbacks callbacks = {
 
 /*
  * What the terminal says back -- the answer to a cursor-position query, say.
- * Dropped for now: while a client is attached its own emulator answers, as
- * it does over plain SSH. Answering from here, during a replay, is sec 5.6's
- * and comes with the modes that need it. Taken rather than left unset, since
+ * Kept while answering is on, for the host to give the program: the client
+ * answers only what it watches live, and a question asked while nobody
+ * watched is the server's to answer (sec 5.6). Dropped otherwise, since the
+ * client's emulator answers then. Taken either way rather than left unset:
  * libvterm otherwise keeps it in a buffer of its own and complains on stderr
  * when that fills.
  */
 static void on_output(const char *bytes, size_t length, void *user) {
-	(void)bytes;
-	(void)length;
-	(void)user;
+	bssh_screen_model_t *model = user;
+	if (!model->answering) return;
+	const size_t room = sizeof model->answers - model->answers_used;
+	/* Past the room, a reply cut short would be worse than none. */
+	if (length > room) return;
+	memcpy(model->answers + model->answers_used, bytes, length);
+	model->answers_used += length;
 }
 
 bssh_screen_model_t *bssh_screen_model_new(int rows, int columns) {
@@ -175,6 +184,19 @@ void bssh_screen_model_feed(bssh_screen_model_t *model, const uint8_t *bytes, si
 		bytes += piece;
 		length -= piece;
 	}
+}
+
+void bssh_screen_model_set_answering(bssh_screen_model_t *model, int answering) {
+	if (model) model->answering = answering;
+}
+
+size_t bssh_screen_model_take_answers(bssh_screen_model_t *model, uint8_t *out, size_t capacity) {
+	if (!model || !out) return 0;
+	const size_t length = model->answers_used < capacity ? model->answers_used : capacity;
+	memcpy(out, model->answers, length);
+	memmove(model->answers, model->answers + length, model->answers_used - length);
+	model->answers_used -= length;
+	return length;
 }
 
 uint64_t bssh_screen_model_offset(const bssh_screen_model_t *model) {

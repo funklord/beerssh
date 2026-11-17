@@ -23,6 +23,7 @@ private slots:
 	void a_client_that_takes_keyframes_is_sent_the_screen_and_the_lines_it_missed();
 	void a_history_line_round_trips_with_its_styles();
 	void a_live_client_far_behind_is_sent_the_screen_not_every_byte();
+	void a_question_nobody_watches_is_answered_by_the_server();
 	void a_malformed_history_line_is_refused();
 	void the_client_takes_history_in_order_and_says_what_went();
 	void a_kept_session_puts_the_lines_it_missed_into_its_scrollback();

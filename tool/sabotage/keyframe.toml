@@ -197,3 +197,19 @@ file = "src/term/emulator_vterm.cpp"
 find = "\tif (replaying()) return;\n\tpending_output.append(bytes);\n"
 replace = "\tpending_output.append(bytes);\n"
 expect = "a_backlog_is_drawn_but_not_answered"
+
+# The server answering what nobody watches, and only that
+# (a_question_nobody_watches_is_answered_by_the_server).
+[[sabotage]]
+name = "the server never answers a question"
+file = "src/session/session_host.c"
+find = "\t\tbssh_screen_model_set_answering(host->screen, !watched);\n"
+replace = "\t\tbssh_screen_model_set_answering(host->screen, 0);\n"
+expect = "a_question_nobody_watches_is_answered_by_the_server"
+
+[[sabotage]]
+name = "the server answers what a live client answers too"
+file = "src/session/session_host.c"
+find = "\t\tbssh_screen_model_set_answering(host->screen, !watched);\n"
+replace = "\t\tbssh_screen_model_set_answering(host->screen, 1);\n"
+expect = "a_question_nobody_watches_is_answered_by_the_server"

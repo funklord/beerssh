@@ -127,6 +127,17 @@ int bssh_screen_model_history_line(const bssh_screen_model_t *model, uint64_t nu
 uint64_t bssh_screen_model_offset(const bssh_screen_model_t *model);
 
 /*
+ * Whether what is fed from now on is answered: a query in it -- the cursor's
+ * place, device attributes -- makes the answer a terminal would send, which
+ * take_answers hands over for the program. On while nobody watches the
+ * output live, since no client will answer it then (sec 5.6); off while one
+ * does, since its own emulator answers. Answers past 512 bytes waiting are
+ * dropped whole.
+ */
+void bssh_screen_model_set_answering(bssh_screen_model_t *model, int answering);
+size_t bssh_screen_model_take_answers(bssh_screen_model_t *model, uint8_t *out, size_t capacity);
+
+/*
  * The first line a client that has seen output up to `offset` lacks: the first
  * pushed after it, or the end of the history when it lacks none. Each line is
  * marked when it goes, at the end of the line of output being written, so a

@@ -778,6 +778,48 @@ void session_host_test::a_client_that_takes_keyframes_is_sent_the_screen_and_the
 	         qPrintable(terminal.screen().to_text()));
 }
 
+void session_host_test::a_question_nobody_watches_is_answered_by_the_server() {
+	/*
+	 * A program asking the terminal where its cursor is, then printing what
+	 * came back within two seconds. Asked with nobody attached, the server's
+	 * screen answers, since no client will: the client draws a backlog
+	 * without answering it. Asked with a client attached and caught up, the
+	 * server keeps quiet, since the client's own emulator answers live --
+	 * this test's client does not, so the program hears nothing.
+	 */
+	const char *const ask =
+	        "stty -echo -icanon min 0 time 20; printf '\\033[6n';"
+	        " r=$(dd bs=1 count=8 2>/dev/null | od -An -c | tr -d ' \\n'); stty sane; echo \"got:[$r]\"";
+
+	QTemporaryDir scratch;
+	const QByteArray marker = (scratch.path() + QStringLiteral("/asked")).toUtf8();
+	const QByteArray away = QByteArray(ask) + "; touch " + marker + "; read wait";
+	host_process_t alone(away.constData());
+	QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(QString::fromUtf8(marker)), 10000);
+	client_t link;
+	QVERIFY(link.connect_to(alone.path));
+	link.attach(0);
+	QVERIFY2(link.wait_for("got:["), link.output.constData());
+	QVERIFY2(link.wait_for("R]"), link.output.constData());
+	QVERIFY2(link.output.contains("got:[033[1;1R]"), link.output.constData());
+
+	const QByteArray watched = QByteArray("read go; ") + ask + "; read wait";
+	host_process_t host(watched.constData());
+	client_t live;
+	QVERIFY(live.connect_to(host.path));
+	live.attach(0);
+	/* Caught up: everything written so far has come. */
+	QVERIFY(live.pump(3000, [&live] {
+		live.take();
+		return true;
+	}));
+	QTest::qWait(300);
+	live.type("\n");
+	QVERIFY2(live.wait_for("got:[", 6000), live.output.constData());
+	QVERIFY2(live.wait_for("]"), live.output.constData());
+	QVERIFY2(live.output.contains("got:[]"), live.output.constData());
+}
+
 void session_host_test::a_live_client_far_behind_is_sent_the_screen_not_every_byte() {
 	/*
 	 * 30,000 lines while away, about 170 KB, all of it still in a 1 MB log.
