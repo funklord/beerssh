@@ -226,8 +226,10 @@ void bssh_pane_container::configure_splitter(QSplitter *splitter) {
 	 * the half is not blank -- it is the left side of a glyph.
 	 */
 	connect(splitter, &QSplitter::splitterMoved, this, [this, splitter](int, int index) {
-		snap_splitter(splitter);
-		follow_divider(splitter, index);
+		/* A drag snaps in follow_divider, after the magnet has had the
+		 * raw position; anything else moving a divider snaps here. */
+		if (m_drag.splitter == splitter && m_drag.index == index) follow_divider(splitter, index);
+		else snap_splitter(splitter);
 	});
 }
 
@@ -1005,7 +1007,7 @@ void bssh_pane_container::snap_divider_to_cells() {
 	for (QSplitter *splitter : all_splitters()) snap_splitter(splitter);
 }
 
-void bssh_pane_container::snap_splitter(QSplitter *splitter) {
+void bssh_pane_container::snap_splitter(QSplitter *splitter, int from, int to) {
 	if (m_views.size() < 2 || splitter->count() < 2) return;
 
 	/*
@@ -1028,7 +1030,7 @@ void bssh_pane_container::snap_splitter(QSplitter *splitter) {
 	 * test asserts it; the gesture that moves the handle is what needs a
 	 * device.
 	 */
-	if (vertical && sizes.size() == 2) {
+	if (vertical && sizes.size() == 2 && from == 0) {
 		const int total = sizes.at(0) + sizes.at(1);
 		/*
 		 * The radius is the user's (sec 8.7 asks for it to be
@@ -1047,10 +1049,29 @@ void bssh_pane_container::snap_splitter(QSplitter *splitter) {
 	}
 
 	bool changed = false;
+	const auto least = [splitter, vertical](int i) {
+		const QSize hint = splitter->widget(i)->minimumSizeHint().expandedTo(splitter->widget(i)->minimumSize());
+		return vertical ? hint.height() : hint.width();
+	};
 
-	for (int i = 0; i < sizes.size() - 1; ++i) {
-		const int snapped = bssh_snap_pane_extent(sizes.at(i), cell);
+	for (int i = qMax(0, from); i < sizes.size() - 1 && i <= to; ++i) {
+		int snapped = bssh_snap_pane_extent(sizes.at(i), cell);
 		if (snapped == sizes.at(i)) continue;
+
+		/*
+		 * Never below the pane's least. A pane held at its 20-column
+		 * floor (bssh_terminal_view::minimumSizeHint, plus the frame) is
+		 * between cells, and rounding it down asked the splitter for less
+		 * than it allows -- which it refused by moving the divider BEFORE
+		 * the pane, out of line with the rows beside it. Seen at a 14 px
+		 * cell, where a hemmed-in row's divider jumped 11 px (sec 12.2).
+		 * Up a cell instead where the neighbour can spare it; else left.
+		 */
+		if (snapped < least(i)) {
+			const int up = snapped + cell;
+			if (sizes.at(i + 1) - (up - sizes.at(i)) < least(i + 1)) continue;
+			snapped = up;
+		}
 
 		/*
 		 * Whatever is trimmed off goes to the neighbour rather than
@@ -1335,10 +1356,19 @@ void bssh_pane_container::follow_divider(QSplitter *splitter, int index) {
 	const QList<bssh_divider_t> geometry = divider_geometry(dividers, this);
 	const int target = bssh_snap_divider(geometry, moving, at, bssh_app_settings().column_snap_radius(),
 	                                     splitter->handleWidth() + 2);
-	if (target >= 0 && geometry.at(target).at != at) {
-		move_divider_to(m_drag, geometry.at(target).at);
-		at = divider_at(splitter, index, this);
+	if (target >= 0) {
+		if (geometry.at(target).at != at) move_divider_to(m_drag, geometry.at(target).at);
+	} else {
+		/*
+		 * Off any line: the pane before the divider in whole cells
+		 * (sec 8.3). After the magnet rather than before it -- snapped
+		 * first, a 16 px cell could carry the divider further from a
+		 * neighbour's line than the magnet reaches, and a drag to within
+		 * three pixels of it never caught.
+		 */
+		snap_splitter(splitter, index - 1, index - 1);
 	}
+	at = divider_at(splitter, index, this);
 
 	/*
 	 * No further than the most hemmed-in of them can go: one row whose
@@ -1360,6 +1390,29 @@ void bssh_pane_container::follow_divider(QSplitter *splitter, int index) {
 		}
 	}
 	for (const divider_ref_t &link : m_drag_linked) move_divider_to(link, at);
+
+	/*
+	 * And every row in the drag ends the same past the divider. The
+	 * dragged row is snapped to whole cells on every step
+	 * (configure_splitter) and passes each trim to the next pane, so its
+	 * NEXT divider crept; the rows moved here were not snapped at all, so
+	 * theirs stayed. With a 9 px cell the two ended a pixel apart, inside
+	 * the handle, and nobody saw it; with a 14 px cell -- Windows'
+	 * default, or a larger font anywhere -- 13 px apart, past the handle,
+	 * and the grid was no longer a grid: the next drag of that column
+	 * moved one row (sec 12.2).
+	 *
+	 * So each row, the dragged one too, snaps the panes AFTER the divider
+	 * from the same divider position, and comes out the same. Not the
+	 * whole row: the divider itself stays where the pointer, the magnet
+	 * above or the hold put it -- snapping the panes before it pulled it
+	 * off a neighbour's line, or a cell away from where a hemmed-in row
+	 * had stopped the rest.
+	 */
+	snap_splitter(splitter, index);
+	for (const divider_ref_t &link : m_drag_linked) {
+		if (link.splitter && link.splitter != splitter) snap_splitter(link.splitter, link.index);
+	}
 }
 
 /* How far a divider can go either way before a pane beside it is at its

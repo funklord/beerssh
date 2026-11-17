@@ -11065,7 +11065,7 @@ void layout_test::dividers_in_line_are_linked_end_to_end() {
 namespace {
 
 /* A grid of sessions named r<row>c<col>, rows of the given lengths. */
-bssh_pane_node grid_tree(bssh_session_registry &registry, const QList<int> &rows) {
+bssh_pane_node grid_tree(bssh_session_registry &registry, const QList<int> &rows, int font_size = 0) {
 	bssh_pane_node tree;
 	tree.orientation = Qt::Vertical;
 	for (int r = 0; r < rows.size(); ++r) {
@@ -11074,6 +11074,11 @@ bssh_pane_node grid_tree(bssh_session_registry &registry, const QList<int> &rows
 		for (int c = 0; c < rows.at(r); ++c) {
 			bssh_pane_node pane;
 			pane.session = registry.create(named(QStringLiteral("r%1c%2").arg(r).arg(c)));
+			if (font_size > 0) {
+				QJsonObject settings = pane.session->settings();
+				settings.insert(QStringLiteral("font_size"), font_size);
+				pane.session->set_settings(settings);
+			}
 			line.children.push_back(pane);
 		}
 		tree.children.push_back(line);
@@ -11211,26 +11216,113 @@ void layout_test::a_dragged_divider_snaps_into_line_with_its_neighbour() {
 	QCOMPARE(handle_x(rows.at(1), 1, &container), lower);
 }
 
+void layout_test::a_grid_stays_in_line_at_a_wide_cell() {
+	/*
+	 * The grid drag at the cell widths Linux's default never reaches
+	 * (sec 12.2): Windows' is 14 px, and a larger font gives any desktop
+	 * 16. At those, three faults hid under a 9 px cell. The rows that
+	 * followed a drag were not snapped, so the dragged row's next divider
+	 * ended a near-cell from theirs; a pane at its 20-column floor was
+	 * rounded below it and the splitter moved the divider before it; and
+	 * the cell snap ran before the magnet, carrying a divider dragged to
+	 * within 3 px of a neighbour's line out of the magnet's reach.
+	 */
+	for (const int font_size : { 17, 20 }) {
+		bssh_session_registry registry;
+		bssh_layout_manager layout;
+		layout.set_width(1800);
+		bssh_pane_container container(&layout);
+		container.show();
+		container.resize(1800, 900);
+		layout.set_room(QSize(1800, 900), QSize(120, 80), 8);
+		layout.set_tree(grid_tree(registry, { 3, 3, 3 }, font_size));
+		QCoreApplication::processEvents();
+		const int cell = container.view_at(0)->cell_width();
+		QVERIFY2(cell >= 14, qPrintable(QStringLiteral("font %1 gave a %2 px cell").arg(font_size).arg(cell)));
+		const QList<QSplitter *> rows = row_splitters(container);
+		QCOMPARE(rows.size(), 3);
+		drag_handle(rows.at(0)->handle(1), 120, Qt::NoModifier);
+		for (QSplitter *row : rows) {
+			QVERIFY2(row->sizes() == rows.at(0)->sizes(),
+			         qPrintable(QStringLiteral("cell %1: rows %2,%3,%4 and %5,%6,%7")
+			                    .arg(cell).arg(rows.at(0)->sizes().at(0)).arg(rows.at(0)->sizes().at(1))
+			                    .arg(rows.at(0)->sizes().at(2)).arg(row->sizes().at(0))
+			                    .arg(row->sizes().at(1)).arg(row->sizes().at(2))));
+		}
+
+		/* And the magnet, from 3 px off a neighbour's line. */
+		bssh_session_registry pair_registry;
+		bssh_layout_manager pair_layout;
+		pair_layout.set_width(1200);
+		bssh_pane_container pair(&pair_layout);
+		pair.show();
+		pair.resize(1200, 900);
+		pair_layout.set_room(QSize(1200, 900), QSize(120, 80), 8);
+		pair_layout.set_tree(grid_tree(pair_registry, { 2, 3 }, font_size));
+		QCoreApplication::processEvents();
+		const QList<QSplitter *> two = row_splitters(pair);
+		QCOMPARE(two.size(), 2);
+		const int top = handle_x(two.at(0), 1, &pair);
+		const int lower = handle_x(two.at(1), 1, &pair);
+		QVERIFY(top - lower > 100);
+		drag_handle(two.at(0)->handle(1), lower - top + 3, Qt::NoModifier);
+		QVERIFY2(handle_x(two.at(0), 1, &pair) == lower,
+		         qPrintable(QStringLiteral("cell %1: the divider stopped at %2, the line is at %3")
+		                    .arg(cell).arg(handle_x(two.at(0), 1, &pair)).arg(lower)));
+
+		/* And a hemmed-in row, whose middle pane stops between cells. */
+		bssh_session_registry hemmed_registry;
+		bssh_layout_manager hemmed_layout;
+		hemmed_layout.set_width(1200);
+		bssh_pane_container hemmed(&hemmed_layout);
+		hemmed.show();
+		hemmed.resize(1200, 900);
+		hemmed_layout.set_room(QSize(1200, 900), QSize(120, 80), 8);
+		hemmed_layout.set_tree(grid_tree(hemmed_registry, { 3, 3, 3 }, font_size));
+		QCoreApplication::processEvents();
+		const QList<QSplitter *> three = row_splitters(hemmed);
+		QCOMPARE(three.size(), 3);
+		three.at(1)->widget(1)->setMinimumWidth(three.at(1)->sizes().at(1) - 50);
+		QCoreApplication::processEvents();
+		drag_handle(three.at(0)->handle(1), 200, Qt::NoModifier);
+		const int moved = handle_x(three.at(0), 1, &hemmed);
+		for (QSplitter *row : three) {
+			QVERIFY2(qAbs(handle_x(row, 1, &hemmed) - moved) <= 1,
+			         qPrintable(QStringLiteral("cell %1: a row's divider at %2, the dragged one at %3")
+			                    .arg(cell).arg(handle_x(row, 1, &hemmed)).arg(moved)));
+		}
+	}
+}
+
 void layout_test::a_double_click_evens_out_every_row_of_a_grid() {
-#ifdef Q_OS_WIN
-	QSKIP("open on Windows (project.md sec 12.2): a row is not left uneven before the double-click");
-#endif
 	bssh_session_registry registry;
 	bssh_layout_manager layout;
-	layout.set_width(1200);
+	/*
+	 * 1800 wide, not 1200: each pane in a row has to have room for this
+	 * drag above its 20-column floor (bssh_terminal_view::minimumSizeHint).
+	 * At 1200 a third is about 395 px, and on Windows, whose cell is 14 px,
+	 * the floor is 289 -- so the middle pane bottomed out within the drag,
+	 * pushed the rest of the row, and the grid fell out of line. That read
+	 * as the divider moving half the pointer's distance there (sec 12.2).
+	 */
+	layout.set_width(1800);
 	bssh_pane_container container(&layout);
 	container.show();
-	container.resize(1200, 900);
+	container.resize(1800, 900);
 	/* The room the window would report: without it a tiled window holds
 	 * four panes (sec 8.2), with it as many as fit. */
-	layout.set_room(QSize(1200, 900), QSize(120, 80), 8);
+	layout.set_room(QSize(1800, 900), QSize(120, 80), 8);
 	layout.set_tree(grid_tree(registry, { 3, 3, 3 }));
 	QCoreApplication::processEvents();
 	const QList<QSplitter *> rows = row_splitters(container);
 	QCOMPARE(rows.size(), 3);
 
 	drag_handle(rows.at(0)->handle(1), 200, Qt::NoModifier);
-	for (QSplitter *row : rows) QVERIFY(row->sizes().at(0) > row->sizes().at(1) + 150);
+	for (QSplitter *row : rows) {
+		QVERIFY2(row->sizes().at(0) > row->sizes().at(1) + 150,
+		         qPrintable(QStringLiteral("a row is %1,%2,%3 after the drag")
+		                    .arg(row->sizes().at(0)).arg(row->sizes().at(1)).arg(row->sizes().at(2))));
+	}
 
 	QSplitterHandle *handle = rows.at(0)->handle(1);
 	const QPoint at(2, 20);
@@ -11304,9 +11396,6 @@ void layout_test::a_tree_is_rebuilt_from_where_its_panes_are() {
 }
 
 void layout_test::a_row_divider_moved_alone_breaks_at_its_column() {
-#ifdef Q_OS_WIN
-	QSKIP("open on Windows (project.md sec 12.2): the moved divider regroups every row instead of breaking at its column");
-#endif
 	/*
 	 * The holder's follow-up (2026-11-13): with columns linked, a 3x3's
 	 * rows were still one divider each, the whole way across. Moved alone,
@@ -11315,11 +11404,19 @@ void layout_test::a_row_divider_moved_alone_breaks_at_its_column() {
 	 */
 	bssh_session_registry registry;
 	bssh_layout_manager layout;
-	layout.set_width(1200);
+	/*
+	 * 1800 wide, not 1200: each pane in a row has to have room for this
+	 * drag above its 20-column floor (bssh_terminal_view::minimumSizeHint).
+	 * At 1200 a third is about 395 px, and on Windows, whose cell is 14 px,
+	 * the floor is 289 -- so the middle pane bottomed out within the drag,
+	 * pushed the rest of the row, and the grid fell out of line. That read
+	 * as the divider moving half the pointer's distance there (sec 12.2).
+	 */
+	layout.set_width(1800);
 	bssh_pane_container container(&layout);
 	container.show();
-	container.resize(1200, 900);
-	layout.set_room(QSize(1200, 900), QSize(120, 80), 8);
+	container.resize(1800, 900);
+	layout.set_room(QSize(1800, 900), QSize(120, 80), 8);
 	layout.set_tree(grid_tree(registry, { 3, 3, 3 }));
 	QCoreApplication::processEvents();
 	QCOMPARE(container.pane_count(), 9);
@@ -11329,6 +11426,15 @@ void layout_test::a_row_divider_moved_alone_breaks_at_its_column() {
 	drag_handle(row_list.at(0)->handle(1), 120, Qt::NoModifier);
 	const int wide = row_list.at(0)->sizes().at(0);
 	QVERIFY(wide > row_list.at(0)->sizes().at(2) + 60);
+	/* The drag moved every row's divider in line (sec 8.3): the grid is
+	 * still a grid before the divider below is moved alone. */
+	for (QSplitter *row : row_list) {
+		QVERIFY2(row->sizes() == row_list.at(0)->sizes(),
+		         qPrintable(QStringLiteral("rows %1,%2,%3 and %4,%5,%6 after the drag")
+		                    .arg(row_list.at(0)->sizes().at(0)).arg(row_list.at(0)->sizes().at(1))
+		                    .arg(row_list.at(0)->sizes().at(2)).arg(row->sizes().at(0))
+		                    .arg(row->sizes().at(1)).arg(row->sizes().at(2))));
+	}
 
 	QSplitter *rows = nullptr;
 	for (QSplitter *each : container.findChildren<QSplitter *>()) {
@@ -11337,8 +11443,9 @@ void layout_test::a_row_divider_moved_alone_breaks_at_its_column() {
 	QVERIFY(rows);
 	QSplitterHandle *handle = rows->handle(1);
 	const int y_before = handle->mapTo(&container, QPoint(0, 0)).y() + handle->height() / 2;
-	/* In the middle column. */
-	const QPoint at(600, handle->height() / 2);
+	/* In the middle column, wherever the drag above left it. */
+	const int middle = (handle_x(row_list.at(0), 1, &container) + handle_x(row_list.at(0), 2, &container)) / 2;
+	const QPoint at(middle - handle->mapTo(&container, QPoint(0, 0)).x(), handle->height() / 2);
 	const QPoint global = handle->mapToGlobal(at);
 	QMouseEvent press(QEvent::MouseButtonPress, at, global, Qt::LeftButton, Qt::LeftButton, Qt::ShiftModifier);
 	QApplication::sendEvent(handle, &press);

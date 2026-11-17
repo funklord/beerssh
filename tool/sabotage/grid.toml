@@ -73,8 +73,8 @@ expect = "a_divider_moves_alone_with_shift_or_after_a_hold"
 [[sabotage]]
 name = "a dragged divider does not snap into line"
 file = "src/ui/pane_container.cpp"
-find = "\tif (target >= 0 && geometry.at(target).at != at) {\n"
-replace = "\tif (false && target >= 0 && geometry.at(target).at != at) {\n"
+find = "\t\tif (geometry.at(target).at != at) move_divider_to(m_drag, geometry.at(target).at);\n"
+replace = "\t\t(void)target;\n"
 expect = "a_dragged_divider_snaps_into_line_with_its_neighbour"
 
 # A double click evens out its own row and leaves the grid uneven.
@@ -134,3 +134,32 @@ file = "src/ui/pane_container.cpp"
 find = "\tif (!column && !m_built_collapsed) remember_divisions();\n"
 replace = "\tif (!column) remember_divisions();\n"
 expect = "a_grid_opened_before_its_window_shows_is_even"
+
+# The rows that followed a drag are not snapped. The dragged row's next
+# divider creeps a trim per step while theirs stay, so the grid ends out
+# of line -- a pixel at a 9 px cell, 13 px at Windows' 14 (sec 12.2).
+[[sabotage]]
+name = "the rows that follow a drag are left unsnapped"
+file = "src/ui/pane_container.cpp"
+find = "\t\tif (link.splitter && link.splitter != splitter) snap_splitter(link.splitter, link.index);"
+replace = "\t\t;"
+expect = "a_grid_stays_in_line_at_a_wide_cell"
+
+# A pane at its least is rounded below it. At its 20-column floor it sits
+# between cells; rounded down, the splitter refuses and moves the divider
+# BEFORE it, out of line with the other rows (a 14 px cell).
+[[sabotage]]
+name = "a pane is snapped below its least"
+file = "src/ui/pane_container.cpp"
+find = "\t\tif (snapped < least(i)) {"
+replace = "\t\tif (false) {"
+expect = "a_grid_stays_in_line_at_a_wide_cell"
+
+# The cell snap before the magnet: at a 16 px cell it carries a divider
+# dragged to within 3 px of a neighbour's line out of the magnet's reach.
+[[sabotage]]
+name = "a drag is snapped to cells before the magnet sees it"
+file = "src/ui/pane_container.cpp"
+find = "\t\tif (m_drag.splitter == splitter && m_drag.index == index) follow_divider(splitter, index);\n\t\telse snap_splitter(splitter);"
+replace = "\t\tsnap_splitter(splitter);\n\t\tfollow_divider(splitter, index);"
+expect = "a_grid_stays_in_line_at_a_wide_cell"

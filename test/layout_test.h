@@ -502,6 +502,7 @@ private slots:
 	void a_bell_in_a_visible_pane_is_not_a_missed_one();
 	void a_bell_with_the_window_away_is_a_missed_one();
 	void a_bell_on_screen_flashes_its_own_pane();
+	void a_grid_stays_in_line_at_a_wide_cell();
 	void the_caps_setting_reaches_a_sessions_router();
 
 	/*

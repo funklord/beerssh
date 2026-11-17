@@ -1,6 +1,8 @@
 #ifndef BSSH_PANE_CONTAINER_H
 #define BSSH_PANE_CONTAINER_H
 
+#include <climits>
+
 #include <QList>
 #include <QPair>
 #include <QString>
@@ -314,7 +316,9 @@ private:
 	/* Handle width, collapsing and the snap, the same for every splitter. */
 	void configure_splitter(QSplitter *splitter);
 	QList<QSplitter *> all_splitters() const;
-	void snap_splitter(QSplitter *splitter);
+	/* Only panes `from` to `to` when given, leaving every divider outside
+	 * them where it is (follow_divider). */
+	void snap_splitter(QSplitter *splitter, int from = 0, int to = INT_MAX);
 	void equalize_splitter(QSplitter *splitter);
 
 	/*

@@ -15780,21 +15780,52 @@ without an icon is defective, so there is a plain one meant to be replaced.
   combo box's name is its buddy's text or nothing. It has the question as
   its accessible name now, and `every_touch_surface_names_its_controls`
   requires a combo box to have a name or a label relation, not a value.
-  **Two layout tests fail on Windows alone and are skipped there, OPEN
-  and not explained** -- each QSKIP names its symptom: a grid row is not
-  uneven before its double-click, and a row divider moved alone regroups
-  every row rather than breaking at its column. Not the widget style:
-  forcing Fusion changed neither. Both drive the divider with
-  `drag_handle`'s synthetic mouse events. **Measured on the Windows job
-  (a diagnostic branch, 2026-11-17):** each 50 px step of the pointer
-  moved the divider 25-28 px there and 46-54 px on Linux, from the same
-  handle at the same place with the same sizes; and the middle pane
-  stopped near 300 px there and went to 189 here. **Not the wider cell:**
-  zooming these views to a 14 px cell on Linux moves the divider the full
-  distance and lets the middle pane reach 196 px. (An earlier note here
-  said a larger font did not reproduce it; that run set the default font
-  size, which never reaches these bare containers, and its cell stayed at
-  9 px -- it tested nothing.) What halves the movement on Windows is open.
+  **Two layout tests failed on Windows alone, and the cause was the
+  tests' geometry, not Windows** -- a grid row not uneven before its
+  double-click, and a row divider moved alone regrouping every row. A
+  per-step trace on the Windows job (2026-11-17, `windows-diag3`) showed
+  the handle following the pointer exactly, with the same
+  `mapFromGlobal`, window position and DPR 1 as Linux -- until it
+  stopped dead at x 493, where Linux went on to 590. The wall is the
+  terminal's 20-column floor (`bssh_terminal_view::minimumSizeHint`): 20
+  of Windows' 14 px cells plus the pane's edge is the 289 px the middle
+  pane stopped at, and 20 of Linux's 9 px is the 189 it reached. A third
+  of 1200 px leaves about 106 px above that floor on Windows; the tests
+  dragged 120 and 200, the middle pane bottomed out and pushed the rest
+  of its row, and the grid fell out of line. Both tests are 1800 wide
+  now, which leaves room at any cell up to about 20 px, and neither is
+  skipped.
+  **And the second one then found three real faults, on every
+  platform, all hidden by Linux's 9 px cell.** A grid's dividers in line
+  are a grid only while they stay within the 8 px handle of each other
+  (`runs_of` in `divider_links.cpp` cuts on the gap); past that the next
+  drag of the column moves one row. Reproduced on Linux by raising the
+  sessions' font to a 14 and a 16 px cell, and each fixed in
+  `pane_container.cpp`:
+  - **The rows that followed a drag were never snapped.** The dragged
+    row snaps every pane on every step and passes each trim on, so its
+    NEXT divider crept; the followers' stayed. 13 px apart at 14 px (pane
+    widths 462 against 475), one pixel at 9, inside the handle. Now every
+    row in the drag, the dragged one too, snaps the panes after its
+    divider from the same position, and comes out the same.
+  - **A pane at its least was snapped below it.** The 20-column floor
+    is between cells; rounded down, the splitter refused and moved the
+    divider BEFORE the pane, 4 px out of line in a hemmed-in row. It
+    rounds up a cell instead where the neighbour can spare it.
+  - **The cell snap ran before the magnet.** At 16 px it carried a
+    divider dragged to within 3 px of a neighbour's line (sec 8.7) out of
+    the magnet's reach, 11 px off. A drag now gives the magnet the raw
+    position and snaps the pane before the divider only off any line.
+  `a_grid_stays_in_line_at_a_wide_cell` runs all three at 14 and 16 px
+  and fails for each fix's sabotage (`tool/sabotage/grid.toml`), and
+  `a_row_divider_moved_alone_breaks_at_its_column` requires identical
+  rows after the drag, which fails the first at 9 px too (477 against
+  478).
+  **Two earlier readings here were wrong:** "the divider moves
+  half the pointer's distance" averaged a clamp into a rate, and "not
+  the wider cell" came from a zoom on Linux that evidently never reached
+  the floor -- the middle pane there reached 196 px, under a 14 px
+  cell's 289. Neither was a measurement of what it claimed.
   The same zoom sweep found the first version of the equalize fix leaving
   the last of three panes a cell and a half from the rest at a 10 px cell:
   `bssh_equal_pane_extents` now shares out whole cells evenly, and
