@@ -2168,8 +2168,10 @@ with any SFTP client.
   and its transport behind a seam. BeerSSH then consumes it either way. The SSH
   stage depends on nothing in fuzznet, so it need not wait. Extracting it is a
   deliberate piece of work, not something done in passing.
-- *What the client takes.* BeerSSH would accept cells as well as bytes, and the
-  size of that change has not been looked at.
+- *What the client takes* -- settled 2026-11-17 by building it. A client takes
+  history lines as cells (frame 15), converted through the rule it reads its
+  own cells by. It takes the screen as terminal bytes, the repaint fed to the
+  emulator it already has, so no cell format was needed for the screen.
 - *Hooks on the server*, later: matching against the server's emulator would see
   every state in real time at almost no bandwidth, even in Live, at the price of
   putting scripts on the server.
