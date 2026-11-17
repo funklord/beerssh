@@ -14,11 +14,32 @@
 #include <QLockFile>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QThread>
 #include <QVariant>
 
 #include <sys/stat.h>
 
 #include <algorithm>
+#include <functional>
+
+/*
+ * A write that failed, tried again a few times before it is reported.
+ *
+ * QSettings commits through a temporary renamed over the file, and on
+ * Windows that rename fails while another process has the file open for
+ * a moment -- a virus scanner, the indexer. The Windows CI job saw a
+ * host's save fail three times in two runs, in different tests, and
+ * pass on a rerun (2026-11-17); for a user that is an edit lost. Five
+ * attempts, 375 ms of waiting at most, and only when a write has already
+ * failed: a write that cannot happen still fails, a little later.
+ */
+static bool written_with_retries(const std::function<bool()> &write) {
+	for (int attempt = 0;; ++attempt) {
+		if (write()) return true;
+		if (attempt == 4) return false;
+		QThread::msleep(25UL << attempt);
+	}
+}
 
 namespace {
 
@@ -639,6 +660,10 @@ int bssh_profile_store::id_for_slug(const QString &slug) const {
 }
 
 bool bssh_profile_store::write_presets() {
+	return written_with_retries([this] { return write_presets_once(); });
+}
+
+bool bssh_profile_store::write_presets_once() {
 	QSettings file(presets_path(), QSettings::IniFormat);
 	file.clear();
 
@@ -700,6 +725,10 @@ bool bssh_profile_store::write_presets() {
 }
 
 bool bssh_profile_store::write_profiles() {
+	return written_with_retries([this] { return write_profiles_once(); });
+}
+
+bool bssh_profile_store::write_profiles_once() {
 	QSettings file(hosts_path(), QSettings::IniFormat);
 	file.clear();
 
@@ -1227,27 +1256,29 @@ bool bssh_profile_store::save_layout(const layout_state_t &layout) {
 		}
 	}
 
-	QSettings file(layout_path(), QSettings::IniFormat);
-	file.clear();
+	return written_with_retries([this, &layout, &ids] {
+		QSettings file(layout_path(), QSettings::IniFormat);
+		file.clear();
 
-	file.beginGroup(QStringLiteral("layout"));
-	file.setValue(QStringLiteral("hosts"), ids.join(QLatin1Char(',')));
-	if (!layout.kept_names.join(QString()).isEmpty())
-		file.setValue(QStringLiteral("kept"), layout.kept_names.join(QLatin1Char(',')));
-	file.setValue(QStringLiteral("panes"), layout.pane_count);
-	file.setValue(QStringLiteral("active"), layout.active_index);
-	if (!layout.shape.isEmpty()) file.setValue(QStringLiteral("shape"), layout.shape);
-	if (!layout.geometry.isNull()) file.setValue(QStringLiteral("geometry"), layout.geometry);
-	file.endGroup();
-	file.sync();
+		file.beginGroup(QStringLiteral("layout"));
+		file.setValue(QStringLiteral("hosts"), ids.join(QLatin1Char(',')));
+		if (!layout.kept_names.join(QString()).isEmpty())
+			file.setValue(QStringLiteral("kept"), layout.kept_names.join(QLatin1Char(',')));
+		file.setValue(QStringLiteral("panes"), layout.pane_count);
+		file.setValue(QStringLiteral("active"), layout.active_index);
+		if (!layout.shape.isEmpty()) file.setValue(QStringLiteral("shape"), layout.shape);
+		if (!layout.geometry.isNull()) file.setValue(QStringLiteral("geometry"), layout.geometry);
+		file.endGroup();
+		file.sync();
 
-	/* Same silence as the two writers above; see write_profiles. */
-	if (file.status() != QSettings::NoError) {
-		m_last_error = QStringLiteral("could not write %1").arg(file.fileName());
-		return false;
-	}
+		/* Same silence as the two writers above; see write_profiles. */
+		if (file.status() != QSettings::NoError) {
+			m_last_error = QStringLiteral("could not write %1").arg(file.fileName());
+			return false;
+		}
 
-	return true;
+		return true;
+	});
 }
 
 bssh_profile_store::layout_state_t bssh_profile_store::layout() const {

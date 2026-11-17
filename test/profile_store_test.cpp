@@ -1,5 +1,7 @@
 #include <QTemporaryDir>
 #include <QtTest>
+#include <chrono>
+#include <thread>
 #include <QFile>
 #include <QStandardPaths>
 
@@ -2771,4 +2773,49 @@ void profile_store_test::another_stores_save_is_seen_and_announced() {
 	/* A second change, after the file was replaced once: still watched. */
 	QVERIFY(first.save(make_profile(QStringLiteral("beta"), QStringLiteral("beta.example"))) > 0);
 	QTRY_COMPARE(second.profiles().count(), 2);
+}
+
+/*
+ * A write that fails for a moment and then could succeed is retried, not
+ * reported lost. Windows' form of it is another process holding the file
+ * while QSettings renames over it -- three failed host saves in two CI
+ * runs (2026-11-17); here the folder is read-only for 60 ms, which fails
+ * the first attempts the same way, and a second thread gives it back.
+ */
+void profile_store_test::a_save_blocked_for_a_moment_still_lands() {
+#ifdef Q_OS_WIN
+	QSKIP("a read-only folder does not stop a write on Windows");
+#else
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	bssh_profile_store store(dir.path());
+	QVERIFY(store.is_open());
+
+	const QFileDevice::Permissions open_mode = QFileDevice::ReadOwner | QFileDevice::WriteOwner
+	                                           | QFileDevice::ExeOwner;
+	QVERIFY(QFile::setPermissions(dir.path(), QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+	{
+		QFile probe(dir.filePath(QStringLiteral("probe")));
+		if (probe.open(QIODevice::WriteOnly)) {
+			probe.close();
+			probe.remove();
+			QFile::setPermissions(dir.path(), open_mode);
+			QSKIP("this account can write a read-only directory, so the block cannot be made here");
+		}
+	}
+	std::thread unblock([&dir, open_mode] {
+		std::this_thread::sleep_for(std::chrono::milliseconds(60));
+		QFile::setPermissions(dir.path(), open_mode);
+	});
+
+	bssh_profile_t host;
+	host.name = QStringLiteral("patient");
+	host.host = QStringLiteral("patient.example");
+	const int id = store.save(host);
+	unblock.join();
+	QVERIFY2(id != 0, "a save blocked for 60 ms was reported lost");
+
+	bssh_profile_store again(dir.path());
+	QCOMPARE(again.profile(id).host, QStringLiteral("patient.example"));
+#endif
 }

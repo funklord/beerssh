@@ -30,6 +30,7 @@ private slots:
 	void a_host_deleted_while_its_session_lived_gets_no_credential();
 	void a_delete_that_cannot_be_written_keeps_the_password_too();
 	void a_save_that_cannot_reach_the_disk_is_not_reported_as_saved();
+	void a_save_blocked_for_a_moment_still_lands();
 	void a_device_setting_that_cannot_be_written_says_so();
 	void a_hand_typed_port_out_of_range_falls_back_rather_than_wrapping();
 	void a_hand_typed_override_meets_the_same_bounds_as_a_preset();

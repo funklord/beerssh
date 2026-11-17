@@ -229,7 +229,9 @@ private:
 	 * changed() exactly like one that had.
 	 */
 	bool write_presets();
+	bool write_presets_once();
 	bool write_profiles();
+	bool write_profiles_once();
 	void sort_profiles();
 	void sort_presets();
 

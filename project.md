@@ -15764,10 +15764,17 @@ without an icon is defective, so there is a plain one meant to be replaced.
   and not explained** -- each QSKIP names its symptom: a grid row is not
   uneven before its double-click, and a row divider moved alone regroups
   every row rather than breaking at its column. Not the widget style:
-  forcing Fusion changed neither. The wider cell, filling panes to their
-  minimum sizes sooner, is the lead. **And one intermittent:**
-  `a_host_remembers_its_zoom` failed once on the Windows job, the host
-  list's save returning 0, and passed on the rerun; why is not known.
+  forcing Fusion changed neither. Both drive the divider with
+  `drag_handle`'s synthetic mouse events, which is what they share; a
+  larger font on Linux did not reproduce either, so the wider cell is
+  not, on that evidence, the cause.
+  **And host saves failing now and then on Windows:** three in two CI
+  runs, in different tests, each passing on a rerun. QSettings renames a
+  temporary over the file, which fails there while another process has
+  it open for a moment -- the likely cause, not a measured one. The three
+  store writers now try five times, 375 ms of waiting at most and only
+  after a failure (`a_save_blocked_for_a_moment_still_lands`, which blocks
+  the folder for 60 ms on Linux and fails without the retries).
   **The local shell is ConPTY** (`ssh/conpty_session.cpp`): the profile's
   shell as a command line, else `%COMSPEC%`; a reader thread for the
   output pipe and a writer thread with a queue, since both calls block;
