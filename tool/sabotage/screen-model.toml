@@ -123,6 +123,37 @@ expect = "a_repaint_carries_the_modes_a_program_set"
 [[sabotage]]
 name = "the client's insert and origin modes bend the drawing"
 file = "src/session/screen_model.c"
-find = "\tput_text(&sink, \"\\x1b[?6l\\x1b[4l\\x1b[r\");\n"
+find = "\tput_text(&sink, \"\\x1b[?6l\\x1b[4l\\x1b[r\\x1b[?7h\");\n"
 replace = "\t;\n"
 expect = "a_repaint_carries_the_modes_a_program_set"
+
+# A row that runs on from the row above, drawn with a cursor move like any
+# other, is a line of its own at the client: a copy splits it and a
+# narrower window will not rewrap it. Seen to fail 2026-11-17.
+[[sabotage]]
+name = "the repaint draws no row as continuing the one above"
+file = "src/session/screen_model.c"
+find = "\t\tconst int continues = info && info->continuation;\n"
+replace = "\t\tconst int continues = 0 && info;\n"
+expect = "a_repaint_draws_the_servers_screen_on_a_fresh_client"
+
+[[sabotage]]
+name = "a space written for a wrap at a row's start is left there"
+file = "src/session/screen_model.c"
+find = "\t\t\t\tif (cell.chars[0] == 0) erase_stand_in(&sink, model, row, 0, columns, &style);\n"
+replace = "\t\t\t\t;\n"
+expect = "a_repaint_draws_the_servers_screen_on_a_fresh_client"
+
+[[sabotage]]
+name = "a space written at the edge above a wrap is left there"
+file = "src/session/screen_model.c"
+find = "\t\t\t\tif (stand_in_above) erase_stand_in(&sink, model, row - 1, columns - 1, columns, &style);\n"
+replace = "\t\t\t\t;\n"
+expect = "a_repaint_draws_the_servers_screen_on_a_fresh_client"
+
+[[sabotage]]
+name = "a stand-in at the edge is erased, which unmarks the row below"
+file = "src/session/screen_model.c"
+find = "\tput_text(sink, col == columns - 1 ? \"\\x1b[P\" : \"\\x1b[X\");\n"
+replace = "\tput_text(sink, \"\\x1b[X\");\n"
+expect = "a_repaint_draws_the_servers_screen_on_a_fresh_client"

@@ -80,6 +80,8 @@ void bssh_screen_model_size(const bssh_screen_model_t *model, int *rows, int *co
 int bssh_screen_model_cell(const bssh_screen_model_t *model, int row, int column, bssh_screen_cell_t *out);
 void bssh_screen_model_cursor(const bssh_screen_model_t *model, int *row, int *column, int *visible);
 int bssh_screen_model_alternate(const bssh_screen_model_t *model);
+/* Whether a row is the tail of a line that ran past the right edge of the row above. */
+int bssh_screen_model_row_continues(const bssh_screen_model_t *model, int row);
 
 /*
  * The screen as bytes a terminal of the same size draws it from: the
@@ -92,10 +94,10 @@ int bssh_screen_model_alternate(const bssh_screen_model_t *model);
  * whole repaint, as snprintf does, so a caller can size a buffer and ask
  * again.
  *
- * Not carried yet: the primary screen underneath an alternate one, which
- * rows continue the row above (what a later narrower resize rewraps by), and
- * modes that are not drawn -- application cursor keys, bracketed paste,
- * mouse reporting.
+ * Which rows continue the row above is carried by drawing them through the
+ * wrap, and the modes a key, a paste, a click or later output depend on are
+ * said both ways. Not carried yet: the primary screen underneath an
+ * alternate one.
  */
 size_t bssh_screen_model_repaint(const bssh_screen_model_t *model, uint8_t *out, size_t capacity);
 

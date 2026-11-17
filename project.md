@@ -1586,9 +1586,33 @@ repaint. It must send the same arrow, paste, focus and mouse bytes as one
 that saw the whole stream, and draw later output in the same place.
 `screen-model.toml` breaks five parts of this, and each fails.
 
+**And which rows continue the row above** (the same day). A row a long line
+ran on to was drawn with a cursor move like any other, so at the client it
+was a line of its own: a copy split it, and a narrower window would not
+rewrap it.
+
+The repaint now draws such a row on past the edge, as the program's text
+did, and the client's libvterm marks the row itself. The repaint opens with
+autowrap on so that the wrap can happen. A wrap needs a character at each
+end, but the row above may have lost its last cell since, and the row may
+start with one never written. A space stands in for each, and is erased
+again once the wrap is made, so the cell reads as never written at both
+ends.
+
+`a_repaint_draws_the_servers_screen_on_a_fresh_client` now compares every
+row's continuation as well, over:
+- a line wrapped twice;
+- a wide glyph that wrapped at the edge;
+- a wrapped line whose upper row lost its last cell to a delete.
+
+An erase reaching the edge cannot leave that last case: libvterm takes it as
+the line ending there, and drops the next row's mark.
+
+Three sabotages fail it. The top row's own mark, meaning a line that began
+in the history, is not carried yet.
+
 **Not yet:**
 - The primary screen under an alternate one.
-- Which screen rows continue the row above.
 - History before the screen when the log does hold the bytes, which is Live
   mode's "latest first" proper. Today a keyframe answers only a gap.
 - The client's own rewrap of its scrollback on a narrower resize, which the

@@ -479,6 +479,59 @@ static void put_style(sink_t *sink, const bssh_screen_cell_t *cell) {
 	put_text(sink, "m");
 }
 
+/*
+ * Row `row`'s last column written again, so the cursor waits at the edge and
+ * the next character wraps. A wide glyph there is written whole; a cell never
+ * written goes as a space, since a wrap needs a character: returns 2 then, for
+ * the caller to erase it again once the wrap is made, and 1 otherwise.
+ */
+static int put_last_column(sink_t *sink, const bssh_screen_model_t *model, int row, int columns,
+                           bssh_screen_cell_t *style) {
+	char text[48];
+	int col = columns - 1;
+	bssh_screen_cell_t cell;
+	bssh_screen_model_cell(model, row, col, &cell);
+	if (cell.chars[0] == 0xFFFFFFFFu && col > 0) bssh_screen_model_cell(model, row, --col, &cell);
+	snprintf(text, sizeof text, "\x1b[%d;%dH", row + 1, col + 1);
+	put_text(sink, text);
+	if (!same_style(&cell, style)) {
+		put_style(sink, &cell);
+		*style = cell;
+	}
+	if (cell.chars[0] == 0) put_utf8(sink, ' ');
+	for (int i = 0; i < BSSH_SCREEN_CELL_CHARS && cell.chars[i]; ++i) put_utf8(sink, cell.chars[i]);
+	return cell.chars[0] == 0 ? 2 : 1;
+}
+
+/*
+ * A stand-in space erased again, in the pen it had: the cell was never
+ * written. At the last column by deleting it rather than erasing it, since
+ * libvterm takes an erase that reaches the edge as the line ending there and
+ * drops the next row's mark -- the one the wrap was written to make.
+ */
+static void erase_stand_in(sink_t *sink, const bssh_screen_model_t *model, int row, int col, int columns,
+                           bssh_screen_cell_t *style) {
+	char text[48];
+	bssh_screen_cell_t cell;
+	bssh_screen_model_cell(model, row, col, &cell);
+	snprintf(text, sizeof text, "\x1b[%d;%dH", row + 1, col + 1);
+	put_text(sink, text);
+	if (!same_style(&cell, style)) {
+		put_style(sink, &cell);
+		*style = cell;
+	}
+	put_text(sink, col == columns - 1 ? "\x1b[P" : "\x1b[X");
+}
+
+int bssh_screen_model_row_continues(const bssh_screen_model_t *model, int row) {
+	int rows = 0, columns = 0;
+	if (!model) return 0;
+	vterm_get_size(model->vt, &rows, &columns);
+	if (row <= 0 || row >= rows) return 0;
+	const VTermLineInfo *info = vterm_state_get_lineinfo(vterm_obtain_state(model->vt), row);
+	return info && info->continuation;
+}
+
 size_t bssh_screen_model_repaint(const bssh_screen_model_t *model, uint8_t *out, size_t capacity) {
 	sink_t sink = { out, out ? capacity : 0, 0 };
 	if (!model) return 0;
@@ -492,22 +545,41 @@ size_t bssh_screen_model_repaint(const bssh_screen_model_t *model, uint8_t *out,
 	put_text(&sink, model->alternate ? "\x1b[?1049h" : "\x1b[?1049l");
 	/* Nothing the client had set may bend the drawing: origin mode would
 	 * move every placement, insert mode push cells along. */
-	put_text(&sink, "\x1b[?6l\x1b[4l\x1b[r");
+	put_text(&sink, "\x1b[?6l\x1b[4l\x1b[r\x1b[?7h");
 	put_text(&sink, "\x1b[0m\x1b[H\x1b[2J");
 
 	int rows = 0, columns = 0;
 	vterm_get_size(model->vt, &rows, &columns);
 	bssh_screen_cell_t style;
 	memset(&style, 0, sizeof style);
+	/*
+	 * A row that continues the one above is drawn by writing on past the
+	 * edge, as the program's text did: the terminal then marks the row
+	 * itself, and it is that mark a copy joins by and a narrower window
+	 * rewraps by. Placed with a cursor move, the row would be a line of
+	 * its own at the client however it looked.
+	 */
+	const VTermState *lines = vterm_obtain_state(model->vt);
+	int wrapping = 0; /* the last column was just written */
 	for (int row = 0; row < rows; ++row) {
-		int at = -1; /* where the terminal's cursor is in this row, if known */
+		const VTermLineInfo *info = row > 0 ? vterm_state_get_lineinfo(lines, row) : NULL;
+		const int continues = info && info->continuation;
+		int stand_in_above = 0;
+		if (continues && !wrapping) {
+			wrapping = 1;
+			stand_in_above = put_last_column(&sink, model, row - 1, columns, &style) == 2;
+		}
+
+		int at = continues && wrapping ? 0 : -1; /* where the cursor is in this row, if known */
+		wrapping = 0;
 		for (int col = 0; col < columns; ++col) {
 			bssh_screen_cell_t cell;
 			if (!bssh_screen_model_cell(model, row, col, &cell)) continue;
 			if (cell.chars[0] == 0xFFFFFFFFu) continue; /* a wide glyph's far half */
+			const int wrap_here = continues && col == 0 && at == 0;
 			/* Never written and nothing to show: the slate already says so. */
-			if (cell.chars[0] == 0 && cell.attrs == 0 && cell.bg.kind == BSSH_SCREEN_COLOR_DEFAULT
-			    && cell.fg.kind == BSSH_SCREEN_COLOR_DEFAULT)
+			if (!wrap_here && cell.chars[0] == 0 && cell.attrs == 0
+			    && cell.bg.kind == BSSH_SCREEN_COLOR_DEFAULT && cell.fg.kind == BSSH_SCREEN_COLOR_DEFAULT)
 				continue;
 			if (at != col) {
 				snprintf(text, sizeof text, "\x1b[%d;%dH", row + 1, col + 1);
@@ -517,17 +589,29 @@ size_t bssh_screen_model_repaint(const bssh_screen_model_t *model, uint8_t *out,
 				put_style(&sink, &cell);
 				style = cell;
 			}
-			if (cell.chars[0] == 0) {
+			if (cell.chars[0] == 0 && !wrap_here) {
 				/* Erased in a colour: erased again, in the same pen. */
 				put_text(&sink, "\x1b[X");
 				at = -1;
 				continue;
 			}
+			/* The wrap needs a character; a space stands for one never written. */
+			if (cell.chars[0] == 0) put_utf8(&sink, ' ');
 			for (int i = 0; i < BSSH_SCREEN_CELL_CHARS && cell.chars[i]; ++i) put_utf8(&sink, cell.chars[i]);
 			at = col + (cell.width > 0 ? cell.width : 1);
+			if (wrap_here) {
+				/* The wrap is made: what stood in for unwritten cells goes. */
+				if (stand_in_above) erase_stand_in(&sink, model, row - 1, columns - 1, columns, &style);
+				if (cell.chars[0] == 0) erase_stand_in(&sink, model, row, 0, columns, &style);
+				if (stand_in_above || cell.chars[0] == 0) at = -1;
+			}
 			/* The last column leaves the cursor waiting to wrap; say where
-			 * the next cell is rather than trust it. */
-			if (at >= columns) at = -1;
+			 * the next cell is rather than trust it, unless the next row
+			 * is where it wraps to. */
+			if (at >= columns) {
+				at = -1;
+				wrapping = 1;
+			}
 		}
 	}
 

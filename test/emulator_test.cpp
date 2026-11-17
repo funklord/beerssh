@@ -754,6 +754,14 @@ void emulator_test::a_repaint_draws_the_servers_screen_on_a_fresh_client() {
 		QByteArrayLiteral("\x1b[44m\x1b[8;1H\x1b[Kblue line to the edge\x1b[0m\x1b[9;40Hz"),
 		QByteArrayLiteral("\x1b[?25l\x1b[?1049h\x1b[2J\x1b[1;1Hin the alternate screen\x1b[7;7H\x1b[44m \x1b[0m"),
 		QByteArrayLiteral("\x1b[?1049l\x1b[?25hback\r\n"),
+		QByteArray(95, 'w') + QByteArrayLiteral("\r\nwide at the edge: ") + QByteArray(20, 'x')
+		        + QByteArray("\xe4\xb8\xad\xe4\xb8\xad\r\n"),
+		/*
+		 * A wrapped line whose upper row lost its last cell since. Deleted,
+		 * not erased: libvterm takes an erase reaching the edge as the line
+		 * ending there, and drops the next row's mark.
+		 */
+		QByteArray(45, 'q') + QByteArrayLiteral("\r\n\x1b[2A\x1b[40G\x1b[P\x1b[2B"),
 	};
 	bssh_screen_model_t *server = bssh_screen_model_new(10, 40);
 	QVERIFY(server);
@@ -767,6 +775,11 @@ void emulator_test::a_repaint_draws_the_servers_screen_on_a_fresh_client() {
 		const QString difference = screen_difference(fresh, server);
 		QVERIFY2(difference.isEmpty(), qPrintable(QStringLiteral("after %1: %2")
 		                                          .arg(QString::fromLatin1(part.left(12).toHex()), difference)));
+
+		/* And which rows run on from the row above, which a copy joins by. */
+		for (int row = 0; row < 10; ++row)
+			QVERIFY2(fresh.row_is_continuation(row) == (bssh_screen_model_row_continues(server, row) != 0),
+			         qPrintable(QStringLiteral("row %1 after %2").arg(row).arg(QString::fromLatin1(part.left(12).toHex()))));
 	}
 	bssh_screen_model_free(server);
 }
