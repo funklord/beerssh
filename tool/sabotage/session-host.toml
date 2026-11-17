@@ -421,8 +421,8 @@ expect = "keeping_every_update_switches_during_a_session"
 [[sabotage]]
 name = "a host started anew is not told the mode"
 file = "src/model/session.cpp"
-find = "\t/* Every attach: a host started anew knows nothing of the last one's. */\n\tsend_output_mode();\n"
-replace = ""
+find = "\t * byte, or the screen and the lines missed -- depends on it.\n\t */\n\tsend_output_mode();\n"
+replace = "\t * byte, or the screen and the lines missed -- depends on it.\n\t */\n"
 expect = "keeping_every_update_switches_during_a_session"
 
 # A frame into a plain shell is typed at its prompt.
