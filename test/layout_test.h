@@ -87,6 +87,8 @@ private slots:
 	void a_terminal_dropped_on_a_side_band_makes_a_tab_bar_there();
 	void a_hidden_menu_bar_comes_back_from_the_terminal_menu();
 	void a_setting_another_process_writes_is_applied();
+	void every_key_a_shell_uses_reaches_the_remote();
+	void a_bare_alt_tap_does_not_take_the_next_key();
 	void hidden_bars_are_reached_from_the_corner();
 	void the_drum_steps_with_the_wheel_and_a_drag_and_wraps();
 

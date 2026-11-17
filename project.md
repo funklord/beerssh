@@ -1919,6 +1919,30 @@ quirks on Android.
   steal some (`Ctrl+Alt+F*` most notoriously), and dead keys/compose go through
   `inputMethodEvent` on desktop too. Test on both Wayland and X11 before
   calling the input layer done.
+- **Qt itself took keys from the shell -- fixed 2026-11-17.** The holder:
+  "tab key is being caught by the gui". Measured by pressing about 250 keys
+  through the window, as the window system delivers them (shortcuts, menu
+  mnemonics and focus navigation all get their chance first), and reading
+  what reached the remote. Three thieves, nothing else lost:
+  **Tab and Shift+Tab** went to focus navigation, which with a second tab
+  open moved focus to the pane's tab bar; **Alt+E, F, H, S and V** went to
+  the menu bar's `&File`, `&Edit`, `&View`, `&Settings` and `&Help` -- Alt+F
+  is readline's forward-word; and under a style with menu-bar Alt
+  navigation (Windows, Breeze) **a bare Alt tap** put the menus in
+  keyboard mode and took the next key. The terminal view now refuses focus
+  navigation (`focusNextPrevChild` returns false) and claims every
+  `ShortcutOverride` except the router's stolen chords
+  (`bssh_input_router::is_stolen`, the same match `handle_key` uses), so
+  the chord table stays the one list of keys the app may take: the
+  window's shortcuts are built from the same bindings and still fire.
+  `every_key_a_shell_uses_reaches_the_remote` (with a stolen chord checked
+  to still open Find) and `a_bare_alt_tap_does_not_take_the_next_key`;
+  each half of the fix taken out fails them. A keyboard user can no longer
+  Tab out of a terminal, as in every other terminal.
+  **Seen once in the full run that followed, not since:**
+  `an_unfocused_pane_resizing_leaves_the_focused_session_its_size` read 75
+  columns for 80; it passed alone three times, beside the new tests, and
+  in a second full run. Unexplained, not dismissed.
 - Support **key repeat**, modifier chords, and a configurable **Caps→Ctrl / map
   keys** option (power-user expectation).
   **Caps→Ctrl is built, and it is honestly partial.** Caps Lock arms Ctrl for

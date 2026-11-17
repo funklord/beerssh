@@ -721,6 +721,24 @@ bool bssh_terminal_view::event(QEvent *event) {
 		sync_corner();
 
 	/*
+	 * Every key is the remote's but the chords the router keeps (sec 6.1).
+	 * Qt asks the focused widget first, as ShortcutOverride, before any
+	 * window shortcut or menu mnemonic may take a key; unanswered, the
+	 * menu bar's &File, &Edit, &View, &Settings and &Help took Alt+F, E,
+	 * V, S and H from the shell -- Alt+F is readline's forward-word.
+	 * Claimed here, the key comes to keyPressEvent as a key. The window's
+	 * own shortcuts are built from the same bindings the router steals
+	 * (main_window.cpp), so they still fire; nothing else can.
+	 */
+	if (event->type() == QEvent::ShortcutOverride) {
+		QKeyEvent *key = static_cast<QKeyEvent *>(event);
+		if (!bssh_input_router::is_stolen(key->key(), key->modifiers())) {
+			event->accept();
+			return true;
+		}
+	}
+
+	/*
 	 * Pinch-to-zoom (sec 9.5). Qt recognises the gesture from the touch
 	 * points and delivers it here; there is no pinchEvent() to override.
 	 *
@@ -741,6 +759,18 @@ bool bssh_terminal_view::event(QEvent *event) {
 	}
 
 	return QWidget::event(event);
+}
+
+/*
+ * Tab and Shift+Tab are the shell's -- completion, and back through a
+ * menu of them -- not a way to move focus to the next widget. Qt offers
+ * them to focusNextPrevChild() before keyPressEvent sees them, and with a
+ * second tab open the pane's tab bar took focus and the key with it: "tab
+ * key is being caught by the gui" (the holder, 2026-11-17). Answering no
+ * hands the key on as a key.
+ */
+bool bssh_terminal_view::focusNextPrevChild(bool) {
+	return false;
 }
 
 void bssh_terminal_view::handle_pinch(qreal change) {

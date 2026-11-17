@@ -343,6 +343,14 @@ public:
 	 */
 	static const QList<chord_t> &stolen_chords();
 
+	/*
+	 * Whether this key, with these modifiers, is one of the chords above
+	 * -- by the same exact match handle_key steals with. The terminal view
+	 * asks it to answer Qt's ShortcutOverride: every other key is the
+	 * remote's, so no window shortcut or menu mnemonic may take it.
+	 */
+	static bool is_stolen(int key, Qt::KeyboardModifiers modifiers);
+
 	/* The built-in bindings, for showing a default and offering a reset. */
 	static const QList<chord_t> &default_chords();
 

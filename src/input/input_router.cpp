@@ -23,6 +23,19 @@ namespace {
  * stolen-chord list and the list the router acts on cannot be two lists
  * (sec 6.1), and a second copy of the mapping is a second way to disagree.
  */
+/*
+ * A chord matches EXACTLY -- Ctrl+Alt+Shift+Left is not Ctrl+Alt+Left --
+ * but against the four modifiers that MEAN something, not the raw set:
+ * Qt reports Qt::KeypadModifier for the keypad's own PageUp and
+ * Qt::GroupSwitchModifier on X11 with a third level engaged, and neither
+ * says which chord was pressed (see handle_key).
+ */
+bool chord_matches(const bssh_input_router::chord_t &chord, int key, Qt::KeyboardModifiers modifiers) {
+	const Qt::KeyboardModifiers meaningful = Qt::ControlModifier | Qt::ShiftModifier
+	                                          | Qt::AltModifier | Qt::MetaModifier;
+	return key == chord.key && (modifiers & meaningful) == chord.modifiers;
+}
+
 int emulator_key_for(int qt_key) {
 	switch (qt_key) {
 	case Qt::Key_Return:
@@ -344,6 +357,13 @@ const QList<bssh_input_router::chord_t> &bssh_input_router::stolen_chords() {
 	return effective_chords;
 }
 
+bool bssh_input_router::is_stolen(int key, Qt::KeyboardModifiers modifiers) {
+	for (const chord_t &chord : stolen_chords()) {
+		if (chord_matches(chord, key, modifiers)) return true;
+	}
+	return false;
+}
+
 bool bssh_input_router::handle_key(QKeyEvent *event) {
 	if (!m_emulator) return false;
 
@@ -406,12 +426,8 @@ bool bssh_input_router::handle_key(QKeyEvent *event) {
 	 * whole set would take Shift+PageUp on the main block and let it
 	 * through on the keypad, on the same keyboard.
 	 */
-	const Qt::KeyboardModifiers meaningful = Qt::ControlModifier | Qt::ShiftModifier
-	                                          | Qt::AltModifier | Qt::MetaModifier;
-
 	for (const chord_t &chord : stolen_chords()) {
-		if (event->key() != chord.key) continue;
-		if ((event->modifiers() & meaningful) != chord.modifiers) continue;
+		if (!chord_matches(chord, event->key(), event->modifiers())) continue;
 
 		emit shortcut_pressed(chord.action);
 		return false;
@@ -430,6 +446,8 @@ bool bssh_input_router::handle_key(QKeyEvent *event) {
 	 * actually keeps (an F-key to a navigation key, a stray key to Escape)
 	 * without a second, text-sending path to reason about.
 	 */
+	const Qt::KeyboardModifiers meaningful = Qt::ControlModifier | Qt::ShiftModifier
+	                                          | Qt::AltModifier | Qt::MetaModifier;
 	const Qt::KeyboardModifiers held = event->modifiers() & meaningful;
 	if (send_remap([event, held](const QKeyCombination &from) {
 		    return from.key() == event->key() && from.keyboardModifiers() == held;

@@ -83,6 +83,7 @@
 #include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
+#include <QStyleFactory>
 #include <QMessageBox>
 #include <QSettings>
 #include <QSplitter>
@@ -16690,4 +16691,187 @@ void layout_test::a_setting_another_process_writes_is_applied() {
 	QVERIFY(save.commit());
 
 	QTRY_VERIFY2(bar->isHidden(), "another process's setting was not applied");
+}
+
+/*
+ * Every key a shell or an editor relies on reaches the remote, pressed
+ * through the window the way a keyboard presses it -- window-system
+ * delivery, so shortcuts, menu mnemonics and focus navigation all get
+ * their chance first. The holder, 2026-11-17: "tab key is being caught by
+ * the gui". Only the router's own stolen chords (sec 6.1) may stay behind,
+ * and they are left out of the list by asking the router for them.
+ */
+void layout_test::every_key_a_shell_uses_reaches_the_remote() {
+	const forced_touch_t desktop(0);
+	struct restore_t {
+		bool shown = bssh_app_settings().menu_bar_shown();
+		~restore_t() { bssh_app_settings().set_menu_bar_shown(shown); }
+	} restore;
+	bssh_app_settings().set_menu_bar_shown(true);
+
+	QList<bssh_fake_ssh_session *> fakes;
+	const bssh_factory_reset_t factory_reset;
+	bssh_ssh_session::set_factory([&fakes](QObject *parent) -> bssh_ssh_session * {
+		fakes.append(new bssh_fake_ssh_session(parent));
+		return fakes.last();
+	});
+
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	const registry_left_as_found_t tidy(window.registry());
+	/*
+	 * A second tab first, so the window has the widgets a real one has
+	 * that Tab could move focus to: with one session nothing else takes
+	 * focus, and focus navigation had nowhere to go, so Tab got through.
+	 */
+	window.adopt_session(window.registry()->create(named(QStringLiteral("beta"))));
+	bssh_session *session = window.registry()->create(named(QStringLiteral("alpha")));
+	window.adopt_session(session);
+	session->connect_to_host();
+	QVERIFY(!fakes.isEmpty());
+	fakes.last()->simulate_key_auth_success();
+	QCoreApplication::processEvents();
+	QMenuBar *bar = window.findChild<QMenuBar *>();
+	QVERIFY2(bar && !bar->isHidden(), "the menu bar has to be up for its mnemonics to be tested");
+	int focusable = 0;
+	for (QWidget *widget : window.findChildren<QWidget *>()) {
+		if (widget->isVisible() && (widget->focusPolicy() & Qt::TabFocus)) ++focusable;
+	}
+	QVERIFY2(focusable >= 2, "nothing but the terminal takes focus, so Tab cannot be tested here");
+
+	bssh_terminal_view *view = window.panes()->view_for(window.layout_manager()->front_of(session));
+	QVERIFY(view);
+	view->activateWindow();
+	view->setFocus();
+	QTRY_VERIFY(view->hasFocus());
+
+	struct press_t { int key; Qt::KeyboardModifiers modifiers; QString name; };
+	QList<press_t> presses;
+	const auto add = [&presses](int key, Qt::KeyboardModifiers modifiers, const QString &name) {
+		presses.append({key, modifiers, name});
+	};
+	add(Qt::Key_Tab, Qt::NoModifier, QStringLiteral("Tab"));
+	add(Qt::Key_Backtab, Qt::ShiftModifier, QStringLiteral("Shift+Tab"));
+	add(Qt::Key_Tab, Qt::ControlModifier, QStringLiteral("Ctrl+Tab"));
+	add(Qt::Key_Backtab, Qt::ControlModifier | Qt::ShiftModifier, QStringLiteral("Ctrl+Shift+Tab"));
+	add(Qt::Key_Tab, Qt::AltModifier, QStringLiteral("Alt+Tab"));
+	add(Qt::Key_Escape, Qt::NoModifier, QStringLiteral("Escape"));
+	add(Qt::Key_Return, Qt::NoModifier, QStringLiteral("Return"));
+	add(Qt::Key_Backspace, Qt::NoModifier, QStringLiteral("Backspace"));
+	add(Qt::Key_Space, Qt::ControlModifier, QStringLiteral("Ctrl+Space"));
+	for (int key : {Qt::Key_Up, Qt::Key_Down, Qt::Key_Left, Qt::Key_Right, Qt::Key_Home, Qt::Key_End,
+	                Qt::Key_PageUp, Qt::Key_PageDown, Qt::Key_Insert, Qt::Key_Delete}) {
+		const QString name = QKeySequence(key).toString();
+		add(key, Qt::NoModifier, name);
+		add(key, Qt::ShiftModifier, QStringLiteral("Shift+") + name);
+		add(key, Qt::ControlModifier, QStringLiteral("Ctrl+") + name);
+		add(key, Qt::AltModifier, QStringLiteral("Alt+") + name);
+	}
+	for (int n = 0; n < 12; ++n) {
+		add(Qt::Key_F1 + n, Qt::NoModifier, QStringLiteral("F%1").arg(n + 1));
+		add(Qt::Key_F1 + n, Qt::ShiftModifier, QStringLiteral("Shift+F%1").arg(n + 1));
+	}
+	for (char letter = 'A'; letter <= 'Z'; ++letter) {
+		add(Qt::Key_A + (letter - 'A'), Qt::ControlModifier, QStringLiteral("Ctrl+%1").arg(QChar(letter)));
+		add(Qt::Key_A + (letter - 'A'), Qt::AltModifier, QStringLiteral("Alt+%1").arg(QChar(letter)));
+	}
+	for (int key : {Qt::Key_Period, Qt::Key_Comma, Qt::Key_Slash, Qt::Key_Underscore, Qt::Key_Less,
+	                Qt::Key_Greater}) {
+		add(key, Qt::AltModifier, QStringLiteral("Alt+") + QKeySequence(key).toString());
+	}
+
+	/* The chords the app keeps by design (sec 6.1) are not the question. */
+	const Qt::KeyboardModifiers meaningful = Qt::ControlModifier | Qt::ShiftModifier
+	                                          | Qt::AltModifier | Qt::MetaModifier;
+	const auto stolen = [&meaningful](int key, Qt::KeyboardModifiers modifiers) {
+		for (const bssh_input_router::chord_t &chord : bssh_input_router::stolen_chords()) {
+			if (chord.key == key && chord.modifiers == (modifiers & meaningful)) return true;
+		}
+		return false;
+	};
+
+	QStringList lost;
+	int pressed = 0;
+	for (const press_t &press : presses) {
+		if (stolen(press.key, press.modifiers)) continue;
+		++pressed;
+		view->setFocus();
+		QCoreApplication::processEvents();
+		fakes.last()->clear_written();
+		QTest::keyClick(window.windowHandle(), Qt::Key(press.key), press.modifiers);
+		QCoreApplication::processEvents();
+		if (fakes.last()->written().isEmpty()) lost << press.name;
+		/* A menu a mnemonic opened has to be closed before the next key. */
+		if (QWidget *popup = QApplication::activePopupWidget()) popup->close();
+		QCoreApplication::processEvents();
+	}
+	QVERIFY2(pressed > 100, "the list was mostly stolen, so this measured nothing");
+	QVERIFY2(lost.isEmpty(), qPrintable(QStringLiteral("never reached the remote: ") + lost.join(QStringLiteral(", "))));
+
+	/* And a chord the app does keep still does its job, through the window. */
+	QVERIFY(bssh_input_router::is_stolen(Qt::Key_F, Qt::ControlModifier | Qt::ShiftModifier));
+	view->setFocus();
+	fakes.last()->clear_written();
+	QTest::keyClick(window.windowHandle(), Qt::Key_F, Qt::ControlModifier | Qt::ShiftModifier);
+	QCoreApplication::processEvents();
+	bssh_find_bar *find = window.findChild<bssh_find_bar *>();
+	QVERIFY2(find && find->isVisible(), "a stolen chord pressed through the window did nothing");
+	QVERIFY2(fakes.last()->written().isEmpty(), "a stolen chord reached the remote as well");
+}
+
+/*
+ * A bare Alt tap, then a key: under a style with menu-bar Alt navigation
+ * (Windows, KDE's Breeze) a tap of Alt alone puts the menu bar in
+ * keyboard mode, and the next key goes to the menus. The test style is
+ * forced on the bar, since the system's own may not have the hint.
+ */
+void layout_test::a_bare_alt_tap_does_not_take_the_next_key() {
+	const forced_touch_t desktop(0);
+	struct restore_t {
+		bool shown = bssh_app_settings().menu_bar_shown();
+		~restore_t() { bssh_app_settings().set_menu_bar_shown(shown); }
+	} restore;
+	bssh_app_settings().set_menu_bar_shown(true);
+
+	QList<bssh_fake_ssh_session *> fakes;
+	const bssh_factory_reset_t factory_reset;
+	bssh_ssh_session::set_factory([&fakes](QObject *parent) -> bssh_ssh_session * {
+		fakes.append(new bssh_fake_ssh_session(parent));
+		return fakes.last();
+	});
+
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	const registry_left_as_found_t tidy(window.registry());
+	bssh_session *session = window.registry()->create(named(QStringLiteral("alpha")));
+	window.adopt_session(session);
+	session->connect_to_host();
+	fakes.last()->simulate_key_auth_success();
+	QMenuBar *bar = window.findChild<QMenuBar *>();
+	QVERIFY(bar && !bar->isHidden());
+	std::unique_ptr<QStyle> windows(QStyleFactory::create(QStringLiteral("Windows")));
+	QVERIFY2(windows, "no Windows style to test with");
+	QVERIFY2(windows->styleHint(QStyle::SH_MenuBar_AltKeyNavigation),
+	         "the test style has no Alt navigation, so this tests nothing");
+	bar->setStyle(windows.get());
+
+	bssh_terminal_view *view = window.panes()->view_for(window.layout_manager()->front_of(session));
+	view->activateWindow();
+	view->setFocus();
+	QTRY_VERIFY(view->hasFocus());
+
+	fakes.last()->clear_written();
+	QTest::keyPress(window.windowHandle(), Qt::Key_Alt, Qt::AltModifier);
+	QTest::keyRelease(window.windowHandle(), Qt::Key_Alt, Qt::NoModifier);
+	QCoreApplication::processEvents();
+	QTest::keyClick(window.windowHandle(), Qt::Key_X, Qt::NoModifier);
+	QCoreApplication::processEvents();
+	const QByteArray got = fakes.last()->written();
+	bar->setStyle(nullptr);
+	QVERIFY2(got.contains('x'), qPrintable(QStringLiteral("after a bare Alt, x sent: \"%1\"").arg(QString::fromLatin1(got))));
+	QVERIFY(view->hasFocus());
 }

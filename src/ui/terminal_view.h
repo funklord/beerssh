@@ -1007,6 +1007,7 @@ protected:
 	 * own, so this is the one place it can be caught.
 	 */
 	bool event(QEvent *event) override;
+	bool focusNextPrevChild(bool next) override;
 
 private:
 	/*
