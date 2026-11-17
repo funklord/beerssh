@@ -857,6 +857,13 @@ void profile_store_test::kept_scrollback_is_the_owners_alone() {
 	const QString path = bssh_kept_scrollback_path(7, dir.path());
 	QVERIFY(path.startsWith(dir.path()));
 
+#ifndef Q_OS_WIN
+	/*
+	 * POSIX mode bits. Windows has none to read: Qt reports group and
+	 * other as readable for any readable file there, unless it is asked
+	 * to walk the ACL, and what keeps the file the owner's is the
+	 * profile folder's ACL, not a mode this could check.
+	 */
 	const QFileDevice::Permissions perms = QFileInfo(path).permissions();
 	QVERIFY2(!(perms & (QFileDevice::ReadGroup | QFileDevice::ReadOther
 	                    | QFileDevice::WriteGroup | QFileDevice::WriteOther)),
@@ -867,6 +874,7 @@ void profile_store_test::kept_scrollback_is_the_owners_alone() {
 	QVERIFY2(!(folder & (QFileDevice::ReadGroup | QFileDevice::ReadOther
 	                     | QFileDevice::ExeGroup | QFileDevice::ExeOther)),
 	          "the kept-scrollback folder is open to others");
+#endif
 
 	bssh_scrollback back;
 	QVERIFY(bssh_load_kept_scrollback(7, &back, dir.path()));

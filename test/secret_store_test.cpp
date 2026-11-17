@@ -43,8 +43,12 @@ class app_data_redirect {
 public:
 	explicit app_data_redirect(const QTemporaryDir &dir)
 	        : m_had(qEnvironmentVariableIsSet("XDG_DATA_HOME")), m_old(qgetenv("XDG_DATA_HOME")) {
-#ifdef Q_OS_MACOS
+#if defined(Q_OS_MACOS) || defined(Q_OS_WIN)
 		/*
+		 * Windows reads no XDG_DATA_HOME either: its first suite run put
+		 * one store in the runner's own AppData for every test, so each
+		 * after the first met another's passphrase (2026-11-17).
+		 *
 		 * macOS reads no XDG_DATA_HOME, so this pointed at the account's
 		 * real ~/Library/Application Support, and the first test made a
 		 * store there with its own passphrase. Test mode moves it under
@@ -63,7 +67,7 @@ public:
 	}
 
 	~app_data_redirect() {
-#ifdef Q_OS_MACOS
+#if defined(Q_OS_MACOS) || defined(Q_OS_WIN)
 		QFile::remove(path);
 		QFile::remove(path + QStringLiteral(".lock"));
 		QStandardPaths::setTestModeEnabled(false);
@@ -568,11 +572,19 @@ void secret_store_test::the_store_is_replaced_atomically_and_stays_owner_only() 
 
 	const QFileDevice::Permissions mode = QFile::permissions(path);
 	QVERIFY2(mode.testFlag(QFileDevice::ReadOwner), "the owner has to be able to read it");
+#ifndef Q_OS_WIN
+	/*
+	 * POSIX mode bits. Windows has none to read: Qt reports group and
+	 * other as readable for any readable file there, unless it is asked
+	 * to walk the ACL, and what keeps the file the owner's is the
+	 * profile folder's ACL, not a mode this could check.
+	 */
 	QVERIFY2(!mode.testFlag(QFileDevice::ReadGroup) && !mode.testFlag(QFileDevice::ReadOther),
 	          qPrintable(QStringLiteral("a credential file must not be readable by anybody "
 	                                     "else; ReadGroup=%1 ReadOther=%2")
 	                      .arg(mode.testFlag(QFileDevice::ReadGroup))
 	                      .arg(mode.testFlag(QFileDevice::ReadOther))));
+#endif
 
 	/*
 	 * And a second write, which is the one that goes through the rename
@@ -581,9 +593,11 @@ void secret_store_test::the_store_is_replaced_atomically_and_stays_owner_only() 
 	 */
 	QVERIFY(store->store(QStringLiteral("profile:2:password"), QStringLiteral("second")));
 
+#ifndef Q_OS_WIN
 	const QFileDevice::Permissions after = QFile::permissions(path);
 	QVERIFY2(!after.testFlag(QFileDevice::ReadGroup) && !after.testFlag(QFileDevice::ReadOther),
 	          "replacing the store must not widen its permissions");
+#endif
 
 	/* And it is still the store it was: both secrets readable after a reopen. */
 	store->lock();
