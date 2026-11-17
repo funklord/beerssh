@@ -57,6 +57,7 @@ private slots:
 	void erase_display_clears_everything();
 	void scrolling_drops_the_top_line();
 	void sgr_sets_colour_and_attributes();
+	void the_servers_screen_agrees_with_the_clients();
 	void wide_characters_take_two_cells();
 	void utf8_split_across_chunks_still_composes();
 	void device_status_report_produces_a_reply();

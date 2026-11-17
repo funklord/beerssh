@@ -2,6 +2,7 @@
 
 #include "session/session_host.h"
 
+#include "session/screen_model.h"
 #include "session/wire.h"
 
 #include <errno.h>
@@ -49,6 +50,14 @@ typedef struct host {
 	size_t to_program_done;
 
 	int told_exit;
+
+	/*
+	 * The screen as the program has drawn it (sec 5.6's live screen), fed
+	 * every byte the log is, attached or not: what a client coming back
+	 * will be sent first. NULL when it could not be made, which costs that
+	 * and nothing else.
+	 */
+	bssh_screen_model_t *screen;
 } host_t;
 
 static int64_t now_ms(void) {
@@ -120,6 +129,7 @@ static void set_size(host_t *host, uint16_t columns, uint16_t rows) {
 	size.ws_col = columns;
 	size.ws_row = rows;
 	ioctl(host->pty, TIOCSWINSZ, &size);
+	bssh_screen_model_resize(host->screen, rows, columns);
 }
 
 static void flush_to_program(host_t *host) {
@@ -324,7 +334,10 @@ static void read_program(host_t *host) {
 		program_gone(host);
 		return;
 	}
-	if (got > 0) bssh_output_log_append(&host->log, chunk, (size_t)got, (uint64_t)now_ms());
+	if (got > 0) {
+		bssh_output_log_append(&host->log, chunk, (size_t)got, (uint64_t)now_ms());
+		bssh_screen_model_feed(host->screen, chunk, (size_t)got);
+	}
 }
 
 int bssh_session_host_run(const bssh_session_host_options_t *options) {
@@ -358,6 +371,9 @@ int bssh_session_host_run(const bssh_session_host_options_t *options) {
 		_exit(127);
 	}
 	set_nonblocking(host->pty);
+	/* The size a pty has before anyone says otherwise, as the program
+	 * sees it; the first attach sets the real one. */
+	host->screen = bssh_screen_model_new(24, 80);
 
 	int64_t linger_until = 0;
 	for (;;) {
@@ -427,6 +443,7 @@ int bssh_session_host_run(const bssh_session_host_options_t *options) {
 
 	if (host->pty >= 0) program_gone(host);
 	const int status = host->status;
+	bssh_screen_model_free(host->screen);
 	free(host);
 	return status;
 }

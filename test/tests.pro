@@ -139,6 +139,7 @@ SOURCES += \
     ../src/session/line_gaps.c \
     ../src/session/session_client.c \
     ../src/session/session_host.c \
+    ../src/session/screen_model.c \
     ../src/session/wire.c \
     ../src/session/generated/frame.c \
     ../src/session/generated/situ.c \
@@ -269,6 +270,7 @@ HEADERS += \
     ../src/model/app_settings.h \
     ../src/model/conn_manager.h \
     ../src/session/output_log.h \
+    ../src/session/screen_model.h \
     ../src/session/line_gaps.h \
     ../src/session/session_client.h \
     ../src/session/session_host.h \

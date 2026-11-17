@@ -868,7 +868,8 @@ $(TEST_BIN): $(VTERM_LIB) $(LIBSSH_LIB) $(TEST_BUILD_DIR)/Makefile $(SOURCES) $(
 # Static, so that one file runs on any Linux of this architecture.
 SESSION_BIN = $(BUILD_DIR)/beerssh-session
 SESSION_SRCS = src/session/session_main.c src/session/session_host.c src/session/output_log.c \
-               src/session/wire.c src/session/generated/frame.c src/session/generated/situ.c
+               src/session/screen_model.c src/session/wire.c src/session/generated/frame.c \
+               src/session/generated/situ.c
 .PHONY: session check-session
 session: $(SESSION_BIN)
 
@@ -893,10 +894,12 @@ fuzz-session: $(FUZZ_BIN)
 check-session: $(SESSION_BIN)
 	tool/check-session.sh $(SESSION_BIN)
 
-$(SESSION_BIN): $(SESSION_SRCS) $(wildcard src/session/*.h src/session/generated/*.h)
+# The patched libvterm, the client's own, for the live screen (sec 5.6): the
+# two ends must make the same screen of the same bytes.
+$(SESSION_BIN): $(SESSION_SRCS) $(VTERM_LIB) $(wildcard src/session/*.h src/session/generated/*.h)
 	@mkdir -p $(BUILD_DIR)
 	$(CC) -std=gnu11 -Os -ffunction-sections -fdata-sections -Wl,--gc-sections -static -Isrc \
-	      -o $@ $(filter %.c,$^)
+	      -I$(VTERM_DIR)/include -o $@ $(filter %.c,$^) $(VTERM_LIB)
 
 # The session protocol's bytes are defined by src/session/frame.situ, and what
 # situ generates from it is committed, so building needs no situ. This says

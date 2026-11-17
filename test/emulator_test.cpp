@@ -7,6 +7,7 @@
 
 #include "emulator_test.h"
 #include "term/emulator.h"
+#include "session/screen_model.h"
 #ifndef _WIN32
 #include "ssh/pty_session.h"
 #endif
@@ -504,6 +505,110 @@ void emulator_test::scrolling_drops_the_top_line() {
 	/* The screen scrolled: "one" is gone, "four" is on the last row. */
 	QCOMPARE(row(emulator, 0), QStringLiteral("two"));
 	QCOMPARE(row(emulator, 2), QStringLiteral("four"));
+}
+
+namespace {
+
+/* Where the two ends differ about a screen, said as the first cell that does;
+ * empty when they agree. */
+QString screen_difference(const bssh_emulator &client, const bssh_screen_model_t *server) {
+	int rows = 0, columns = 0;
+	bssh_screen_model_size(server, &rows, &columns);
+	if (rows != client.screen().rows() || columns != client.screen().cols())
+		return QStringLiteral("size %1x%2 against %3x%4").arg(columns).arg(rows)
+		        .arg(client.screen().cols()).arg(client.screen().rows());
+	const auto color = [](const bssh_screen_color_t &c) {
+		bssh_color_t out;
+		if (c.kind == BSSH_SCREEN_COLOR_INDEXED) {
+			out.kind = bssh_color_t::INDEXED;
+			out.index = c.index;
+		} else if (c.kind == BSSH_SCREEN_COLOR_RGB) {
+			out.kind = bssh_color_t::RGB;
+			out.rgb = qRgb(c.red, c.green, c.blue);
+		}
+		return out;
+	};
+	for (int row = 0; row < rows; ++row) {
+		for (int col = 0; col < columns; ++col) {
+			const bssh_cell_t &mine = client.screen().cell(row, col);
+			if (mine.width == 0) continue; /* the far half of a wide glyph */
+			bssh_screen_cell_t theirs;
+			if (!bssh_screen_model_cell(server, row, col, &theirs))
+				return QStringLiteral("no cell at %1,%2").arg(row).arg(col);
+			const char32_t ch = theirs.chars[0] ? char32_t(theirs.chars[0]) : U' ';
+			quint8 attrs = 0;
+			if (theirs.attrs & BSSH_SCREEN_BOLD) attrs |= bssh_cell_t::BOLD;
+			if (theirs.attrs & BSSH_SCREEN_ITALIC) attrs |= bssh_cell_t::ITALIC;
+			if (theirs.attrs & BSSH_SCREEN_UNDERLINE) attrs |= bssh_cell_t::UNDERLINE;
+			if (theirs.attrs & BSSH_SCREEN_REVERSE) attrs |= bssh_cell_t::INVERSE;
+			if (theirs.attrs & BSSH_SCREEN_BLINK) attrs |= bssh_cell_t::BLINK;
+			if (theirs.attrs & BSSH_SCREEN_STRIKE) attrs |= bssh_cell_t::STRIKE;
+			if (theirs.attrs & BSSH_SCREEN_DIM) attrs |= bssh_cell_t::DIM;
+			if (!theirs.chars[0]) attrs |= bssh_cell_t::UNWRITTEN;
+			const quint8 drawn = mine.attrs;
+			if (ch != mine.ch || theirs.width != mine.width || attrs != drawn || !(color(theirs.fg) == mine.fg)
+			    || !(color(theirs.bg) == mine.bg)) {
+				return QStringLiteral("cell %1,%2: U+%3 w%4 a%5 against U+%6 w%7 a%8")
+				        .arg(row).arg(col).arg(uint(ch), 0, 16).arg(theirs.width).arg(attrs)
+				        .arg(uint(mine.ch), 0, 16).arg(mine.width).arg(drawn);
+			}
+		}
+	}
+	int row = 0, col = 0, visible = 0;
+	bssh_screen_model_cursor(server, &row, &col, &visible);
+	if (row != client.screen().cursor_row() || col != client.screen().cursor_col()
+	    || bool(visible) != client.screen().cursor_visible())
+		return QStringLiteral("cursor %1,%2 (%3) against %4,%5 (%6)").arg(row).arg(col).arg(visible)
+		        .arg(client.screen().cursor_row()).arg(client.screen().cursor_col())
+		        .arg(client.screen().cursor_visible());
+	if (bool(bssh_screen_model_alternate(server)) != client.alternate_screen())
+		return QStringLiteral("alternate screen %1 against %2").arg(bssh_screen_model_alternate(server))
+		        .arg(client.alternate_screen());
+	return QString();
+}
+
+} /* namespace */
+
+void emulator_test::the_servers_screen_agrees_with_the_clients() {
+	/*
+	 * sec 5.6's live screen: the session host keeps its own copy of the
+	 * screen, to send a client coming back the screen as it is now before
+	 * the bytes behind it. That only works if both ends make the same
+	 * screen of the same bytes, cell for cell -- so the same patched
+	 * libvterm, set up the same way, and this checks it. The server is fed
+	 * in pieces that split escapes and UTF-8 sequences, as a pty read does.
+	 */
+	const QList<QByteArray> parts = {
+		QByteArrayLiteral("plain text, then \x1b[1;31mbold red\x1b[0m and \x1b[3;4;9mitalic under strike\x1b[0m\r\n"),
+		QByteArrayLiteral("\x1b[38;5;208m256 orange\x1b[48;2;10;20;30m on truecolor\x1b[0m \x1b[2;5;7mdim blink rev\x1b[0m\r\n"),
+		QByteArray("wide \xe4\xb8\xad\xe6\x96\x87 and combining e\xcc\x81 and \xf0\x9f\x98\x80\r\n"),
+		QByteArrayLiteral("\x1b[5;10Hplaced\x1b[2;1H\x1b[K\x1b[3;3r\x1b[3;1Hscroll\nregion\n\x1b[r"),
+		QByteArrayLiteral("\x1b[?25l\x1b[?1049h\x1b[2J\x1b[1;1Hin the alternate screen\x1b[7;7H\x1b[44m \x1b[0m"),
+		QByteArrayLiteral("\x1b[?1049l\x1b[?25hback\r\n"),
+	};
+	for (int split : { 1, 3, 7, 64 }) {
+		bssh_emulator client(40, 10);
+		bssh_screen_model_t *server = bssh_screen_model_new(10, 40);
+		QVERIFY(server);
+		for (const QByteArray &part : parts) {
+			client.feed(part);
+			for (int at = 0; at < part.size(); at += split) {
+				const int length = std::min<int>(split, part.size() - at);
+				bssh_screen_model_feed(server, reinterpret_cast<const uint8_t *>(part.constData()) + at,
+				                       size_t(length));
+			}
+			const QString difference = screen_difference(client, server);
+			QVERIFY2(difference.isEmpty(), qPrintable(QStringLiteral("in pieces of %1, after %2: %3")
+			                                          .arg(split).arg(QString::fromLatin1(part.left(12).toHex()))
+			                                          .arg(difference)));
+		}
+		/* Narrower, which rewraps (reflow at both ends). */
+		client.resize(25, 10);
+		bssh_screen_model_resize(server, 10, 25);
+		const QString difference = screen_difference(client, server);
+		QVERIFY2(difference.isEmpty(), qPrintable(QStringLiteral("after the resize: %1").arg(difference)));
+		bssh_screen_model_free(server);
+	}
 }
 
 void emulator_test::sgr_sets_colour_and_attributes() {

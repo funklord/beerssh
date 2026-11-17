@@ -1475,6 +1475,22 @@ the client under ASan and UBSan. `src/session/session_client.h` is the client's
 half, for both transports: it keeps its place across links and never joins text
 across a gap.
 
+**The live screen's first part [BUILT 2026-11-17]:** `src/session/screen_model.h`,
+the server's copy of the screen -- the same patched libvterm as the client, set
+up the same way, fed by the session host from every pty read and resized with
+the pty. `emulator_test::the_servers_screen_agrees_with_the_clients` feeds both
+ends the same bytes, the server's in pieces of 1, 3, 7 and 64, and compares every
+cell, the cursor and the alternate screen, before and after a reflowing resize.
+It found one difference at once: libvterm decodes a UTF-8 sequence split across
+two writes as U+FFFD, which the client has always held back for and the model
+had not, so the model holds the same tail (an incomplete sequence, or a lone ESC).
+It costs `beerssh-session` 58,872 bytes (790,160 to 849,032, static). **Not yet:**
+the history stream, so a resize that would pull lines back down from the
+scrollback differs; sending a snapshot -- a frame kind and the client applying
+it -- which is the next step, and until it exists nothing observes the host's
+feeding, so that wiring is unguarded by any test; and answering terminal queries
+from the server during a replay.
+
 **BeerSSH uses it over SSH, per host, off by default**: *Keep the shell on the
 server*, `resume_session`. Off because the probe is a round trip on every
 connection, for a program few hosts have yet; the holder's automatic negotiation
