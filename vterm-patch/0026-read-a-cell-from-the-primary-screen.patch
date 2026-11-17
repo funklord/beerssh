@@ -1,0 +1,46 @@
+Read a cell from the primary screen while the alternate is up
+
+A copy of the terminal made elsewhere -- BeerSSH's server keeps one and
+sends it to a client that reconnects (its project.md sec 5.6) -- has to
+carry the screen a full-screen program is drawn over, or leaving the
+program shows the client whatever it had before. vterm_screen_get_cell()
+reads only the screen showing, and the buffers are private to screen.c.
+
+vterm_screen_get_primary_cell() is the same read from the primary buffer,
+with the same conversion, swapping the buffer in for the one call.
+
+---
+--- a/include/vterm.h
++++ b/include/vterm.h
+@@ -625,6 +625,9 @@
+ int vterm_screen_get_attrs_extent(const VTermScreen *screen, VTermRect *extent, VTermPos pos, VTermAttrMask attrs);
+ 
+ int vterm_screen_get_cell(const VTermScreen *screen, VTermPos pos, VTermScreenCell *cell);
++/* The same, from the primary screen whichever one is showing: what is under
++ * a full-screen program, for a copy of the terminal made elsewhere. */
++int vterm_screen_get_primary_cell(const VTermScreen *screen, VTermPos pos, VTermScreenCell *cell);
+ 
+ int vterm_screen_is_eol(const VTermScreen *screen, VTermPos pos);
+ 
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -1371,6 +1371,19 @@
+   return 1;
+ }
+ 
++/* Read with the primary buffer swapped in for the one call: getcell() and
++ * screencell_to_cell() read the current buffer, and are the conversion the
++ * screen's own cells get. Nothing else can run between the two swaps. */
++int vterm_screen_get_primary_cell(const VTermScreen *screen, VTermPos pos, VTermScreenCell *cell)
++{
++  VTermScreen *writable = (VTermScreen *)screen;
++  ScreenCell *showing = writable->buffer;
++  writable->buffer = writable->buffers[BUFIDX_PRIMARY];
++  int got = vterm_screen_get_cell(screen, pos, cell);
++  writable->buffer = showing;
++  return got;
++}
++
+ int vterm_screen_is_eol(const VTermScreen *screen, VTermPos pos)
+ {
+   /* This cell is EOL if this and every cell to the right is black */

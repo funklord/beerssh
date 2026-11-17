@@ -853,6 +853,55 @@ void emulator_test::a_repaint_carries_the_modes_a_program_set() {
 	}
 }
 
+void emulator_test::a_repaint_keeps_the_screen_under_a_full_screen_program() {
+	/*
+	 * A client coming back while an editor is up is shown the editor -- and
+	 * when the editor exits, the shell underneath: what the server's
+	 * primary screen held, where the shell's cursor was, and which of its
+	 * rows ran on from the row above -- the cursor short of the last text,
+	 * as a shell's is under a status line. A client given only the repaint must
+	 * leave the program onto the screen of one that saw the whole stream,
+	 * whatever its own primary screen held before.
+	 */
+	const QByteArray stream = QByteArrayLiteral("$ ls\r\n\x1b[1;32mgreen\x1b[0m file\r\n") + QByteArray(55, 'L')
+	                          + QByteArrayLiteral("\r\n$ vi\x1b[8;1Ha status line below\x1b[5;5H")
+	                          + QByteArrayLiteral("\x1b[?1049h\x1b[2J\x1b[H~ editing\x1b[5;5Hhere");
+	bssh_screen_model_t *server = bssh_screen_model_new(10, 40);
+	QVERIFY(server);
+	bssh_screen_model_feed(server, reinterpret_cast<const uint8_t *>(stream.constData()), size_t(stream.size()));
+	QVERIFY(bssh_screen_model_alternate(server));
+	const size_t length = bssh_screen_model_repaint(server, nullptr, 0);
+	QByteArray repaint(int(length), Qt::Uninitialized);
+	bssh_screen_model_repaint(server, reinterpret_cast<uint8_t *>(repaint.data()), length);
+
+	bssh_emulator saw_it_all(40, 10);
+	saw_it_all.feed(stream);
+	bssh_emulator came_back(40, 10);
+	came_back.feed(QByteArrayLiteral("what this client had before\r\n\x1b[44mblue\x1b[0m"));
+	came_back.feed(repaint);
+
+	/* The program's own screen first, as the existing test checks it. */
+	QCOMPARE(came_back.screen().to_text(), saw_it_all.screen().to_text());
+
+	/* Then the program exits, and the shell writes on. */
+	const QByteArray after = QByteArrayLiteral("\x1b[?1049lafter");
+	saw_it_all.feed(after);
+	came_back.feed(after);
+	QCOMPARE(came_back.screen().to_text(), saw_it_all.screen().to_text());
+	for (int row = 0; row < 10; ++row) {
+		QCOMPARE(came_back.row_is_continuation(row), saw_it_all.row_is_continuation(row));
+		for (int col = 0; col < 40; ++col) {
+			const bssh_cell_t &got = came_back.screen().cell(row, col);
+			const bssh_cell_t &want = saw_it_all.screen().cell(row, col);
+			QVERIFY2(got.ch == want.ch && got.attrs == want.attrs && got.width == want.width
+			                 && got.fg.kind == want.fg.kind && got.fg.index == want.fg.index
+			                 && got.bg.kind == want.bg.kind,
+			         qPrintable(QStringLiteral("cell %1,%2").arg(row).arg(col)));
+		}
+	}
+	bssh_screen_model_free(server);
+}
+
 void emulator_test::sgr_sets_colour_and_attributes() {
 	bssh_emulator emulator(20, 3);
 

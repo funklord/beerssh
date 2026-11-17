@@ -41,8 +41,8 @@ expect = "a_repaint_draws_the_servers_screen_on_a_fresh_client"
 [[sabotage]]
 name = "the repaint ignores the alternate screen"
 file = "src/session/screen_model.c"
-find = "\tput_text(&sink, model->alternate ? \"\\x1b[?1049h\" : \"\\x1b[?1049l\");\n"
-replace = "\t;\n"
+find = "\t\tput_text(&sink, \"\\x1b[?1049h\\x1b[0m\\x1b[H\\x1b[2J\");\n"
+replace = "\t\tput_text(&sink, \"\\x1b[0m\\x1b[H\\x1b[2J\");\n"
 expect = "a_repaint_draws_the_servers_screen_on_a_fresh_client"
 
 # A program that hid the cursor gets it back on every keyframe.
@@ -57,7 +57,7 @@ expect = "a_repaint_draws_the_servers_screen_on_a_fresh_client"
 [[sabotage]]
 name = "the repaint skips cells erased in a colour"
 file = "src/session/screen_model.c"
-find = "\t\t\t\tput_text(&sink, \"\\x1b[X\");\n"
+find = "\t\t\t\tput_text(sink, \"\\x1b[X\");\n"
 replace = "\t\t\t\t;\n"
 expect = "a_repaint_draws_the_servers_screen_on_a_fresh_client"
 
@@ -123,8 +123,8 @@ expect = "a_repaint_carries_the_modes_a_program_set"
 [[sabotage]]
 name = "the client's insert and origin modes bend the drawing"
 file = "src/session/screen_model.c"
-find = "\tput_text(&sink, \"\\x1b[?6l\\x1b[4l\\x1b[r\\x1b[?7h\");\n"
-replace = "\t;\n"
+find = "\tput_text(&sink, \"\\x1b[?1049l\\x1b[?6l\\x1b[4l\\x1b[r\\x1b[?7h\\x1b[0m\\x1b[H\\x1b[2J\");\n"
+replace = "\tput_text(&sink, \"\\x1b[?1049l\\x1b[0m\\x1b[H\\x1b[2J\");\n"
 expect = "a_repaint_carries_the_modes_a_program_set"
 
 # A row that runs on from the row above, drawn with a cursor move like any
@@ -133,21 +133,21 @@ expect = "a_repaint_carries_the_modes_a_program_set"
 [[sabotage]]
 name = "the repaint draws no row as continuing the one above"
 file = "src/session/screen_model.c"
-find = "\t\tconst int continues = info && info->continuation;\n"
-replace = "\t\tconst int continues = 0 && info;\n"
+find = "\t\tconst int continues = row_continues(model, primary, row);\n"
+replace = "\t\tconst int continues = 0 && row_continues(model, primary, row);\n"
 expect = "a_repaint_draws_the_servers_screen_on_a_fresh_client"
 
 [[sabotage]]
 name = "a space written for a wrap at a row's start is left there"
 file = "src/session/screen_model.c"
-find = "\t\t\t\tif (cell.chars[0] == 0) erase_stand_in(&sink, model, row, 0, columns, &style);\n"
+find = "\t\t\t\tif (cell.chars[0] == 0) erase_stand_in(sink, model, primary, row, 0, columns, &style);\n"
 replace = "\t\t\t\t;\n"
 expect = "a_repaint_draws_the_servers_screen_on_a_fresh_client"
 
 [[sabotage]]
 name = "a space written at the edge above a wrap is left there"
 file = "src/session/screen_model.c"
-find = "\t\t\t\tif (stand_in_above) erase_stand_in(&sink, model, row - 1, columns - 1, columns, &style);\n"
+find = "\t\t\t\tif (stand_in_above) erase_stand_in(sink, model, primary, row - 1, columns - 1, columns, &style);\n"
 replace = "\t\t\t\t;\n"
 expect = "a_repaint_draws_the_servers_screen_on_a_fresh_client"
 
@@ -157,3 +157,34 @@ file = "src/session/screen_model.c"
 find = "\tput_text(sink, col == columns - 1 ? \"\\x1b[P\" : \"\\x1b[X\");\n"
 replace = "\tput_text(sink, \"\\x1b[X\");\n"
 expect = "a_repaint_draws_the_servers_screen_on_a_fresh_client"
+
+# The screen under a full-screen program, which a client leaving it after a
+# reconnect is shown (a_repaint_keeps_the_screen_under_a_full_screen_program).
+# Seen to fail 2026-11-17.
+[[sabotage]]
+name = "the repaint leaves the primary screen as the client had it"
+file = "src/session/screen_model.c"
+find = "\tif (model->alternate) {\n\t\tput_screen(&sink, model, 1, rows, columns);\n"
+replace = "\tif (model->alternate) {\n"
+expect = "a_repaint_keeps_the_screen_under_a_full_screen_program"
+
+[[sabotage]]
+name = "the primary screen is read from the one showing"
+file = "src/session/screen_model.c"
+find = "\tif (!primary || !model->alternate) return bssh_screen_model_cell(model, row, column, out);\n"
+replace = "\tif (1) return bssh_screen_model_cell(model, row, column, out);\n"
+expect = "a_repaint_keeps_the_screen_under_a_full_screen_program"
+
+[[sabotage]]
+name = "the primary screen's rows are marked as the alternate's are"
+file = "src/session/screen_model.c"
+find = "\tif (primary && model->alternate)\n\t\treturn state->lineinfos[BUFIDX_PRIMARY]"
+replace = "\tif (0)\n\t\treturn state->lineinfos[BUFIDX_PRIMARY]"
+expect = "a_repaint_keeps_the_screen_under_a_full_screen_program"
+
+[[sabotage]]
+name = "the shell's cursor is not put back under the program"
+file = "src/session/screen_model.c"
+find = "\t\tput_text(&sink, text);\n\t\tput_text(&sink, \"\\x1b[?1049h\\x1b[0m\\x1b[H\\x1b[2J\");\n"
+replace = "\t\tput_text(&sink, \"\\x1b[?1049h\\x1b[0m\\x1b[H\\x1b[2J\");\n"
+expect = "a_repaint_keeps_the_screen_under_a_full_screen_program"

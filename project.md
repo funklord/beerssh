@@ -1608,11 +1608,28 @@ row's continuation as well, over:
 An erase reaching the edge cannot leave that last case: libvterm takes it as
 the line ending there, and drops the next row's mark.
 
-Three sabotages fail it. The top row's own mark, meaning a line that began
+Four sabotages fail it. The top row's own mark, meaning a line that began
 in the history, is not carried yet.
 
+**And the screen under a full-screen program** (the same day). A client
+coming back while an editor was up was shown the editor. When the editor
+exited, the client showed whatever its own primary screen had held. The
+repaint now draws the primary screen first, with its continuation marks,
+and puts the cursor where the shell's was saved. Only then does it switch
+to the alternate screen and draw that, as the program did.
+
+libvterm keeps the primary buffer private to `screen.c`, so
+`vterm-patch/0026` adds `vterm_screen_get_primary_cell`. That is the same
+read and conversion as `vterm_screen_get_cell`, with the primary buffer
+swapped in for the call. The Makefile's witness checks for it, like the
+other patches.
+
+`emulator_test::a_repaint_keeps_the_screen_under_a_full_screen_program`
+checks a client that had other text on its primary screen and was given
+only the repaint. It leaves the program onto the same cells, rows and cursor
+as one that saw the whole stream. Four sabotages fail it.
+
 **Not yet:**
-- The primary screen under an alternate one.
 - History before the screen when the log does hold the bytes, which is Live
   mode's "latest first" proper. Today a keyframe answers only a gap.
 - The client's own rewrap of its scrollback on a narrower resize, which the

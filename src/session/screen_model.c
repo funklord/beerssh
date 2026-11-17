@@ -480,18 +480,47 @@ static void put_style(sink_t *sink, const bssh_screen_cell_t *cell) {
 }
 
 /*
+ * A cell of the screen showing, or of the primary one underneath an alternate
+ * screen (vterm-patch/0026): what the repaint draws first when a full-screen
+ * program is up, so leaving it shows the shell as it was.
+ */
+static int read_cell(const bssh_screen_model_t *model, int primary, int row, int column, bssh_screen_cell_t *out) {
+	if (!primary || !model->alternate) return bssh_screen_model_cell(model, row, column, out);
+	memset(out, 0, sizeof *out);
+	out->width = 1;
+	int rows = 0, columns = 0;
+	vterm_get_size(model->vt, &rows, &columns);
+	if (row < 0 || row >= rows || column < 0 || column >= columns) return 0;
+	VTermPos pos = { .row = row, .col = column };
+	VTermScreenCell cell;
+	if (!vterm_screen_get_primary_cell(model->screen, pos, &cell)) return 0;
+	convert(&cell, out);
+	return 1;
+}
+
+/* Whether a row of that screen continues the row above. */
+static int row_continues(const bssh_screen_model_t *model, int primary, int row) {
+	if (row <= 0) return 0;
+	const VTermState *state = vterm_obtain_state(model->vt);
+	if (primary && model->alternate)
+		return state->lineinfos[BUFIDX_PRIMARY] && state->lineinfos[BUFIDX_PRIMARY][row].continuation;
+	const VTermLineInfo *info = vterm_state_get_lineinfo(state, row);
+	return info && info->continuation;
+}
+
+/*
  * Row `row`'s last column written again, so the cursor waits at the edge and
  * the next character wraps. A wide glyph there is written whole; a cell never
  * written goes as a space, since a wrap needs a character: returns 2 then, for
  * the caller to erase it again once the wrap is made, and 1 otherwise.
  */
-static int put_last_column(sink_t *sink, const bssh_screen_model_t *model, int row, int columns,
+static int put_last_column(sink_t *sink, const bssh_screen_model_t *model, int primary, int row, int columns,
                            bssh_screen_cell_t *style) {
 	char text[48];
 	int col = columns - 1;
 	bssh_screen_cell_t cell;
-	bssh_screen_model_cell(model, row, col, &cell);
-	if (cell.chars[0] == 0xFFFFFFFFu && col > 0) bssh_screen_model_cell(model, row, --col, &cell);
+	read_cell(model, primary, row, col, &cell);
+	if (cell.chars[0] == 0xFFFFFFFFu && col > 0) read_cell(model, primary, row, --col, &cell);
 	snprintf(text, sizeof text, "\x1b[%d;%dH", row + 1, col + 1);
 	put_text(sink, text);
 	if (!same_style(&cell, style)) {
@@ -509,11 +538,11 @@ static int put_last_column(sink_t *sink, const bssh_screen_model_t *model, int r
  * libvterm takes an erase that reaches the edge as the line ending there and
  * drops the next row's mark -- the one the wrap was written to make.
  */
-static void erase_stand_in(sink_t *sink, const bssh_screen_model_t *model, int row, int col, int columns,
-                           bssh_screen_cell_t *style) {
+static void erase_stand_in(sink_t *sink, const bssh_screen_model_t *model, int primary, int row, int col,
+                           int columns, bssh_screen_cell_t *style) {
 	char text[48];
 	bssh_screen_cell_t cell;
-	bssh_screen_model_cell(model, row, col, &cell);
+	read_cell(model, primary, row, col, &cell);
 	snprintf(text, sizeof text, "\x1b[%d;%dH", row + 1, col + 1);
 	put_text(sink, text);
 	if (!same_style(&cell, style)) {
@@ -532,24 +561,9 @@ int bssh_screen_model_row_continues(const bssh_screen_model_t *model, int row) {
 	return info && info->continuation;
 }
 
-size_t bssh_screen_model_repaint(const bssh_screen_model_t *model, uint8_t *out, size_t capacity) {
-	sink_t sink = { out, out ? capacity : 0, 0 };
-	if (!model) return 0;
+/* One screen's cells, onto a clean slate the caller has made. */
+static void put_screen(sink_t *sink, const bssh_screen_model_t *model, int primary, int rows, int columns) {
 	char text[48];
-
-	/*
-	 * Into the alternate screen first when it is up, so what follows lands
-	 * on it; then a clean slate. An erased cell is an unwritten one at both
-	 * ends, which is what most of a screen is.
-	 */
-	put_text(&sink, model->alternate ? "\x1b[?1049h" : "\x1b[?1049l");
-	/* Nothing the client had set may bend the drawing: origin mode would
-	 * move every placement, insert mode push cells along. */
-	put_text(&sink, "\x1b[?6l\x1b[4l\x1b[r\x1b[?7h");
-	put_text(&sink, "\x1b[0m\x1b[H\x1b[2J");
-
-	int rows = 0, columns = 0;
-	vterm_get_size(model->vt, &rows, &columns);
 	bssh_screen_cell_t style;
 	memset(&style, 0, sizeof style);
 	/*
@@ -559,22 +573,20 @@ size_t bssh_screen_model_repaint(const bssh_screen_model_t *model, uint8_t *out,
 	 * rewraps by. Placed with a cursor move, the row would be a line of
 	 * its own at the client however it looked.
 	 */
-	const VTermState *lines = vterm_obtain_state(model->vt);
 	int wrapping = 0; /* the last column was just written */
 	for (int row = 0; row < rows; ++row) {
-		const VTermLineInfo *info = row > 0 ? vterm_state_get_lineinfo(lines, row) : NULL;
-		const int continues = info && info->continuation;
+		const int continues = row_continues(model, primary, row);
 		int stand_in_above = 0;
 		if (continues && !wrapping) {
 			wrapping = 1;
-			stand_in_above = put_last_column(&sink, model, row - 1, columns, &style) == 2;
+			stand_in_above = put_last_column(sink, model, primary, row - 1, columns, &style) == 2;
 		}
 
 		int at = continues && wrapping ? 0 : -1; /* where the cursor is in this row, if known */
 		wrapping = 0;
 		for (int col = 0; col < columns; ++col) {
 			bssh_screen_cell_t cell;
-			if (!bssh_screen_model_cell(model, row, col, &cell)) continue;
+			if (!read_cell(model, primary, row, col, &cell)) continue;
 			if (cell.chars[0] == 0xFFFFFFFFu) continue; /* a wide glyph's far half */
 			const int wrap_here = continues && col == 0 && at == 0;
 			/* Never written and nothing to show: the slate already says so. */
@@ -583,26 +595,26 @@ size_t bssh_screen_model_repaint(const bssh_screen_model_t *model, uint8_t *out,
 				continue;
 			if (at != col) {
 				snprintf(text, sizeof text, "\x1b[%d;%dH", row + 1, col + 1);
-				put_text(&sink, text);
+				put_text(sink, text);
 			}
 			if (!same_style(&cell, &style)) {
-				put_style(&sink, &cell);
+				put_style(sink, &cell);
 				style = cell;
 			}
 			if (cell.chars[0] == 0 && !wrap_here) {
 				/* Erased in a colour: erased again, in the same pen. */
-				put_text(&sink, "\x1b[X");
+				put_text(sink, "\x1b[X");
 				at = -1;
 				continue;
 			}
 			/* The wrap needs a character; a space stands for one never written. */
-			if (cell.chars[0] == 0) put_utf8(&sink, ' ');
-			for (int i = 0; i < BSSH_SCREEN_CELL_CHARS && cell.chars[i]; ++i) put_utf8(&sink, cell.chars[i]);
+			if (cell.chars[0] == 0) put_utf8(sink, ' ');
+			for (int i = 0; i < BSSH_SCREEN_CELL_CHARS && cell.chars[i]; ++i) put_utf8(sink, cell.chars[i]);
 			at = col + (cell.width > 0 ? cell.width : 1);
 			if (wrap_here) {
 				/* The wrap is made: what stood in for unwritten cells goes. */
-				if (stand_in_above) erase_stand_in(&sink, model, row - 1, columns - 1, columns, &style);
-				if (cell.chars[0] == 0) erase_stand_in(&sink, model, row, 0, columns, &style);
+				if (stand_in_above) erase_stand_in(sink, model, primary, row - 1, columns - 1, columns, &style);
+				if (cell.chars[0] == 0) erase_stand_in(sink, model, primary, row, 0, columns, &style);
 				if (stand_in_above || cell.chars[0] == 0) at = -1;
 			}
 			/* The last column leaves the cursor waiting to wrap; say where
@@ -614,6 +626,35 @@ size_t bssh_screen_model_repaint(const bssh_screen_model_t *model, uint8_t *out,
 			}
 		}
 	}
+}
+
+size_t bssh_screen_model_repaint(const bssh_screen_model_t *model, uint8_t *out, size_t capacity) {
+	sink_t sink = { out, out ? capacity : 0, 0 };
+	if (!model) return 0;
+	char text[48];
+
+	int rows = 0, columns = 0;
+	vterm_get_size(model->vt, &rows, &columns);
+	const VTermState *state_now = vterm_obtain_state(model->vt);
+
+	/*
+	 * The primary screen first, then into the alternate one when it is up,
+	 * as the program went: leaving it then shows the shell as it was, at
+	 * the place its cursor was saved, and not whatever the client had.
+	 * Each onto a clean slate; an erased cell is an unwritten one at both
+	 * ends, which is what most of a screen is. Nothing the client had set
+	 * may bend the drawing: origin mode would move every placement, insert
+	 * mode push cells along, and a wrap needs autowrap.
+	 */
+	put_text(&sink, "\x1b[?1049l\x1b[?6l\x1b[4l\x1b[r\x1b[?7h\x1b[0m\x1b[H\x1b[2J");
+	if (model->alternate) {
+		put_screen(&sink, model, 1, rows, columns);
+		snprintf(text, sizeof text, "\x1b[0m\x1b[%d;%dH", state_now->saved_primary.pos.row + 1,
+		         state_now->saved_primary.pos.col + 1);
+		put_text(&sink, text);
+		put_text(&sink, "\x1b[?1049h\x1b[0m\x1b[H\x1b[2J");
+	}
+	put_screen(&sink, model, 0, rows, columns);
 
 	/*
 	 * The modes, each said both ways: the client fed this was somewhere

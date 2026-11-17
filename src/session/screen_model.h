@@ -95,9 +95,9 @@ int bssh_screen_model_row_continues(const bssh_screen_model_t *model, int row);
  * again.
  *
  * Which rows continue the row above is carried by drawing them through the
- * wrap, and the modes a key, a paste, a click or later output depend on are
- * said both ways. Not carried yet: the primary screen underneath an
- * alternate one.
+ * wrap, the modes a key, a paste, a click or later output depend on are said
+ * both ways, and under a full-screen program the primary screen is drawn
+ * first, as the program's own switch left it.
  */
 size_t bssh_screen_model_repaint(const bssh_screen_model_t *model, uint8_t *out, size_t capacity);
 
