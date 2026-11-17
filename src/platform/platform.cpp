@@ -1,5 +1,6 @@
 #include "platform/platform.h"
 
+#include <QApplication>
 #include <QGuiApplication>
 #include <QNetworkInformation>
 
@@ -166,6 +167,12 @@ bool bssh_platform::has_biometric() const {
 void bssh_platform::notify(const QString &title, const QString &body) {
 	emit notified(title, body);
 	platform_notify(title, body);
+}
+
+void bssh_platform::request_attention(QWidget *window) {
+	if (!window) return;
+	emit attention_requested(window);
+	QApplication::alert(window);
 }
 
 void bssh_platform::set_sleep_inhibited(bool inhibit) {

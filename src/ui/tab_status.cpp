@@ -15,14 +15,9 @@ state_t state_for(const bssh_session *session) {
 	switch (session->state()) {
 	case bssh_ssh_session::DISCONNECTED:
 	case bssh_ssh_session::FAILED:
-		/*
-		 * Dead beats everything, including an unheard bell: a bell on a
-		 * tab whose connection has dropped would invite the user to go
-		 * read output that is no longer arriving.
-		 */
 		return DISCONNECTED;
 	case bssh_ssh_session::CONNECTED:
-		return session->has_unseen_bell() ? BELL : CONNECTED;
+		return CONNECTED;
 	default:
 		/* Resolving, connecting, authenticating -- all "not yet". */
 		return CONNECTING;
@@ -30,7 +25,7 @@ state_t state_for(const bssh_session *session) {
 }
 
 /*
- * Two sets, same four hues, because these were chosen against a dark tab
+ * Two sets, same hues, because these were chosen against a dark tab
  * bar and stopped working when sec 6.2's light theme arrived. Measured
  * against the light window colour, every one of them failed WCAG's 3:1
  * for a graphical indicator -- green 1.83:1, grey 2.22:1, and the
@@ -50,8 +45,6 @@ QColor colour_for(state_t state) {
 		return light ? QColor(0x22, 0x97, 0x54) : QColor(0x2e, 0xcc, 0x71);
 	case CONNECTING:
 		return light ? QColor(0xa0, 0x82, 0x09) : QColor(0xf1, 0xc4, 0x0f);
-	case BELL:
-		return light ? QColor(0x26, 0x89, 0xd1) : QColor(0x2b, 0x90, 0xd9);
 	case DISCONNECTED:
 		return light ? QColor(0x74, 0x89, 0x8b) : QColor(0x95, 0xa5, 0xa6);
 	}

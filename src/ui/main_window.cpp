@@ -3338,6 +3338,18 @@ void bssh_main_window::wire_session(bssh_session *session) {
 	connect(session, &bssh_session::title_changed, this, [this, session] {
 		if (session == m_current) update_window_title();
 	});
+
+	/*
+	 * The bell asks for the window's attention (sec 5.5): the urgency hint,
+	 * xterm's bellIsUrgent, which the desktop shows on the taskbar and
+	 * clears itself when the window is raised -- so it never lingers the
+	 * way the tab's bell dot did. Only from the window holding the session
+	 * now: one torn out of here is wired here still.
+	 */
+	connect(session, &bssh_session::bell_rang, this, [this, session] {
+		if (m_shown.contains(session) && bssh_platform::instance())
+			bssh_platform::instance()->request_attention(this);
+	});
 }
 void bssh_main_window::adopt_session(bssh_session *session) {
 	if (!session || m_shown.contains(session)) return;

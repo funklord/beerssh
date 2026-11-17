@@ -1380,7 +1380,8 @@ holds a socket open simply keeps holding it. What still needs deciding is what
   against a default.
 - **Desktop notifications** (via `QSystemTrayIcon`, or the platform's native
   service) carry the same events the Android notification does: reconnecting,
-  reconnect failed, bell rang in an unfocused pane. And a fourth since the Fold:
+  reconnect failed, and -- until 2026-11-17, and on Android still -- a bell
+  rung while away (the bell entry below). And a fourth since the Fold:
   a session stopped on a question nobody is looking at (*Waiting for you*).
   **[BUILT 2026-09-20], and what was there before was the whole feature
   except the part that runs.** `bssh_platform::notify()` was declared with
@@ -1434,26 +1435,39 @@ holds a socket open simply keeps holding it. What still needs deciding is what
   broken thing -- and only running them says which one you have. That is
   the argument for the harness rather than for care: it removes the
   moment where being careful is a choice.
-- **The visual bell [BUILT 2026-11-17].** A bell rung in a session ON
-  screen did nothing at all: not missed, so no dot and no notification,
-  and nothing else answered it. The holder, the same day: the bell is
-  "mostly used as a direct signal for attention, it is not really supposed
-  to be a notification ... it rarely carries value afterwards". So the
-  pane it rang in inverts for 120 ms -- xterm's `visualBell`, the old
-  answer to the same question -- and keeps nothing. Painted as reverse
-  video on top of DECSCNM, so a screen the remote reversed flashes back
-  to normal; a burst of bells is one flash held from the last, not a
-  strobe; `bell_enabled` off silences it like the dot. The session emits
-  `bell_on_screen` where it already holds both conditions, beside
-  `bell_while_away`, and the pane container wires it to that pane's view.
-  `layout_test::a_bell_on_screen_flashes_its_own_pane`.
-  **Open, the holder's: the off-screen half.** By the same reading the
-  dot that waits until the tab is seen, and the desktop notification
-  (decided 2026-09-29, above and sec 8.3), are the lingering kind. A
-  transient alternative is the window manager's urgency hint
-  (`QApplication::alert`, xterm's `bellIsUrgent`), which clears itself
-  when the window is raised. Not changed without the holder's word,
-  since it reverses a decision of theirs.
+- **The bell [DECIDED and BUILT 2026-11-17 by the holder].** "It used to
+  be a sound, but most people prefer visual notification, always
+  configurable. It has nothing to do with which one has focus or is being
+  looked at. It always signals the user, unless turned off for that
+  terminal." And: "use the urgency hint, drop the lasting tab mark." So
+  every bell, while the host's `bell_enabled` is on, does two things and
+  keeps nothing:
+  - **every pane showing the session flashes**, inverted for 120 ms --
+    xterm's `visualBell` -- focused or not, the app in front or not.
+    Painted as reverse video on top of DECSCNM, so a screen the remote
+    reversed flashes back to normal; a burst of bells is one flash held
+    from the last, not a strobe;
+  - **the window holding the session asks for attention**: the urgency
+    hint, `QApplication::alert` (xterm's `bellIsUrgent`), which the
+    desktop shows on its taskbar and clears itself when the window is
+    raised. Through `bssh_platform::request_attention`, which emits
+    `attention_requested` first so a test can hear it offscreen.
+  What went: the tab's bell dot, which stayed until the tab was looked at
+  (sec 8.3), and the bell's desktop notification. **Android keeps a
+  notification for a bell rung while the app is away**, because it has no
+  urgency hint and a notification is the one way it can call for attention
+  at all -- an assumption to check with the holder. The session emits one
+  `bell_rang`, where `bell_enabled` is in hand, and listeners decide what a
+  bell looks like. **Not checked against other terminals before the first
+  version, and it should have been:** xterm, Konsole, GNOME Terminal and
+  iTerm2 all treat the bell as a per-profile signal -- sound, flash,
+  urgency or nothing -- independent of focus, which is exactly the
+  holder's answer; this tree had made it a remembered mark about unseen
+  tabs. `layout_test::a_bell_flashes_its_pane_and_asks_for_the_window`,
+  `a_bell_asks_for_its_windows_attention`,
+  `session_registry_test::a_bell_rings_whoever_is_looking_unless_silenced`;
+  `tool/sabotage/visual-bell.toml`, four edits. The handoff stream keeps
+  the old mark's field, always false, so two builds still hand over.
 
 ---
 
@@ -8020,8 +8034,9 @@ a tab dragged to the end of a two-tab bar would tear itself out mid-reorder.
 
 - **Tab bar:** horizontally scrollable; label from **OSC title** with fallback to
   the profile name; a small **status dot** per tab (connected / reconnecting /
-  disconnected / bell-rang-while-away — and *away* means **no pane**, not
-  *unfocused*; see below). Long-press (touch) or right-click
+  disconnected). A fourth state, bell-rang-while-away, was taken out by the
+  holder on 2026-11-17: a bell is a flash and the window's urgency hint now
+  (§5.5), and leaves nothing on the tab. Long-press (touch) or right-click
   (desktop) for close/duplicate/move-to-split; desktop also gets a middle-click
   close and drag-to-reorder. The long-press is **built** (see §6.4 — Qt does not
   provide the gesture, so it is `bssh_long_press`), and the tab bar is the last
@@ -8033,16 +8048,17 @@ a tab dragged to the end of a two-tab bar would tear itself out mid-reorder.
   *Show beside current*, is already disabled wherever the long-press is the
   input, because touch means COMPACT means one pane (§8.2).
 - **"While away" means no pane on screen, not merely unfocused**, and it was
-  the second of those until a split made the difference visible. The flag was
+  the second of those until a split made the difference visible. It decides
+  §5.5's *Waiting for you* and reconnect notices, and decided the bell dot
+  while there was one. The flag was
   driven by which session the *window* had made current, which is the same
   thing only while there is one pane. With two, a bell in the pane beside the
   one being typed in raised a you-missed-this dot on a pane the user was
   looking straight at — and the pane that lost focus was marked away while
   still visible. The pane container owns the answer now, because "which
   sessions are on screen" is the question it exists to answer: a session with a
-  pane is on screen, one without is a tab. The four dot states, the rule that
-  **dead beats an unheard bell**, and the light/dark contrast floor for the
-  colours were all already built and tested.
+  pane is on screen, one without is a tab. The dot states and the light/dark
+  contrast floor for their colours were already built and tested.
   **A pane is necessary and not sufficient: the window has to be up too.**
   Answering from the layout alone left every pane "on screen" while the whole
   app was hidden — the tray on desktop, the task moved to the back on Android
@@ -8058,9 +8074,8 @@ a tab dragged to the end of a two-tab bar would tear itself out mid-reorder.
   beside `isVisible()`, and asks again on `application_active_changed`.
   Application-wide on purpose: a BeerSSH dialog in front of the terminal,
   or a second BeerSSH window, is not "another program". The same flag gates
-  §5.5's desktop notifications, so a bell in a window behind a browser now
-  raises one, which is what that section's own list said ("a bell in an
-  unfocused pane"). The suite forces the answer in front, since the
+  §5.5's desktop notifications. (The bell no longer asks it: since
+  2026-11-17 a bell signals whoever is looking, §5.5.) The suite forces the answer in front, since the
   offscreen platform never activates anything; `layout_test` flips it.
   Guarded by `tool/sabotage/away-behind.toml`, two edits; the platform's
   forwarding of the real state is not reachable offscreen and says so.

@@ -11598,24 +11598,14 @@ void layout_test::a_divider_is_thumb_sized_only_where_a_thumb_uses_it() {
 	QVERIFY2(splitter->handleWidth() > 0, "a divider nobody can grab is not a divider");
 }
 
-void layout_test::a_bell_in_a_visible_pane_is_not_a_missed_one() {
+void layout_test::a_visible_pane_is_on_screen_focused_or_not() {
 	/*
-	 * sec 8.3's fourth dot state is "bell-rang-while-AWAY", and the flag
-	 * behind it documents itself as a bell that rang "while this session
-	 * was not the one on screen".
+	 * Which sessions are on screen -- what sec 5.5's "Waiting for you"
+	 * asks before it notifies, and once sec 8.3's bell dot asked too.
 	 *
 	 * With a split, more than one session is on screen at once. Only the
-	 * FOCUSED one was ever marked so, so a bell in the pane beside the
-	 * one being typed in raised a you-missed-this dot on a pane the user
-	 * was looking at -- and the same rule marked a still-visible pane as
-	 * off screen the moment focus left it.
-	 *
-	 * Asserted on the FLAG rather than on the dot: these sessions never
-	 * connected, and state_for() answers DISCONNECTED for them whatever
-	 * the bell says -- deliberately, since a bell on a dead tab would
-	 * send someone to read output that stopped arriving. Which state wins
-	 * is tab_status_test's question; this one is about which sessions
-	 * count as on screen.
+	 * FOCUSED one was ever marked so, so the pane beside the one being
+	 * typed in counted as away while the user was looking straight at it.
 	 */
 	bssh_session_registry registry;
 	bssh_layout_manager layout;
@@ -11634,9 +11624,7 @@ void layout_test::a_bell_in_a_visible_pane_is_not_a_missed_one() {
 	/* Focus is on the first; the second is beside it and plainly visible. */
 	QCOMPARE(container.focused_session(), a);
 
-	b->emulator()->feed(QByteArrayLiteral("\a"));
-	QVERIFY2(!b->has_unseen_bell(),
-	          "a bell in a pane on screen beside the focused one is not missed");
+	QVERIFY2(b->is_on_screen(), "a pane beside the focused one is on screen");
 
 	/*
 	 * And a session the layout is NOT showing is away, which is the case
@@ -11647,26 +11635,22 @@ void layout_test::a_bell_in_a_visible_pane_is_not_a_missed_one() {
 	QCoreApplication::processEvents();
 	QCOMPARE(container.pane_count(), 1);
 
-	b->emulator()->feed(QByteArrayLiteral("\a"));
-	QVERIFY2(b->has_unseen_bell(), "a bell in a session with no pane is exactly what the dot is for");
+	QVERIFY2(!b->is_on_screen(), "a session with no pane is away");
 
-	/*
-	 * Bringing it back on screen clears it, because the point of the dot
-	 * is that you have not looked yet.
-	 */
 	layout.set_intent({a, b});
 	container.rebuild();
 	QCoreApplication::processEvents();
-	QVERIFY2(!b->has_unseen_bell(), "showing the pane again means it has been seen");
+	QVERIFY2(b->is_on_screen(), "showing the pane again puts it on screen");
 }
 
-void layout_test::a_bell_on_screen_flashes_its_own_pane() {
+void layout_test::a_bell_flashes_its_pane_and_asks_for_the_window() {
 	/*
-	 * The visual bell (sec 5.5). A bell rang in a session on screen did
-	 * nothing at all: it was not missed, so it marked no tab, and nothing
-	 * else answered it. The holder (2026-11-17): the bell is "a direct
-	 * signal for attention", so it shows where the eyes are -- the pane it
-	 * rang in, not its neighbour -- and goes again by itself.
+	 * The bell (sec 5.5), as the holder set it on 2026-11-17: "a direct
+	 * signal for attention", and "it has nothing to do with which one has
+	 * focus or is being looked at. It always signals the user, unless
+	 * turned off for that terminal." So the pane it rang in flashes --
+	 * focused or not, the app in front or not -- not its neighbour, and
+	 * goes again by itself.
 	 */
 	bssh_session_registry registry;
 	bssh_layout_manager layout;
@@ -11692,6 +11676,17 @@ void layout_test::a_bell_on_screen_flashes_its_own_pane() {
 	QTRY_VERIFY_WITH_TIMEOUT(!view_b->bell_flashing(), 2000);
 	QCOMPARE(view_b->effective_background(), background);
 
+	/* With the app behind another, the same: whether anyone is looking does
+	 * not enter into it. */
+	bssh_platform::force_application_active(0);
+	QCoreApplication::processEvents();
+	QVERIFY(!b->is_on_screen());
+	b->emulator()->feed(QByteArrayLiteral("\a"));
+	QVERIFY2(view_b->bell_flashing(), "a bell with the app behind another flashes too");
+	bssh_platform::force_application_active(1);
+	QCoreApplication::processEvents();
+	QTRY_VERIFY_WITH_TIMEOUT(!view_b->bell_flashing(), 2000);
+
 	/* A host that silences the bell gets no flash either (sec 10.2). */
 	QJsonObject quiet = b->settings();
 	quiet.insert(QStringLiteral("bell_enabled"), false);
@@ -11700,18 +11695,54 @@ void layout_test::a_bell_on_screen_flashes_its_own_pane() {
 	QVERIFY2(!view_b->bell_flashing(), "bell_enabled off means no signal at all");
 }
 
-void layout_test::a_bell_with_the_window_away_is_a_missed_one() {
+void layout_test::a_bell_asks_for_its_windows_attention() {
 	/*
-	 * The case sec 8.3's dot most exists for, and the one having a pane
-	 * does not answer: the whole window is gone. On desktop that is
-	 * sec 5.5's hide-to-tray, on Android sec 5.5's move-to-back, and in
+	 * The rest of the bell (sec 5.5): the window holding the session asks
+	 * for attention -- the urgency hint, xterm's bellIsUrgent -- for a
+	 * session in a tab behind the current one as for the one in front, and
+	 * not at all for a host with bells off. It replaced the tab's bell dot,
+	 * which stayed until the tab was looked at (the holder, 2026-11-17).
+	 */
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	const registry_left_as_found_t tidy(window.registry());
+	bssh_session *a = window.registry()->create(named(QStringLiteral("a")));
+	bssh_session *b = window.registry()->create(named(QStringLiteral("b")));
+	window.adopt_session(a);
+	window.adopt_session(b);
+	QCoreApplication::processEvents();
+
+	QList<QWidget *> asked;
+	QObject sink;
+	QObject::connect(bssh_platform::instance(), &bssh_platform::attention_requested, &sink,
+	                 [&asked](QWidget *each) { asked.append(each); });
+	a->emulator()->feed(QByteArrayLiteral("\a"));
+	b->emulator()->feed(QByteArrayLiteral("\a"));
+	QCOMPARE(asked.size(), 2);
+	QCOMPARE(asked.at(0), static_cast<QWidget *>(&window));
+	QCOMPARE(asked.at(1), static_cast<QWidget *>(&window));
+
+	QJsonObject quiet = b->settings();
+	quiet.insert(QStringLiteral("bell_enabled"), false);
+	b->set_settings(quiet);
+	b->emulator()->feed(QByteArrayLiteral("\a"));
+	QCOMPARE(asked.size(), 2);
+}
+
+void layout_test::a_pane_in_a_hidden_window_is_away() {
+	/*
+	 * The case having a pane does not answer: the whole window is gone.
+	 * On desktop that is sec 5.5's hide-to-tray, on Android sec 5.5's
+	 * move-to-back, and in
 	 * both the sessions keep running with nobody watching -- which is
 	 * precisely "away".
 	 *
 	 * A pane is necessary and not sufficient. Marking on-screen from the
 	 * layout alone left every pane on screen while the app was in the
-	 * background, so the bell that rang while the user was in another
-	 * app -- the one they most want to know about -- raised nothing.
+	 * background, so what happened while the user was in another app --
+	 * what they most want to know about -- raised nothing.
 	 */
 	bssh_session_registry registry;
 	bssh_layout_manager layout;
@@ -11734,19 +11765,16 @@ void layout_test::a_bell_with_the_window_away_is_a_missed_one() {
 	QCoreApplication::processEvents();
 	QCOMPARE(container->pane_count(), 1);
 
-	a->emulator()->feed(QByteArrayLiteral("\a"));
-	QVERIFY2(!a->has_unseen_bell(), "the window is up and the pane is on it");
+	QVERIFY2(a->is_on_screen(), "the window is up and the pane is on it");
 
 	window.hide();
 	QCoreApplication::processEvents();
 
-	a->emulator()->feed(QByteArrayLiteral("\a"));
-	QVERIFY2(a->has_unseen_bell(), "a bell with the window away is exactly what the dot is for");
+	QVERIFY2(!a->is_on_screen(), "the window is hidden, so the pane is away");
 
-	/* And coming back is seeing it. */
 	window.show();
 	QCoreApplication::processEvents();
-	QVERIFY2(!a->has_unseen_bell(), "the window came back, so it has been seen");
+	QVERIFY2(a->is_on_screen(), "the window came back");
 }
 
 void layout_test::the_caps_setting_reaches_a_sessions_router() {

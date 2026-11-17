@@ -35,7 +35,6 @@ bssh_session::bssh_session(const bssh_profile_t &profile, QObject *parent)
       m_font_zoom(0),
       m_transport(nullptr),
       m_user_disconnected(false),
-      m_unseen_bell(false),
       m_remote_exited(false),
       m_exit_status(0),
       m_used_key_auth(false),
@@ -89,28 +88,15 @@ bssh_session::bssh_session(const bssh_profile_t &profile, QObject *parent)
 
 	connect(m_emulator, &bssh_emulator::bell, this, [this] {
 		/*
-		 * A host whose preset silences the bell (sec 10.2) -- a noisy
-		 * build machine, say -- should not mark its tab either. The
-		 * setting means "do not tell me", not "tell me quietly".
+		 * Every bell, unless this host has bells off (sec 10.2) -- a noisy
+		 * build machine, say. Not only an unseen one: the holder
+		 * (2026-11-17), "it has nothing to do with which one has focus or
+		 * is being looked at. It always signals the user, unless turned
+		 * off for that terminal." What a bell looks like is the listeners'
+		 * (sec 5.5); this says only that it rang.
 		 */
 		if (!m_settings.value(QStringLiteral("bell_enabled")).toBool(true)) return;
-
-		if (m_on_screen) {
-			emit bell_on_screen();
-			return;
-		}
-
-		m_unseen_bell = true;
-		emit state_changed();
-
-		/*
-		 * And tell whoever is listening that it happened out of sight
-		 * (sec 5.5). Emitted here rather than derived by a listener,
-		 * because the two conditions that make a bell worth reporting --
-		 * the host wants bells at all, and nothing is showing this
-		 * session -- have both just been evaluated above.
-		 */
-		emit bell_while_away();
+		emit bell_rang();
 	});
 
 	connect(m_emulator, &bssh_emulator::title_changed, this, [this](const QString &title) {
@@ -901,16 +887,8 @@ void bssh_session::note_connection_lost() {
 	emit state_changed();
 }
 
-void bssh_session::mark_seen() {
-	if (!m_unseen_bell) return;
-
-	m_unseen_bell = false;
-	emit state_changed();
-}
-
 void bssh_session::set_on_screen(bool on_screen) {
 	m_on_screen = on_screen;
-	if (on_screen) mark_seen();
 }
 
 void bssh_session::resize(int cols, int rows) {
@@ -1150,7 +1128,9 @@ bool bssh_session::export_handoff(QByteArray &state, QList<int> &fds, QString *w
 	write_profile(out, m_profile);
 	out << QJsonDocument(m_settings).toJson(QJsonDocument::Compact) << qint32(m_font_zoom)
 	    << qint32(m_cols) << qint32(m_rows) << m_remote_title << m_password
-	    << m_used_key_auth << m_password_requested << m_unseen_bell
+	    /* Where the unseen-bell mark was, which a session no longer keeps;
+	     * held so a handoff between two builds still reads. */
+	    << m_used_key_auth << m_password_requested << false
 	    << m_bytes_in << m_bytes_out << m_last_in << m_last_out << m_connected_at
 	    << qint32(m_connections);
 	out << m_transport->kind() << transport << m_emulator->export_state();
@@ -1237,7 +1217,6 @@ bssh_session *bssh_session::import_handoff(const QByteArray &state, const QList<
 	session->m_password = password;
 	session->m_used_key_auth = used_key_auth;
 	session->m_password_requested = password_requested;
-	session->m_unseen_bell = unseen_bell;
 	session->m_bytes_in = bytes_in;
 	session->m_bytes_out = bytes_out;
 	session->m_last_in = last_in;

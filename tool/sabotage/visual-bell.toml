@@ -1,23 +1,24 @@
-# The visual bell (project.md sec 5.5): a bell rung in a session on screen
-# inverts that pane for a moment. Three seams: the session reporting the
-# bell it did not count as missed, the pane wired to it, and the flash
-# reaching what is painted rather than only a flag.
+# The bell (project.md sec 5.5), as the holder set it on 2026-11-17: every
+# bell signals unless the host has bells off, whoever is looking -- the pane
+# it rang in flashes and its window asks for attention (the urgency hint).
+# Four seams: the session saying it rang, the pane wired to it, the flash
+# reaching what is painted, and the window's request.
 
-# The session drops a bell rung on screen.
+# The session drops the bell.
 [[sabotage]]
-name = "a bell on screen is not reported"
+name = "a bell is not reported"
 file = "src/model/session.cpp"
-find = "\t\t\temit bell_on_screen();"
-replace = "\t\t\t;"
-expect = "a_bell_on_screen_flashes_its_own_pane"
+find = "\t\temit bell_rang();"
+replace = "\t\t;"
+expect = "a_bell_flashes_its_pane_and_asks_for_the_window"
 
 # The pane never hears it.
 [[sabotage]]
 name = "the pane ignores the bell"
 file = "src/ui/pane_container.cpp"
-find = "\tconnect(session, &bssh_session::bell_on_screen, view, &bssh_terminal_view::flash_bell);"
+find = "\tconnect(session, &bssh_session::bell_rang, view, &bssh_terminal_view::flash_bell);"
 replace = "\t;"
-expect = "a_bell_on_screen_flashes_its_own_pane"
+expect = "a_bell_flashes_its_pane_and_asks_for_the_window"
 
 # The flash is recorded and painted nowhere.
 [[sabotage]]
@@ -25,4 +26,12 @@ name = "the flash does not reach the paint"
 file = "src/ui/terminal_view.h"
 find = "\tbool painted_reverse() const { return m_reverse_video != m_bell_flash; }"
 replace = "\tbool painted_reverse() const { return m_reverse_video; }"
-expect = "a_bell_on_screen_flashes_its_own_pane"
+expect = "a_bell_flashes_its_pane_and_asks_for_the_window"
+
+# The window never asks for attention.
+[[sabotage]]
+name = "the window does not ask for attention"
+file = "src/ui/main_window.cpp"
+find = "\t\t\tbssh_platform::instance()->request_attention(this);"
+replace = "\t\t\t;"
+expect = "a_bell_asks_for_its_windows_attention"

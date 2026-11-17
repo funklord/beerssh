@@ -42,7 +42,7 @@ private slots:
 	/* sec 5.6: a host set to On hears at once that its shell is not kept. */
 	void a_shell_that_could_not_be_kept_is_said_so();
 	void a_store_view_touches_nothing_of_the_users();
-	void a_silenced_bell_does_not_mark_the_tab();
+	void a_bell_rings_whoever_is_looking_unless_silenced();
 	void turning_scrollback_off_actually_turns_it_off();
 
 	/* sec 8.3's window title, which is a format rather than a choice. */

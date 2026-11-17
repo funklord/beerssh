@@ -571,8 +571,9 @@ bssh_terminal_view *bssh_pane_container::add_pane_view(bssh_session *session,
 	connect(session->emulator(), &bssh_emulator::reverse_video_changed,
 	         view, &bssh_terminal_view::set_reverse_video);
 
-	/* The visual bell, in the pane the bell rang in (sec 5.5). */
-	connect(session, &bssh_session::bell_on_screen, view, &bssh_terminal_view::flash_bell);
+	/* The visual bell, in every pane showing the session it rang in (sec
+	 * 5.5), focused or not. */
+	connect(session, &bssh_session::bell_rang, view, &bssh_terminal_view::flash_bell);
 
 	m_views.append(view);
 	view->show();
@@ -918,7 +919,8 @@ void bssh_pane_container::rebuild() {
 
 	/*
 	 * Which sessions are ON SCREEN, which is this container's answer to
-	 * give and nobody else's (sec 8.3's bell dot).
+	 * give and nobody else's (sec 5.5's "Waiting for you"; the bell dot
+	 * that first asked it is gone).
 	 *
 	 * It used to follow the FOCUSED session, set by the window as the
 	 * focus moved -- which is the same thing only while there is one

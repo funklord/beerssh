@@ -1040,30 +1040,35 @@ void session_registry_test::turning_scrollback_off_actually_turns_it_off() {
 	          "has gone past, and base() is what counts those");
 }
 
-void session_registry_test::a_silenced_bell_does_not_mark_the_tab() {
+void session_registry_test::a_bell_rings_whoever_is_looking_unless_silenced() {
+	/*
+	 * The holder (2026-11-17): the bell "has nothing to do with which one
+	 * has focus or is being looked at. It always signals the user, unless
+	 * turned off for that terminal." So it rings on screen and off it
+	 * alike, and a host with bells off -- a build machine that rings every
+	 * few minutes -- rings for nobody.
+	 */
 	bssh_profile_t profile;
 	profile.host = QStringLiteral("noisy.example.com");
 	bssh_session session(profile);
+	QSignalSpy rang(&session, &bssh_session::bell_rang);
 
 	QJsonObject settings;
 	settings.insert(QStringLiteral("bell_enabled"), false);
 	session.set_settings(settings);
-
 	session.set_on_screen(false);
 	session.emulator()->feed(QByteArrayLiteral("\a"));
-
-	/*
-	 * "Do not tell me about the bell" has to mean the tab dot as well as
-	 * the sound. A build machine that rings every few minutes would
-	 * otherwise keep its tab permanently marked, which trains the user to
-	 * ignore the one marker that means something.
-	 */
-	QVERIFY2(!session.has_unseen_bell(), "a silenced bell must not mark the tab");
+	session.set_on_screen(true);
+	session.emulator()->feed(QByteArrayLiteral("\a"));
+	QVERIFY2(rang.isEmpty(), "a silenced bell rang");
 
 	settings.insert(QStringLiteral("bell_enabled"), true);
 	session.set_settings(settings);
 	session.emulator()->feed(QByteArrayLiteral("\a"));
-	QVERIFY(session.has_unseen_bell());
+	QCOMPARE(rang.size(), 1);
+	session.set_on_screen(false);
+	session.emulator()->feed(QByteArrayLiteral("\a"));
+	QCOMPARE(rang.size(), 2);
 }
 
 void session_registry_test::the_window_title_expands_what_the_session_knows() {
@@ -1245,27 +1250,23 @@ void session_registry_test::the_three_events_sec_5_5_names_reach_the_platform() 
 	QCOMPARE(titles.at(1), QStringLiteral("Reconnect failed"));
 
 	/*
-	 * And the bell, fed as a BEL byte rather than by emitting the signal.
-	 *
-	 * The first version of this did `emit session->bell_while_away()',
-	 * and the sabotage that DELETES that emit from the session stayed
-	 * green -- the test was raising the signal itself, so removing the
-	 * only thing that legitimately raises it changed nothing it could
-	 * see. A test that calls the helper it is verifying cannot see a
-	 * wrong caller. Driving it from the wire exercises the two
-	 * conditions the session evaluates (bell_enabled, and nothing
-	 * showing it) instead of assuming their result.
+	 * And the bell, fed as a BEL byte, raises no notification on the
+	 * desktop, on screen or off it: a bell is answered by a flash and the
+	 * window's urgency hint, which do not linger (sec 5.5, the holder,
+	 * 2026-11-17). Android, which has no urgency hint, still notifies for
+	 * one rung while the app is away.
 	 */
 	QVERIFY(session->emulator() != nullptr);
 	session->set_on_screen(false);
 	session->emulator()->feed(QByteArrayLiteral("\a"));
-	QCOMPARE(titles.size(), 3);
-	QCOMPARE(titles.at(2), QStringLiteral("Bell"));
-
-	/* And on screen it is remembered rather than announced (sec 8.3). */
 	session->set_on_screen(true);
 	session->emulator()->feed(QByteArrayLiteral("\a"));
+#ifdef Q_OS_ANDROID
 	QCOMPARE(titles.size(), 3);
+	QCOMPARE(titles.at(2), QStringLiteral("Bell"));
+#else
+	QCOMPARE(titles.size(), 2);
+#endif
 }
 
 static const QByteArray sample_listing =

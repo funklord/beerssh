@@ -499,9 +499,10 @@ private slots:
 	void a_grid_keeps_its_dividers_through_a_rebuild();
 	void a_hemmed_in_row_holds_the_grid_in_line();
 	void a_divider_is_thumb_sized_only_where_a_thumb_uses_it();
-	void a_bell_in_a_visible_pane_is_not_a_missed_one();
-	void a_bell_with_the_window_away_is_a_missed_one();
-	void a_bell_on_screen_flashes_its_own_pane();
+	void a_visible_pane_is_on_screen_focused_or_not();
+	void a_bell_asks_for_its_windows_attention();
+	void a_pane_in_a_hidden_window_is_away();
+	void a_bell_flashes_its_pane_and_asks_for_the_window();
 	void a_grid_stays_in_line_at_a_wide_cell();
 	void the_caps_setting_reaches_a_sessions_router();
 

@@ -9,6 +9,8 @@
 #include <QStringList>
 #include <functional>
 
+class QWidget;
+
 /*
  * bssh_platform -- everything that differs between Android and desktop,
  * per project.md sec 3, core principle 3. One implementation per platform
@@ -285,6 +287,17 @@ public:
 	void notify(const QString &title, const QString &body);
 
 	/*
+	 * Asks for attention to `window` the way the desktop does it: the
+	 * urgency hint (QApplication::alert, xterm's bellIsUrgent), shown on the
+	 * taskbar and cleared by the desktop when the window is raised. Nothing
+	 * where there is no such thing, as on Android. For the bell (sec 5.5).
+	 *
+	 * Emits attention_requested first, as notify() emits notified, so a
+	 * test can hear the request: offscreen, the hint itself shows nowhere.
+	 */
+	void request_attention(QWidget *window);
+
+	/*
 	 * Keeps the computer from sleeping while `inhibit` holds (sec 5.5): for a
 	 * host whose "keep the computer awake while connected" is on, the long
 	 * remote build a lid close would otherwise drop. The holder's answer of
@@ -303,6 +316,9 @@ public:
 signals:
 	/* Emitted for every notify(), before the platform shows anything. */
 	void notified(const QString &title, const QString &body);
+
+	/* Emitted for every request_attention(), before the window is marked. */
+	void attention_requested(QWidget *window);
 
 	/* Emitted when set_sleep_inhibited() changes its answer. */
 	void sleep_inhibition_changed(bool inhibited);

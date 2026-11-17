@@ -107,14 +107,6 @@ public:
 	bssh_ssh_session::state_t state() const;
 	bool is_live() const;
 
-	/*
-	 * A bell that rang while this session was not the one on screen
-	 * (sec 8.3). The whole value of a bell is telling you about the tab
-	 * you are NOT looking at, so it is remembered rather than played and
-	 * forgotten.
-	 */
-	bool has_unseen_bell() const { return m_unseen_bell; }
-	void mark_seen();
 
 	/*
 	 * Whether a view is showing this session right now (sec 8.4: exactly
@@ -416,17 +408,11 @@ signals:
 	void multiplexers_settled();
 
 	/*
-	 * A bell rang while nothing was showing this session (sec 5.5).
-	 *
-	 * Separate from state_changed, which fires for everything and would
-	 * make a listener re-derive the one fact it wants. The condition is
-	 * evaluated once, where bell_enabled and the on-screen flag are
-	 * already in hand, so a listener cannot get it subtly different.
+	 * The program rang the bell and this host wants bells (sec 5.5): every
+	 * pane showing the session flashes and its window asks for attention.
+	 * Whether anyone is looking does not enter into it.
 	 */
-	void bell_while_away();
-
-	/* And one rang while it IS on screen: the view flashes (sec 5.5). */
-	void bell_on_screen();
+	void bell_rang();
 
 	/* Asked a person something nobody is looking at; `what` says what. */
 	void asking_while_away(const QString &what);
@@ -553,7 +539,6 @@ private:
 	 * with the setting off. */
 	void list_multiplexers(bool asked = false);
 
-	bool m_unseen_bell;
 	bool m_remote_exited;
 	int m_exit_status;
 	bool m_used_key_auth;

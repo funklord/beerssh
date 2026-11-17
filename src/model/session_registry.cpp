@@ -234,12 +234,19 @@ void bssh_session_registry::attach(bssh_session *session) {
 		        QStringLiteral("%1 -- %2").arg(session->title()).arg(what));
 	});
 
-	connect(session, &bssh_session::bell_while_away, this, [session] {
-		bssh_platform::instance()->notify(
-		        QStringLiteral("Bell"),
-		        QStringLiteral("%1 rang while you were elsewhere")
-		                .arg(session->title()));
+#ifdef Q_OS_ANDROID
+	/*
+	 * A bell with the app in the background, on Android only. The desktop
+	 * answers a bell with the window's urgency hint (main_window), which
+	 * clears itself when the window is raised; Android has none, and a
+	 * notification is the one way it can call for attention at all.
+	 */
+	connect(session, &bssh_session::bell_rang, this, [session] {
+		if (!session->is_on_screen())
+			bssh_platform::instance()->notify(QStringLiteral("Bell"),
+			                                  QStringLiteral("%1 rang").arg(session->title()));
 	});
+#endif
 
 	/*
 	 * A session whose shell ended closes itself, unless it was opened to
