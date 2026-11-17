@@ -9615,6 +9615,32 @@ window with no name is a blank row in the task switcher.
   processes save together, a second sighting is worth chasing at once,
   with its message: the five-second wait for a peer's lock is the first
   suspect under load, not a finding.
+  **Seen a second time 2026-11-17, its twin and on Windows:**
+  `two_processes_saving_at_once_lose_no_secret` failed in CI on `03560c1`,
+  a commit that touched only the server's screen model. The failure said
+  only that `bssh_run_store_writers` returned false, so the message was lost
+  again, this time by the helper. A writer had failed, but not which one or
+  how: the exit codes that say it (an unlock refused, a save refused, no go
+  within 30 s) were discarded. The run took 4.8 s for the whole class, so it
+  was not the 60 s wait.
+
+  **The helper now says which writer failed, how, and what it printed.**
+  The writers' output is captured rather than forwarded, since forwarded
+  output never reached the CI log. The next sighting will carry its reason.
+
+  An untested candidate, written down so it is not taken as found. Every
+  read and write in the store runs under `store_change`'s lock, `unlock()`
+  included. But `tryLock` gives up at once on a lock *error*, as opposed to
+  a lock held, and the change then goes ahead unlocked with *another BeerSSH
+  holds the store, changing it anyway*. On Windows, a lock file a peer is
+  deleting cannot be created. That would be QLockFile's error 3. Without the
+  lock, a rename over a file a peer has open fails there, which is a refused
+  save or unlock.
+
+  Within the same class, `an_unlock_that_could_not_be_written_is_not_unlocked`
+  logged *Got unexpected locking error 3* on Windows. That test makes the
+  lock fail on purpose, so it is not evidence either way. The writers'
+  captured output will show the warning if this is it.
 - **A pane drag was raised from inside the view's own signal emission, and
   the thing it reaches destroys that view.** `mouseMoveEvent` emits
   `pane_drag_requested`; `start_session_drag` answers it with

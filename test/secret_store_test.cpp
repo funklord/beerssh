@@ -645,7 +645,8 @@ void secret_store_test::two_processes_saving_at_once_lose_no_secret() {
 	QTemporaryDir dir;
 	app_data_redirect redirect(dir);
 	const int each = 30;
-	QVERIFY(bssh_run_store_writers(QStringLiteral("secrets"), dir.path(), each));
+	const QString failed = bssh_run_store_writers(QStringLiteral("secrets"), dir.path(), each);
+	QVERIFY2(failed.isEmpty(), qPrintable(failed));
 
 	std::unique_ptr<bssh_secret_store> reader(bssh_make_separate_file_secret_store());
 	QVERIFY(reader->unlock(QStringLiteral("correct horse")));

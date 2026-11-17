@@ -2650,7 +2650,8 @@ void profile_store_test::a_store_that_loaded_first_does_not_erase_a_later_save()
 void profile_store_test::two_processes_saving_at_once_lose_nothing() {
 	QTemporaryDir dir;
 	const int each = 100;
-	QVERIFY(bssh_run_store_writers(QStringLiteral("hosts"), dir.path(), each));
+	const QString failed = bssh_run_store_writers(QStringLiteral("hosts"), dir.path(), each);
+	QVERIFY2(failed.isEmpty(), qPrintable(failed));
 
 	bssh_profile_store reader(dir.filePath(QStringLiteral("test.db")));
 	QSet<int> ids;
