@@ -16875,3 +16875,54 @@ void layout_test::a_bare_alt_tap_does_not_take_the_next_key() {
 	QVERIFY2(got.contains('x'), qPrintable(QStringLiteral("after a bare Alt, x sent: \"%1\"").arg(QString::fromLatin1(got))));
 	QVERIFY(view->hasFocus());
 }
+
+/*
+ * Tab in a grid stays in its pane. The holder ran `beerssh --grid 3x3`
+ * and saw Tab "just switching terminals" (2026-11-17): with nine views in
+ * the focus chain, focus navigation walked from one to the next. The
+ * view refuses focus navigation, so Tab and Shift+Tab are the shell's.
+ */
+void layout_test::tab_in_a_grid_stays_in_its_pane() {
+	const forced_touch_t desktop(0);
+	QList<bssh_fake_ssh_session *> fakes;
+	const bssh_factory_reset_t factory_reset;
+	bssh_ssh_session::set_factory([&fakes](QObject *parent) -> bssh_ssh_session * {
+		fakes.append(new bssh_fake_ssh_session(parent));
+		return fakes.last();
+	});
+
+	bssh_main_window window(named(QStringLiteral("grid")));
+	window.resize(1200, 900);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	const registry_left_as_found_t tidy(window.registry());
+	window.open_grid(3, 3);
+	QCoreApplication::processEvents();
+	for (bssh_fake_ssh_session *each : fakes) each->simulate_key_auth_success();
+	QCoreApplication::processEvents();
+
+	const QList<bssh_session *> shown = window.layout_manager()->visible_panes();
+	QVERIFY2(shown.size() >= 4, qPrintable(QString::number(shown.size())));
+	bssh_terminal_view *view = window.panes()->view_for(shown.at(4 % shown.size()));
+	QVERIFY(view);
+	view->activateWindow();
+	view->setFocus();
+	QTRY_VERIFY(view->hasFocus());
+
+	const struct { Qt::Key key; Qt::KeyboardModifiers mods; QByteArray bytes; } presses[] = {
+		{ Qt::Key_Tab, Qt::NoModifier, QByteArray("\t") },
+		{ Qt::Key_Backtab, Qt::ShiftModifier, QByteArray("\x1b[Z") },
+	};
+	for (const auto &press : presses) {
+		for (bssh_fake_ssh_session *each : fakes) each->clear_written();
+		QTest::keyClick(window.windowHandle(), press.key, press.mods);
+		QCoreApplication::processEvents();
+		QWidget *now = QApplication::focusWidget();
+		QVERIFY2(now == view, qPrintable(QStringLiteral("%1 moved focus to %2")
+		                                 .arg(QString::fromLatin1(press.bytes.toHex()),
+		                                      now ? QString::fromLatin1(now->metaObject()->className()) : QStringLiteral("nothing"))));
+		int reached = 0;
+		for (bssh_fake_ssh_session *each : fakes) if (each->written() == press.bytes) ++reached;
+		QVERIFY2(reached == 1, qPrintable(QStringLiteral("%1 reached %2 sessions").arg(QString::fromLatin1(press.bytes.toHex())).arg(reached)));
+	}
+}
