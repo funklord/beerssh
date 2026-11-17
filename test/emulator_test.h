@@ -61,6 +61,7 @@ private slots:
 	void a_repaint_draws_the_servers_screen_on_a_fresh_client();
 	void a_repaint_carries_the_modes_a_program_set();
 	void a_repaint_keeps_the_screen_under_a_full_screen_program();
+	void a_history_line_wider_than_the_terminal_is_wrapped_to_it();
 	void the_servers_history_agrees_with_the_clients_scrollback();
 	void the_servers_history_says_which_lines_a_client_lacks();
 	void wide_characters_take_two_cells();

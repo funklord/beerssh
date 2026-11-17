@@ -145,3 +145,18 @@ file = "src/session/session_client.c"
 find = "\tif (!again || from > client->history_next) client->history_next = from;\n"
 replace = "\tclient->history_next = from;\n"
 expect = "the_client_takes_history_in_order_and_says_what_went"
+
+# A host's line wider than the terminal, pushed as one row.
+[[sabotage]]
+name = "a history line wider than the terminal is pushed whole"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\tint end = cols > 0 ? qMin(at + cols, int(line.size())) : int(line.size());\n"
+replace = "\t\tint end = int(line.size());\n"
+expect = "a_history_line_wider_than_the_terminal_is_wrapped_to_it"
+
+[[sabotage]]
+name = "a wide glyph at the edge is cut in half"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\tif (end < line.size() && end - at > 1 && line.at(end - 1).width == 2) --end;\n"
+replace = "\t\t;\n"
+expect = "a_history_line_wider_than_the_terminal_is_wrapped_to_it"

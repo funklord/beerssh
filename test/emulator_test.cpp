@@ -902,6 +902,38 @@ void emulator_test::a_repaint_keeps_the_screen_under_a_full_screen_program() {
 	bssh_screen_model_free(server);
 }
 
+void emulator_test::a_history_line_wider_than_the_terminal_is_wrapped_to_it() {
+	/*
+	 * A host's history line, pushed while the terminal was wider: 34 cells
+	 * with a wide glyph across the 20th column, into 20 columns. Rows of 20
+	 * at most, the glyph whole on the second, and the second continuing the
+	 * first, so a copy reads one line.
+	 */
+	bssh_emulator terminal(20, 5);
+	QList<bssh_screen_cell_t> cells;
+	auto add = [&cells](char32_t ch, int width) {
+		bssh_screen_cell_t cell;
+		memset(&cell, 0, sizeof(cell));
+		cell.chars[0] = uint32_t(ch);
+		cell.width = uint8_t(width);
+		cells.append(cell);
+	};
+	for (int i = 0; i < 19; ++i) add(U'a' + char32_t(i % 26), 1);
+	add(U'\x4E2D', 2);
+	for (int i = 0; i < 13; ++i) add(U'z', 1);
+	QCOMPARE(cells.size(), 33); /* and 34 columns: the far half goes as the wire sends it, implied */
+	terminal.push_history(cells.constData(), int(cells.size()), false);
+
+	const bssh_scrollback &history = terminal.scrollback();
+	QCOMPARE(history.count(), 2);
+	QCOMPARE(history.line(0).size(), 19);
+	QVERIFY(!history.is_continuation(0));
+	QVERIFY(history.is_continuation(1));
+	QCOMPARE(history.line(1).first().ch, U'\x4E2D');
+	QCOMPARE(int(history.line(1).first().width), 2);
+	QCOMPARE(history.line(1).size(), 15);
+}
+
 void emulator_test::sgr_sets_colour_and_attributes() {
 	bssh_emulator emulator(20, 3);
 

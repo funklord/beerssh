@@ -2608,10 +2608,26 @@ void bssh_emulator::replace_history(const bssh_scrollback &kept) {
 }
 
 void bssh_emulator::push_history(const QList<bssh_cell_t> &line, bool continuation) {
-	m_private->scrollback.push(line, continuation);
+	/*
+	 * A host's line can be wider than this terminal: the host's history is
+	 * not rewrapped when the terminal narrows, as this one's is. So it is
+	 * cut into rows of this width, each after the first continuing the one
+	 * above, and a wide glyph at the edge goes whole to the next row -- what
+	 * the scrollback's own rewrap makes of a line.
+	 */
+	const int cols = m_private->screen.cols();
+	int rows = 0;
+	int at = 0;
+	do {
+		int end = cols > 0 ? qMin(at + cols, int(line.size())) : int(line.size());
+		if (end < line.size() && end - at > 1 && line.at(end - 1).width == 2) --end;
+		m_private->scrollback.push(line.mid(at, end - at), rows == 0 ? continuation : true);
+		++rows;
+		at = end;
+	} while (at < line.size());
 
-	/* What is already in the history goes one line further back with it. */
-	if (m_private->images.pushed_into_history(1)) emit images_changed();
+	/* What is already in the history goes as many lines further back. */
+	if (m_private->images.pushed_into_history(rows)) emit images_changed();
 	emit scrollback_changed();
 }
 
@@ -2625,6 +2641,8 @@ void bssh_emulator::push_history(const bssh_screen_cell_t *cells, int count, boo
 	line.reserve(count);
 	for (int i = 0; i < count; ++i) {
 		const bssh_screen_cell_t &from = cells[i];
+		/* A wide glyph's far half: made below from the glyph, as the wire leaves it out. */
+		if (from.chars[0] == 0xFFFFFFFFu) continue;
 		VTermScreenCell source;
 		memset(&source, 0, sizeof(source));
 		source.chars[0] = from.chars[0];

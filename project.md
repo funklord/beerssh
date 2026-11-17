@@ -1689,9 +1689,21 @@ client's history with the host's line by line, with wrapped rows joined.
 Three sabotages fail it. Pictures that had scrolled off go when the history
 is put back, having been placed against the history replaced.
 
+**And a history line wider than the terminal is cut to it** (the same day).
+The model does not rewrap its history when the terminal narrows, though the
+client rewraps its own. So the model's lines can be wider than the client
+they are sent to: in the measurement above, 34-cell lines went into a
+20-column client's scrollback as rows wider than its screen.
+
+`push_history` now cuts such a line into rows of the terminal's width, each
+after the first continuing the one above. A wide glyph at the edge goes whole
+to the next row, which is what the scrollback's own rewrap does.
+`emulator_test::a_history_line_wider_than_the_terminal_is_wrapped_to_it`
+checks it, and two sabotages fail it.
+
 **Not yet:**
-- The client's own rewrap of its scrollback on a narrower resize, which the
-  model does not copy.
+- The model's own rewrap of its history on a narrower resize. A client's
+  wrapping of what it is sent covers it, so only the numbering differs.
 - Answering terminal queries from the server during a replay.
 
 **BeerSSH uses it over SSH, per host, off by default**: *Keep the shell on the
