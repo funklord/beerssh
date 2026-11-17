@@ -4861,6 +4861,21 @@ void layout_test::an_unfocused_pane_resizing_leaves_the_focused_session_its_size
 	bssh_terminal_view *view_a = window.panes()->view_for(a);
 	QVERIFY(view_a);
 
+	/*
+	 * Settled first: b's size can still be arriving when one round of
+	 * events is over, and the baseline was then read mid-way -- 80
+	 * columns, and 75 a moment later whatever a did (seen twice in full
+	 * runs, 2026-11-17, never alone). Its emulator agreeing with its own
+	 * view, and staying so, is what settled means.
+	 */
+	bssh_terminal_view *view_b = window.panes()->view_for(b);
+	QVERIFY(view_b);
+	QTRY_VERIFY(b->emulator()->screen().cols() == view_b->cols()
+	            && b->emulator()->screen().rows() == view_b->rows());
+	QTest::qWait(100);
+	QTRY_VERIFY(b->emulator()->screen().cols() == view_b->cols()
+	            && b->emulator()->screen().rows() == view_b->rows());
+
 	const int cols = b->emulator()->screen().cols();
 	const int rows = b->emulator()->screen().rows();
 	QVERIFY(cols != 7 || rows != 5);
