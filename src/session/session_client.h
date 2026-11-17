@@ -71,6 +71,7 @@ typedef struct bssh_session_client {
 	uint32_t in_used;
 	int said_hello;  /* this link has proved it speaks the protocol */
 	uint64_t history_next;  /* the history line expected next */
+	int keyframe_open;      /* a keyframe began and its last part has not come */
 } bssh_session_client_t;
 
 void bssh_session_client_init(bssh_session_client_t *client,

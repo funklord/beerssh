@@ -71,11 +71,13 @@ typedef struct host {
 
 	/*
 	 * A keyframe in place of a replay (sec 5.6), for a client that asked: the
-	 * header, then history from `history_next`, then the repaint in parts.
+	 * header, the repaint in parts, history from `history_next` up to
+	 * `history_end`, and an empty last part (fill_keyframe).
 	 */
 	int keyframes;        /* this link's client takes them */
 	int keyframe_step;    /* KEYFRAME_* */
 	uint64_t history_next;
+	uint64_t history_end;   /* the first line pushed after the repaint's offset */
 	int history_lost;
 	uint8_t *repaint;
 	size_t repaint_len;
@@ -84,7 +86,7 @@ typedef struct host {
 	uint64_t repaint_lines;
 } host_t;
 
-enum { KEYFRAME_NONE, KEYFRAME_HEADER, KEYFRAME_HISTORY, KEYFRAME_REPAINT };
+enum { KEYFRAME_NONE, KEYFRAME_HEADER, KEYFRAME_REPAINT, KEYFRAME_HISTORY };
 
 static int start_keyframe(host_t *host);
 
@@ -302,35 +304,15 @@ static int start_keyframe(host_t *host) {
 	return 1;
 }
 
+/*
+ * Latest first: the header, the screen as it is now in parts, the lines that
+ * had gone off the top by then, and an empty last part that moves the
+ * client's place. The client draws the screen at once and its history fills
+ * in behind it, and a link lost before the last part leaves the client where
+ * it was, to be sent the keyframe again.
+ */
 static void fill_keyframe(host_t *host) {
 	if (host->keyframe_step == KEYFRAME_HEADER) {
-		host->out_used = bssh_wire_put_keyframe(host->out, sizeof(host->out), host->history_next,
-		                                        host->history_lost);
-		host->keyframe_step = KEYFRAME_HISTORY;
-		return;
-	}
-
-	if (host->keyframe_step == KEYFRAME_HISTORY) {
-		uint64_t first = 0, count = 0;
-		bssh_screen_model_history(host->screen, &first, &count);
-
-		/* Gone past the limit while earlier lines went out: the client says so. */
-		if (host->history_next < first) host->history_next = first;
-		if (host->history_next < first + count) {
-			int continuation = 0;
-			const int width = bssh_screen_model_history_line(host->screen, host->history_next, NULL, 0,
-			                                                 &continuation);
-			bssh_screen_cell_t *cells = width > 0 ? malloc((size_t)width * sizeof(*cells)) : NULL;
-			const int have = cells ? bssh_screen_model_history_line(host->screen, host->history_next, cells,
-			                                                        width, &continuation)
-			                       : 0;
-			host->out_used = bssh_wire_put_history(host->out, sizeof(host->out), host->history_next,
-			                                       continuation, cells, have > 0 ? have : 0);
-			free(cells);
-			++host->history_next;
-			return;
-		}
-
 		/* The screen now, standing for every byte the model has taken. */
 		host->repaint_len = bssh_screen_model_repaint(host->screen, NULL, 0);
 		host->repaint = malloc(host->repaint_len ? host->repaint_len : 1);
@@ -345,18 +327,51 @@ static void fill_keyframe(host_t *host) {
 		host->repaint_offset = bssh_screen_model_offset(host->screen);
 		/* The few bytes the model holds back are never a newline. */
 		host->repaint_lines = host->log.end_line;
+		/* What follows the repaint's offset comes as output, lines and all. */
+		bssh_screen_model_history_after(host->screen, host->repaint_offset, &host->history_end);
+
+		host->out_used = bssh_wire_put_keyframe(host->out, sizeof(host->out), host->history_next,
+		                                        host->history_lost);
 		host->keyframe_step = KEYFRAME_REPAINT;
+		return;
+	}
+
+	if (host->keyframe_step == KEYFRAME_REPAINT) {
+		size_t taken = 0;
+		host->out_used = bssh_wire_put_repaint(host->out, sizeof(host->out), host->repaint_offset,
+		                                       host->repaint_lines, 0, host->repaint + host->repaint_done,
+		                                       host->repaint_len - host->repaint_done, &taken);
+		host->repaint_done += taken;
+		if (host->repaint_done == host->repaint_len) host->keyframe_step = KEYFRAME_HISTORY;
+		return;
+	}
+
+	uint64_t first = 0, count = 0;
+	bssh_screen_model_history(host->screen, &first, &count);
+	const uint64_t held_to = first + count < host->history_end ? first + count : host->history_end;
+
+	/* Gone past the limit while earlier lines went out: the client says so. */
+	if (host->history_next < first) host->history_next = first;
+	if (host->history_next < held_to) {
+		int continuation = 0;
+		const int width = bssh_screen_model_history_line(host->screen, host->history_next, NULL, 0,
+		                                                 &continuation);
+		bssh_screen_cell_t *cells = width > 0 ? malloc((size_t)width * sizeof(*cells)) : NULL;
+		const int have = cells ? bssh_screen_model_history_line(host->screen, host->history_next, cells, width,
+		                                                        &continuation)
+		                       : 0;
+		host->out_used = bssh_wire_put_history(host->out, sizeof(host->out), host->history_next, continuation,
+		                                       cells, have > 0 ? have : 0);
+		free(cells);
+		++host->history_next;
+		return;
 	}
 
 	size_t taken = 0;
 	host->out_used = bssh_wire_put_repaint(host->out, sizeof(host->out), host->repaint_offset,
-	                                       host->repaint_lines, 1, host->repaint + host->repaint_done,
-	                                       host->repaint_len - host->repaint_done, &taken);
-	host->repaint_done += taken;
-	if (host->repaint_done == host->repaint_len) {
-		host->sent = host->repaint_offset;
-		end_keyframe(host);
-	}
+	                                       host->repaint_lines, 1, NULL, 0, &taken);
+	host->sent = host->repaint_offset;
+	end_keyframe(host);
 }
 
 static void fill_out(host_t *host) {

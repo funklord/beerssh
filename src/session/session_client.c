@@ -24,6 +24,9 @@ static int take_output(bssh_session_client_t *client, const bssh_wire_frame_t *f
 
 	if (bssh_wire_read_output(frame, &offset, &bytes, &len)) return -1;
 
+	/* A replay instead: whatever keyframe was under way is not coming back. */
+	client->keyframe_open = 0;
+
 	if (offset > client->next) {
 		client->events.gap(client->events.context, offset - client->next, 0);
 		client->next = offset;
@@ -61,9 +64,16 @@ static int take_keyframe(bssh_session_client_t *client, const bssh_wire_frame_t 
 	int lost = 0;
 
 	if (bssh_wire_read_keyframe(frame, &from, &lost)) return -1;
-	client->history_next = from;
+
+	/*
+	 * One cut short by a lost link is sent again from where the client
+	 * stood, and the lines it did deliver are not taken twice.
+	 */
+	const int again = client->keyframe_open;
+	if (!again || from > client->history_next) client->history_next = from;
+	client->keyframe_open = 1;
 	if (client->events.keyframe) client->events.keyframe(client->events.context);
-	if (lost && client->events.history_lost) client->events.history_lost(client->events.context, 0);
+	if (lost && !again && client->events.history_lost) client->events.history_lost(client->events.context, 0);
 	return 0;
 }
 
@@ -101,7 +111,8 @@ static int take_repaint(bssh_session_client_t *client, const bssh_wire_frame_t *
 	if (bssh_wire_read_repaint(frame, &offset, &lines, &last, &bytes, &len)) return -1;
 	if (len) client->events.output(client->events.context, bytes, len);
 
-	/* The screen now stands for everything before the offset. */
+	/* The screen and its history now stand for everything before the offset. */
+	if (last) client->keyframe_open = 0;
 	if (last && offset > client->next) {
 		client->next = offset;
 		client->line = lines;

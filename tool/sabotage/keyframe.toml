@@ -130,3 +130,18 @@ file = "src/session/screen_model.c"
 find = "\tmodel->pushing_at = model->fed + 1;\n"
 replace = "\tmodel->pushing_at = model->fed;\n"
 expect = "a_resize_while_away_does_not_bring_lines_back_twice"
+
+# Latest first, and a keyframe cut short and sent again.
+[[sabotage]]
+name = "the screen is drawn after the history"
+file = "src/session/session_host.c"
+find = "\t                                       host->repaint_lines, 1, NULL, 0, &taken);\n"
+replace = "\t                                       host->repaint_lines, 1, host->repaint, host->repaint_len, &taken);\n"
+expect = "a_client_that_takes_keyframes_is_sent_the_screen_and_the_lines_it_missed"
+
+[[sabotage]]
+name = "a keyframe sent again takes its lines twice"
+file = "src/session/session_client.c"
+find = "\tif (!again || from > client->history_next) client->history_next = from;\n"
+replace = "\tclient->history_next = from;\n"
+expect = "the_client_takes_history_in_order_and_says_what_went"

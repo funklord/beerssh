@@ -1645,10 +1645,26 @@ covers the three cases over 30,000 lines in a 1 MB log:
 - Serial gets every byte;
 - Live 200 bytes behind gets those 200 bytes.
 
-Still not "latest first" in order: history goes ahead of the screen, because
-the client's scrollback is filled from the bottom. Sending the screen first
-and the history above it after would need the scrollback to take lines in
-front of the ones it has.
+**And the screen goes first** (the same day). A keyframe is now:
+1. a header;
+2. the repaint, in parts;
+3. the history lines pushed by the repaint's offset;
+4. an empty last part, which moves the client's place.
+
+So on a slow link the screen is drawn at once and the history fills in
+behind it. That was first written down here as needing the scrollback to
+take lines in front of its own. It does not: nothing scrolls while the
+history comes, since output resumes only after the last part, so the
+history lines append at the bottom of the scrollback, directly above the
+screen. Lines pushed after the repaint's offset come as output, as before.
+
+A link lost before the last part leaves the client's place where it was,
+so the host sends the keyframe again. The client then skips the lines it
+already has and says a loss only once. A replay that comes instead closes
+the open keyframe.
+
+The host test now checks that the whole screen had arrived before the first
+history line. The client test cuts a keyframe short and sends it again.
 
 **And a terminal resized while away** (the same day). A phone turned while
 its link was down narrows on its own, and its reflow pushes rows of the

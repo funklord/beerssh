@@ -501,6 +501,7 @@ struct received_t {
 	int32_t status = 0;
 	QList<QByteArray> history;     /* each line's text, a '+' ahead of a continuation */
 	QList<uint64_t> history_lost;
+	int text_when_history_began = -1;
 	bssh_session_client_t client;
 
 	received_t() {
@@ -527,7 +528,9 @@ struct received_t {
 			bssh_screen_cell_t cell;
 			while (bssh_wire_next_cell(cells, &cell) > 0)
 				text += QString(QChar::fromUcs4(cell.chars[0] ? cell.chars[0] : U' ')).toUtf8();
-			static_cast<received_t *>(self)->history.append(text);
+			received_t *me = static_cast<received_t *>(self);
+			if (me->text_when_history_began < 0) me->text_when_history_began = int(me->text.size());
+			me->history.append(text);
 		};
 		events.history_lost = [](void *self, uint64_t lines) {
 			static_cast<received_t *>(self)->history_lost.append(lines);
@@ -735,6 +738,10 @@ void session_host_test::a_client_that_takes_keyframes_is_sent_the_screen_and_the
 
 	/* Lines went past the server's limit too, and it says so without a count. */
 	QCOMPARE(received.history_lost, QList<uint64_t>{ 0 });
+
+	/* Latest first: the whole screen had come before the first line of history. */
+	QVERIFY(received.text_when_history_began > 0);
+	QCOMPARE(received.text_when_history_began, int(received.text.size()));
 
 	/* The history it still held, in order and every one of them. */
 	QVERIFY(received.history.size() >= BSSH_SCREEN_HISTORY_LINES);
@@ -966,6 +973,26 @@ void session_host_test::the_client_takes_history_in_order_and_says_what_went() {
 	/* A keyframe saying lines went before it says so, count unknown. */
 	QCOMPARE(feed(bssh_wire_put_keyframe(out, sizeof(out), 50, 1)), 0);
 	QCOMPARE(received.history_lost, (QList<uint64_t>{ 2, 0 }));
+
+	/*
+	 * Cut short by a lost link, before its last part: the place has not
+	 * moved, so the host sends it again from where the client stood, and
+	 * the lines that did arrive are not taken twice, nor the loss said twice.
+	 */
+	QCOMPARE(feed(line(50, 'p')), 0);
+	QCOMPARE(feed(line(51, 'q')), 0);
+	const uint64_t stood = received.client.next;
+	bssh_session_client_reset_link(&received.client);
+	received.hello();
+	QCOMPARE(received.client.next, stood);
+	QCOMPARE(feed(bssh_wire_put_keyframe(out, sizeof(out), 50, 1)), 0);
+	QCOMPARE(feed(line(50, 'p')), 0);
+	QCOMPARE(feed(line(51, 'q')), 0);
+	QCOMPARE(feed(line(52, 'r')), 0);
+	QCOMPARE(feed(bssh_wire_put_repaint(out, sizeof(out), 2000, 90, 1, nullptr, 0, &taken)), 0);
+	QCOMPARE(received.history.mid(2), (QList<QByteArray>{ "p", "q", "r" }));
+	QCOMPARE(received.history_lost, (QList<uint64_t>{ 2, 0 }));
+	QCOMPARE(received.client.next, uint64_t(2000));
 }
 
 void session_host_test::a_client_and_a_real_host_agree_from_the_first_byte() {
