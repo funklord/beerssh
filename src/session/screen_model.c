@@ -5,6 +5,12 @@
 #include <string.h>
 
 #include <vterm.h>
+/*
+ * The state's modes are kept where libvterm keeps them, in a structure no
+ * API reads; the same vendored, patched library as this file's, built with
+ * it, so the two cannot disagree about its layout.
+ */
+#include "../../vterm/src/vterm_internal.h"
 
 /* A line gone off the top, trailing blanks left off. */
 typedef struct history_line {
@@ -484,6 +490,9 @@ size_t bssh_screen_model_repaint(const bssh_screen_model_t *model, uint8_t *out,
 	 * ends, which is what most of a screen is.
 	 */
 	put_text(&sink, model->alternate ? "\x1b[?1049h" : "\x1b[?1049l");
+	/* Nothing the client had set may bend the drawing: origin mode would
+	 * move every placement, insert mode push cells along. */
+	put_text(&sink, "\x1b[?6l\x1b[4l\x1b[r");
 	put_text(&sink, "\x1b[0m\x1b[H\x1b[2J");
 
 	int rows = 0, columns = 0;
@@ -522,10 +531,43 @@ size_t bssh_screen_model_repaint(const bssh_screen_model_t *model, uint8_t *out,
 		}
 	}
 
+	/*
+	 * The modes, each said both ways: the client fed this was somewhere
+	 * else, so what it has set is no guide. These are the ones a key, a
+	 * paste or a click is sent by, and the ones that move later output.
+	 */
+	VTermState *state = vterm_obtain_state(model->vt);
+	put_text(&sink, state->mode.cursor ? "\x1b[?1h" : "\x1b[?1l");
+	put_text(&sink, state->mode.keypad ? "\x1b=" : "\x1b>");
+	put_text(&sink, state->mode.bracketpaste ? "\x1b[?2004h" : "\x1b[?2004l");
+	put_text(&sink, state->mode.report_focus ? "\x1b[?1004h" : "\x1b[?1004l");
+	put_text(&sink, "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1005l\x1b[?1006l\x1b[?1015l");
+	if (state->mouse_flags & MOUSE_WANT_MOVE) put_text(&sink, "\x1b[?1003h");
+	else if (state->mouse_flags & MOUSE_WANT_DRAG) put_text(&sink, "\x1b[?1002h");
+	else if (state->mouse_flags & MOUSE_WANT_CLICK) put_text(&sink, "\x1b[?1000h");
+	if (state->mouse_protocol == MOUSE_UTF8) put_text(&sink, "\x1b[?1005h");
+	else if (state->mouse_protocol == MOUSE_SGR) put_text(&sink, "\x1b[?1006h");
+	else if (state->mouse_protocol == MOUSE_RXVT) put_text(&sink, "\x1b[?1015h");
+	put_text(&sink, state->mode.autowrap ? "\x1b[?7h" : "\x1b[?7l");
+	put_text(&sink, state->mode.insert ? "\x1b[4h" : "\x1b[4l");
+	put_text(&sink, state->mode.newline ? "\x1b[20h" : "\x1b[20l");
+
+	/* The region and origin mode both send the cursor home, so before it. */
+	const int top = state->scrollregion_top;
+	const int bottom = SCROLLREGION_BOTTOM(state);
+	if (top == 0 && bottom == rows) {
+		put_text(&sink, "\x1b[r");
+	} else {
+		snprintf(text, sizeof text, "\x1b[%d;%dr", top + 1, bottom);
+		put_text(&sink, text);
+	}
+	if (state->mode.origin) put_text(&sink, "\x1b[?6h");
+
 	int row = 0, col = 0, visible = 1;
 	bssh_screen_model_cursor(model, &row, &col, &visible);
 	put_text(&sink, "\x1b[0m");
-	snprintf(text, sizeof text, "\x1b[%d;%dH", row + 1, col + 1);
+	/* Under origin mode a position is counted from the region's top. */
+	snprintf(text, sizeof text, "\x1b[%d;%dH", (state->mode.origin ? row - top : row) + 1, col + 1);
 	put_text(&sink, text);
 	put_text(&sink, visible ? "\x1b[?25h" : "\x1b[?25l");
 	return sink.length;

@@ -1565,10 +1565,29 @@ So the client converts a cell by the rule it reads its own with, through
 - `make fuzz-session` reads the new frames.
 - `tool/sabotage/keyframe.toml` breaks nine parts, and each fails.
 
+**And the repaint says the modes, both ways** (the same day). The client
+fed a keyframe was somewhere else, so whatever it had set is no guide. The
+repaint now ends by setting every mode that decides what a key, a paste or a
+click sends, or where later output lands:
+- application cursor keys and keypad;
+- bracketed paste and focus reports;
+- mouse tracking and its protocol;
+- autowrap, insert and newline modes;
+- the scroll region and origin mode.
+
+It opens by clearing the client's origin and insert modes and its region, so
+they cannot bend the drawing. The modes are read from libvterm's own state
+through `vterm_internal.h`. That is the same vendored library, built with
+the model, so the layout cannot disagree; no API reads them.
+
+`emulator_test::a_repaint_carries_the_modes_a_program_set` checks a client
+that first set every mode on, or every mode off, and was then given only the
+repaint. It must send the same arrow, paste, focus and mouse bytes as one
+that saw the whole stream, and draw later output in the same place.
+`screen-model.toml` breaks five parts of this, and each fails.
+
 **Not yet:**
 - The primary screen under an alternate one.
-- Modes the repaint does not carry: application cursor keys, bracketed paste
-  and mouse reporting stay whatever the client last had.
 - Which screen rows continue the row above.
 - History before the screen when the log does hold the bytes, which is Live
   mode's "latest first" proper. Today a keyframe answers only a gap.

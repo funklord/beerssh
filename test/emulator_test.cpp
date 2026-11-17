@@ -771,6 +771,75 @@ void emulator_test::a_repaint_draws_the_servers_screen_on_a_fresh_client() {
 	bssh_screen_model_free(server);
 }
 
+void emulator_test::a_repaint_carries_the_modes_a_program_set() {
+	/*
+	 * A keyframe is fed to a client that was somewhere else: its modes are
+	 * whatever it had when the link went, the shell's say, while the
+	 * program it is shown now -- an editor -- set others. So the repaint
+	 * says every mode a key, a paste or a click is sent by, and every one
+	 * that changes how later output lands, both ways: a client given only
+	 * the repaint must behave as one that saw the whole stream, whatever it
+	 * had set before.
+	 */
+	const QByteArray everything_on = QByteArrayLiteral(
+	        "\x1b[?1h\x1b=\x1b[?2004h\x1b[?1004h\x1b[?1002h\x1b[?1006h\x1b[?7l\x1b[4h\x1b[20h\x1b[3;8r\x1b[?6h");
+	const QByteArray everything_off = QByteArrayLiteral(
+	        "\x1b[?1l\x1b>\x1b[?2004l\x1b[?1004l\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?7h\x1b[4l"
+	        "\x1b[20l\x1b[r\x1b[?6l");
+	const QList<QByteArray> streams = {
+		everything_on + QByteArrayLiteral("\x1b[2;3Hin the region"),
+		everything_off + QByteArrayLiteral("plain"),
+		QByteArrayLiteral("\x1b[?1003h\x1b[?1005h\x1b[5;20r\x1b[7;1Hx"),
+		QByteArrayLiteral("\x1b[?1000h\x1b[?1015h"),
+	};
+
+	/* What a client does that depends on a mode, as the bytes it sends and draws. */
+	auto behaviour = [](bssh_emulator &client) {
+		QByteArray said;
+		client.take_output();
+		client.send_key(bssh_emulator::KEY_UP, 0);
+		said += client.take_output() + '|';
+		client.send_paste(QStringLiteral("p"));
+		said += client.take_output() + '|';
+		client.set_focused(false);
+		client.set_focused(true);
+		said += client.take_output() + '|';
+		client.send_mouse_button(1, true, 0);
+		client.send_mouse_move(3, 4, 0);
+		client.send_mouse_button(1, false, 0);
+		said += client.take_output() + '|';
+		said += QByteArray::number(client.mouse_reporting()) + QByteArray::number(client.mouse_wants_motion());
+
+		/* Where the cursor stands, then where later output lands: past the
+		 * edge, past the region's foot, and home. */
+		client.feed(QByteArrayLiteral("@"));
+		said += '|' + client.screen().to_text().toUtf8();
+		client.feed(QByteArrayLiteral("0123456789012345678901234567890123456789XYZ\n\n\n\n\n\n\nend\x1b[1;1Hhome\nnl"));
+		said += '|' + client.screen().to_text().toUtf8();
+		return said;
+	};
+
+	for (const QByteArray &stream : streams) {
+		bssh_screen_model_t *server = bssh_screen_model_new(10, 40);
+		QVERIFY(server);
+		bssh_screen_model_feed(server, reinterpret_cast<const uint8_t *>(stream.constData()), size_t(stream.size()));
+		const size_t length = bssh_screen_model_repaint(server, nullptr, 0);
+		QByteArray repaint(int(length), Qt::Uninitialized);
+		bssh_screen_model_repaint(server, reinterpret_cast<uint8_t *>(repaint.data()), length);
+		bssh_screen_model_free(server);
+
+		bssh_emulator saw_it_all(40, 10);
+		saw_it_all.feed(stream);
+		const QByteArray expected = behaviour(saw_it_all);
+		for (const QByteArray &before : { everything_on, everything_off }) {
+			bssh_emulator came_back(40, 10);
+			came_back.feed(before);
+			came_back.feed(repaint);
+			QCOMPARE(behaviour(came_back), expected);
+		}
+	}
+}
+
 void emulator_test::sgr_sets_colour_and_attributes() {
 	bssh_emulator emulator(20, 3);
 

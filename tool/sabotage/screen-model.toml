@@ -88,3 +88,41 @@ file = "src/session/screen_model.c"
 find = "\thistory_line_t line = { NULL, 0, continuation ? 1 : 0, model->pushing_at };"
 replace = "\thistory_line_t line = { NULL, 0, 0, model->pushing_at };"
 expect = "the_servers_history_agrees_with_the_clients_scrollback"
+
+# A keyframe lands on a client that was somewhere else, so each mode must be
+# said both ways (a_repaint_carries_the_modes_a_program_set). Seen to fail
+# 2026-11-17.
+[[sabotage]]
+name = "the repaint leaves application cursor keys as the client had them"
+file = "src/session/screen_model.c"
+find = "\tput_text(&sink, state->mode.cursor ? \"\\x1b[?1h\" : \"\\x1b[?1l\");\n"
+replace = "\t;\n"
+expect = "a_repaint_carries_the_modes_a_program_set"
+
+[[sabotage]]
+name = "the repaint forgets which mouse protocol was asked for"
+file = "src/session/screen_model.c"
+find = "\telse if (state->mouse_protocol == MOUSE_SGR) put_text(&sink, \"\\x1b[?1006h\");\n"
+replace = "\telse if (0) put_text(&sink, \"\\x1b[?1006h\");\n"
+expect = "a_repaint_carries_the_modes_a_program_set"
+
+[[sabotage]]
+name = "the repaint leaves the scroll region as the client had it"
+file = "src/session/screen_model.c"
+find = "\t\tsnprintf(text, sizeof text, \"\\x1b[%d;%dr\", top + 1, bottom);\n\t\tput_text(&sink, text);\n"
+replace = "\t\t;\n"
+expect = "a_repaint_carries_the_modes_a_program_set"
+
+[[sabotage]]
+name = "the cursor is placed from the top of the screen under origin mode"
+file = "src/session/screen_model.c"
+find = "(state->mode.origin ? row - top : row) + 1"
+replace = "row + 1"
+expect = "a_repaint_carries_the_modes_a_program_set"
+
+[[sabotage]]
+name = "the client's insert and origin modes bend the drawing"
+file = "src/session/screen_model.c"
+find = "\tput_text(&sink, \"\\x1b[?6l\\x1b[4l\\x1b[r\");\n"
+replace = "\t;\n"
+expect = "a_repaint_carries_the_modes_a_program_set"
