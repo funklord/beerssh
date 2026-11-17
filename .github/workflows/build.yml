@@ -185,7 +185,8 @@ jobs:
         run: QT_QPA_PLATFORM=offscreen ./beerssh.exe --self-test
       # The suite, less what Windows does not build (test/tests.pro).
       - name: Test
-        run: make QMAKE=qmake6 DESKTOP_MEDIA= test
+        run: |
+          make QMAKE=qmake6 DESKTOP_MEDIA= test || { status=$?; echo "test: exit $status"; exit $status; }
 
   android:
     runs-on: ubuntu-latest

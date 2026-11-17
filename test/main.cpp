@@ -386,6 +386,15 @@ static int run_store_writer(const QString &spec) {
 }
 
 int main(int argc, char *argv[]) {
+#ifdef _WIN32
+	/*
+	 * A pipe is fully buffered there, and a crash took QtTest's whole
+	 * report with it: the first Windows run printed three lines and an
+	 * exit status. Unbuffered, the report is there up to the crash.
+	 */
+	setvbuf(stdout, nullptr, _IONBF, 0);
+	setvbuf(stderr, nullptr, _IONBF, 0);
+#endif
 	/*
 	 * Point every standard location at a throwaway tree, BEFORE
 	 * QApplication resolves any of them.
