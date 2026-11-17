@@ -1,5 +1,6 @@
 #include "session/screen_model.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -189,4 +190,136 @@ void bssh_screen_model_cursor(const bssh_screen_model_t *model, int *row, int *c
 
 int bssh_screen_model_alternate(const bssh_screen_model_t *model) {
 	return model ? model->alternate : 0;
+}
+
+/* A repaint being written: past `capacity` it only counts. */
+typedef struct sink {
+	uint8_t *out;
+	size_t capacity;
+	size_t length;
+} sink_t;
+
+static void put(sink_t *sink, const char *bytes, size_t length) {
+	for (size_t i = 0; i < length; ++i) {
+		if (sink->length < sink->capacity) sink->out[sink->length] = (uint8_t)bytes[i];
+		++sink->length;
+	}
+}
+
+static void put_text(sink_t *sink, const char *text) {
+	put(sink, text, strlen(text));
+}
+
+static void put_utf8(sink_t *sink, uint32_t code) {
+	char bytes[4];
+	size_t length;
+	if (code < 0x80) {
+		bytes[0] = (char)code;
+		length = 1;
+	} else if (code < 0x800) {
+		bytes[0] = (char)(0xC0 | (code >> 6));
+		bytes[1] = (char)(0x80 | (code & 0x3F));
+		length = 2;
+	} else if (code < 0x10000) {
+		bytes[0] = (char)(0xE0 | (code >> 12));
+		bytes[1] = (char)(0x80 | ((code >> 6) & 0x3F));
+		bytes[2] = (char)(0x80 | (code & 0x3F));
+		length = 3;
+	} else {
+		bytes[0] = (char)(0xF0 | (code >> 18));
+		bytes[1] = (char)(0x80 | ((code >> 12) & 0x3F));
+		bytes[2] = (char)(0x80 | ((code >> 6) & 0x3F));
+		bytes[3] = (char)(0x80 | (code & 0x3F));
+		length = 4;
+	}
+	put(sink, bytes, length);
+}
+
+static void put_color(sink_t *sink, const bssh_screen_color_t *color, int foreground) {
+	char text[32];
+	if (color->kind == BSSH_SCREEN_COLOR_INDEXED)
+		snprintf(text, sizeof text, ";%d;5;%u", foreground ? 38 : 48, color->index);
+	else if (color->kind == BSSH_SCREEN_COLOR_RGB)
+		snprintf(text, sizeof text, ";%d;2;%u;%u;%u", foreground ? 38 : 48, color->red, color->green,
+		         color->blue);
+	else
+		return; /* the 0 that opens every SGR here has already said default */
+	put_text(sink, text);
+}
+
+static int same_style(const bssh_screen_cell_t *a, const bssh_screen_cell_t *b) {
+	return a->attrs == b->attrs && !memcmp(&a->fg, &b->fg, sizeof a->fg) && !memcmp(&a->bg, &b->bg, sizeof a->bg);
+}
+
+/* From a reset, so nothing set for an earlier cell can leak into this one. */
+static void put_style(sink_t *sink, const bssh_screen_cell_t *cell) {
+	put_text(sink, "\x1b[0");
+	if (cell->attrs & BSSH_SCREEN_BOLD) put_text(sink, ";1");
+	if (cell->attrs & BSSH_SCREEN_DIM) put_text(sink, ";2");
+	if (cell->attrs & BSSH_SCREEN_ITALIC) put_text(sink, ";3");
+	if (cell->attrs & BSSH_SCREEN_UNDERLINE) put_text(sink, ";4");
+	if (cell->attrs & BSSH_SCREEN_BLINK) put_text(sink, ";5");
+	if (cell->attrs & BSSH_SCREEN_REVERSE) put_text(sink, ";7");
+	if (cell->attrs & BSSH_SCREEN_STRIKE) put_text(sink, ";9");
+	put_color(sink, &cell->fg, 1);
+	put_color(sink, &cell->bg, 0);
+	put_text(sink, "m");
+}
+
+size_t bssh_screen_model_repaint(const bssh_screen_model_t *model, uint8_t *out, size_t capacity) {
+	sink_t sink = { out, out ? capacity : 0, 0 };
+	if (!model) return 0;
+	char text[48];
+
+	/*
+	 * Into the alternate screen first when it is up, so what follows lands
+	 * on it; then a clean slate. An erased cell is an unwritten one at both
+	 * ends, which is what most of a screen is.
+	 */
+	put_text(&sink, model->alternate ? "\x1b[?1049h" : "\x1b[?1049l");
+	put_text(&sink, "\x1b[0m\x1b[H\x1b[2J");
+
+	int rows = 0, columns = 0;
+	vterm_get_size(model->vt, &rows, &columns);
+	bssh_screen_cell_t style;
+	memset(&style, 0, sizeof style);
+	for (int row = 0; row < rows; ++row) {
+		int at = -1; /* where the terminal's cursor is in this row, if known */
+		for (int col = 0; col < columns; ++col) {
+			bssh_screen_cell_t cell;
+			if (!bssh_screen_model_cell(model, row, col, &cell)) continue;
+			if (cell.chars[0] == 0xFFFFFFFFu) continue; /* a wide glyph's far half */
+			/* Never written and nothing to show: the slate already says so. */
+			if (cell.chars[0] == 0 && cell.attrs == 0 && cell.bg.kind == BSSH_SCREEN_COLOR_DEFAULT
+			    && cell.fg.kind == BSSH_SCREEN_COLOR_DEFAULT)
+				continue;
+			if (at != col) {
+				snprintf(text, sizeof text, "\x1b[%d;%dH", row + 1, col + 1);
+				put_text(&sink, text);
+			}
+			if (!same_style(&cell, &style)) {
+				put_style(&sink, &cell);
+				style = cell;
+			}
+			if (cell.chars[0] == 0) {
+				/* Erased in a colour: erased again, in the same pen. */
+				put_text(&sink, "\x1b[X");
+				at = -1;
+				continue;
+			}
+			for (int i = 0; i < BSSH_SCREEN_CELL_CHARS && cell.chars[i]; ++i) put_utf8(&sink, cell.chars[i]);
+			at = col + (cell.width > 0 ? cell.width : 1);
+			/* The last column leaves the cursor waiting to wrap; say where
+			 * the next cell is rather than trust it. */
+			if (at >= columns) at = -1;
+		}
+	}
+
+	int row = 0, col = 0, visible = 1;
+	bssh_screen_model_cursor(model, &row, &col, &visible);
+	put_text(&sink, "\x1b[0m");
+	snprintf(text, sizeof text, "\x1b[%d;%dH", row + 1, col + 1);
+	put_text(&sink, text);
+	put_text(&sink, visible ? "\x1b[?25h" : "\x1b[?25l");
+	return sink.length;
 }

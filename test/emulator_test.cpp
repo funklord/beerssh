@@ -611,6 +611,40 @@ void emulator_test::the_servers_screen_agrees_with_the_clients() {
 	}
 }
 
+void emulator_test::a_repaint_draws_the_servers_screen_on_a_fresh_client() {
+	/*
+	 * The keyframe (sec 5.6): the server's screen written as the bytes a
+	 * terminal draws it from, so a client coming back is shown the screen
+	 * as it is now by feeding them to the emulator it already has. A fresh
+	 * client fed only the repaint must make the server's screen, cell for
+	 * cell -- after each part of the same bytes the agreement test uses,
+	 * the alternate screen and a hidden cursor among them.
+	 */
+	const QList<QByteArray> parts = {
+		QByteArrayLiteral("plain text, then \x1b[1;31mbold red\x1b[0m and \x1b[3;4;9mitalic under strike\x1b[0m\r\n"),
+		QByteArrayLiteral("\x1b[38;5;208m256 orange\x1b[48;2;10;20;30m on truecolor\x1b[0m \x1b[2;5;7mdim blink rev\x1b[0m\r\n"),
+		QByteArray("wide \xe4\xb8\xad\xe6\x96\x87 and combining e\xcc\x81 and \xf0\x9f\x98\x80\r\n"),
+		QByteArrayLiteral("\x1b[5;10Hplaced\x1b[2;1H\x1b[K\x1b[3;3r\x1b[3;1Hscroll\nregion\n\x1b[r"),
+		QByteArrayLiteral("\x1b[44m\x1b[8;1H\x1b[Kblue line to the edge\x1b[0m\x1b[9;40Hz"),
+		QByteArrayLiteral("\x1b[?25l\x1b[?1049h\x1b[2J\x1b[1;1Hin the alternate screen\x1b[7;7H\x1b[44m \x1b[0m"),
+		QByteArrayLiteral("\x1b[?1049l\x1b[?25hback\r\n"),
+	};
+	bssh_screen_model_t *server = bssh_screen_model_new(10, 40);
+	QVERIFY(server);
+	for (const QByteArray &part : parts) {
+		bssh_screen_model_feed(server, reinterpret_cast<const uint8_t *>(part.constData()), size_t(part.size()));
+		const size_t length = bssh_screen_model_repaint(server, nullptr, 0);
+		QByteArray repaint(int(length), Qt::Uninitialized);
+		QCOMPARE(bssh_screen_model_repaint(server, reinterpret_cast<uint8_t *>(repaint.data()), length), length);
+		bssh_emulator fresh(40, 10);
+		fresh.feed(repaint);
+		const QString difference = screen_difference(fresh, server);
+		QVERIFY2(difference.isEmpty(), qPrintable(QStringLiteral("after %1: %2")
+		                                          .arg(QString::fromLatin1(part.left(12).toHex()), difference)));
+	}
+	bssh_screen_model_free(server);
+}
+
 void emulator_test::sgr_sets_colour_and_attributes() {
 	bssh_emulator emulator(20, 3);
 

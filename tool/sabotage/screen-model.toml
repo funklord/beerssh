@@ -1,0 +1,62 @@
+# The server's copy of the screen (project.md sec 5.6, the live screen) and
+# the repaint that carries it to a client. The model must make the client's
+# screen of the same bytes; the repaint must draw the model's screen on a
+# fresh client. All seen to fail 2026-11-17.
+
+# A UTF-8 sequence split across two pty reads, written as it came: libvterm
+# decodes each half as U+FFFD, where the client holds the tail back.
+[[sabotage]]
+name = "a split UTF-8 sequence is not held back"
+file = "src/session/screen_model.c"
+find = "static size_t tail_to_hold(const uint8_t *bytes, size_t length) {\n"
+replace = "static size_t tail_to_hold(const uint8_t *bytes, size_t length) {\n\treturn 0;\n"
+expect = "the_servers_screen_agrees_with_the_clients"
+
+# Set up unlike the client: no alternate screen, so a full-screen program
+# draws over the shell at the server's end only.
+[[sabotage]]
+name = "the model has no alternate screen"
+file = "src/session/screen_model.c"
+find = "\tvterm_screen_enable_altscreen(model->screen, 1);\n"
+replace = "\t;\n"
+expect = "the_servers_screen_agrees_with_the_clients"
+
+# An attribute dropped on the way out of libvterm.
+[[sabotage]]
+name = "the model loses reverse video"
+file = "src/session/screen_model.c"
+find = "\tif (cell.attrs.reverse) attrs |= BSSH_SCREEN_REVERSE;\n"
+replace = "\t;\n"
+expect = "the_servers_screen_agrees_with_the_clients"
+
+# The repaint draws every cell in the default colours.
+[[sabotage]]
+name = "the repaint leaves out the colours"
+file = "src/session/screen_model.c"
+find = "\tput_color(sink, &cell->fg, 1);\n\tput_color(sink, &cell->bg, 0);\n"
+replace = "\t;\n"
+expect = "a_repaint_draws_the_servers_screen_on_a_fresh_client"
+
+# A full-screen program's screen repainted over the shell's.
+[[sabotage]]
+name = "the repaint ignores the alternate screen"
+file = "src/session/screen_model.c"
+find = "\tput_text(&sink, model->alternate ? \"\\x1b[?1049h\" : \"\\x1b[?1049l\");\n"
+replace = "\t;\n"
+expect = "a_repaint_draws_the_servers_screen_on_a_fresh_client"
+
+# A program that hid the cursor gets it back on every keyframe.
+[[sabotage]]
+name = "the repaint shows a hidden cursor"
+file = "src/session/screen_model.c"
+find = "\tput_text(&sink, visible ? \"\\x1b[?25h\" : \"\\x1b[?25l\");\n"
+replace = "\t;\n"
+expect = "a_repaint_draws_the_servers_screen_on_a_fresh_client"
+
+# A line erased in a colour comes back uncoloured.
+[[sabotage]]
+name = "the repaint skips cells erased in a colour"
+file = "src/session/screen_model.c"
+find = "\t\t\t\tput_text(&sink, \"\\x1b[X\");\n"
+replace = "\t\t\t\t;\n"
+expect = "a_repaint_draws_the_servers_screen_on_a_fresh_client"

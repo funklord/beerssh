@@ -80,6 +80,23 @@ int bssh_screen_model_cell(const bssh_screen_model_t *model, int row, int column
 void bssh_screen_model_cursor(const bssh_screen_model_t *model, int *row, int *column, int *visible);
 int bssh_screen_model_alternate(const bssh_screen_model_t *model);
 
+/*
+ * The screen as bytes a terminal of the same size draws it from: the
+ * keyframe, written in the terminal's own language rather than a format of
+ * ours, so a client applies it by feeding it to the emulator it already
+ * has. Every cell with its attributes and colours, the cursor where it is
+ * and whether it shows, and the alternate screen if that is up.
+ *
+ * Writes at most `capacity` bytes to `out` and returns the length of the
+ * whole repaint, as snprintf does, so a caller can size a buffer and ask
+ * again.
+ *
+ * Not carried yet: the primary screen underneath an alternate one, and
+ * which rows continue the row above (what a later narrower resize rewraps
+ * by).
+ */
+size_t bssh_screen_model_repaint(const bssh_screen_model_t *model, uint8_t *out, size_t capacity);
+
 #ifdef __cplusplus
 }
 #endif

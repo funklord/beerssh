@@ -1484,12 +1484,22 @@ cell, the cursor and the alternate screen, before and after a reflowing resize.
 It found one difference at once: libvterm decodes a UTF-8 sequence split across
 two writes as U+FFFD, which the client has always held back for and the model
 had not, so the model holds the same tail (an incomplete sequence, or a lone ESC).
-It costs `beerssh-session` 58,872 bytes (790,160 to 849,032, static). **Not yet:**
-the history stream, so a resize that would pull lines back down from the
-scrollback differs; sending a snapshot -- a frame kind and the client applying
-it -- which is the next step, and until it exists nothing observes the host's
-feeding, so that wiring is unguarded by any test; and answering terminal queries
-from the server during a replay.
+It costs `beerssh-session` 58,872 bytes (790,160 to 849,032, static).
+**And the keyframe is written in the terminal's own language** (`repaint`, the
+same day): the model's screen as the bytes a terminal draws it from -- the
+alternate screen, a clean slate, every written or coloured cell with its style
+from an SGR reset, the cursor and whether it shows. A client applies it by
+feeding it to the emulator it already has, so no frame of ours has to describe a
+cell and the client needs no new code to draw one; mosh's choice too, for the
+same reason. `a_repaint_draws_the_servers_screen_on_a_fresh_client` feeds a fresh
+client only the repaint and compares; `tool/sabotage/screen-model.toml` breaks
+seven parts of the two and each fails. **Not yet:** the history stream, so a
+resize that would pull lines back down from the scrollback differs; the primary
+screen under an alternate one, and which rows continue the row above, which the
+repaint does not carry; sending it -- a frame kind, and a gap where the bytes it
+stands for were skipped -- and until that exists nothing observes the host's
+feeding, so that wiring is unguarded; and answering terminal queries from the
+server during a replay.
 
 **BeerSSH uses it over SSH, per host, off by default**: *Keep the shell on the
 server*, `resume_session`. Off because the probe is a round trip on every
