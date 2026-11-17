@@ -5,7 +5,9 @@
 #include <QThread>
 #include <QtTest>
 
+#ifndef _WIN32
 #include "pty_host.h"
+#endif
 
 #include <signal.h>
 #include <sys/stat.h>
@@ -29,9 +31,13 @@
 #include "conn_manager_test.h"
 #include "output_log_test.h"
 #include "line_gaps_test.h"
+#ifndef _WIN32
 #include "session_host_test.h"
+#endif
 #include "emulator_bench.h"
+#ifndef _WIN32
 #include "live_ssh_test.h"
+#endif
 #include "ui_shots.h"
 #include "emulator_test.h"
 #include "conformance_test.h"
@@ -44,17 +50,23 @@
 #include "tab_status_test.h"
 #include "host_key_test.h"
 #include "input_router_test.h"
+#ifndef _WIN32
 #include "pty_session_test.h"
+#endif
 #include "layout_test.h"
 #include "font_catalog_test.h"
 #include "font_download_test.h"
+#ifndef _WIN32
 #include "handoff_test.h"
+#endif
 #include "font_picker_test.h"
 #include "preset_editor_test.h"
 #include "screen_test.h"
 #include "ssh_config_test.h"
+#ifndef _WIN32
 #include "sshd_test.h"
 #include "sshd_window_test.h"
+#endif
 #include "terminal_view_test.h"
 
 /*
@@ -303,12 +315,17 @@ static int run_test(int argc, char *argv[]) {
 	 * cap ended the run, for any crash in any class after the first. The
 	 * list is QtTest's own (qtestcrashhandler_p.h).
 	 */
+#ifndef _WIN32
 	static const int fatal[] = { SIGHUP, SIGINT, SIGQUIT, SIGABRT, SIGILL,
 	                             SIGBUS, SIGFPE, SIGSEGV, SIGPIPE, SIGTERM };
 	struct sigaction before[sizeof(fatal) / sizeof(fatal[0])];
 	for (size_t i = 0; i < sizeof(fatal) / sizeof(fatal[0]); ++i) sigaction(fatal[i], nullptr, &before[i]);
 	const int failed = QTest::qExec(&instance, argc, argv);
 	for (size_t i = 0; i < sizeof(fatal) / sizeof(fatal[0]); ++i) sigaction(fatal[i], &before[i], nullptr);
+#else
+	/* No sigaction on Windows, and QtTest's handler there is not a signal handler. */
+	const int failed = QTest::qExec(&instance, argc, argv);
+#endif
 
 	watchdog_leave();
 	return failed;
@@ -394,9 +411,11 @@ int main(int argc, char *argv[]) {
 	bssh_drop_theme_when_offscreen();
 	QApplication app(argc, argv);
 
+#ifndef _WIN32
 	if (qEnvironmentVariableIsSet("BSSH_TEST_PTY_HOST")) {
 		return run_pty_host(qgetenv("BSSH_TEST_PTY_HOST"), argv + 1);
 	}
+#endif
 
 	if (qEnvironmentVariableIsSet("BSSH_TEST_STORE_WRITER")) {
 		return run_store_writer(qEnvironmentVariable("BSSH_TEST_STORE_WRITER"));
@@ -448,11 +467,13 @@ int main(int argc, char *argv[]) {
 		 * really crosses a process boundary. Answered here, before the
 		 * suite, and nothing else runs.
 		 */
+#ifndef _WIN32
 		if (qstrcmp(argv[i], "--handoff-give") == 0) return bssh_handoff_give_mode();
 		if (qstrcmp(argv[i], "--handoff-take") == 0 && i + 2 < argc) {
 			return bssh_handoff_take_mode(QString::fromLocal8Bit(argv[i + 1]),
 			                              QString::fromLocal8Bit(argv[i + 2]));
 		}
+#endif
 		if (qstrcmp(argv[i], "--bench") == 0) {
 			bench = true;
 			continue;
@@ -487,9 +508,14 @@ int main(int argc, char *argv[]) {
 		return run_test<emulator_bench>(forwarded_argc, forwarded_argv) == 0 ? 0 : 1;
 	}
 
+#ifndef _WIN32
 	if (live_ssh) {
 		return run_test<live_ssh_test>(forwarded_argc, forwarded_argv) == 0 ? 0 : 1;
 	}
+#else
+	/* Against a real sshd from tool/check-ssh.sh, which is POSIX shell. */
+	if (live_ssh) return 1;
+#endif
 
 	if (shots) {
 		return run_test<bssh_ui_shots>(forwarded_argc, forwarded_argv) == 0 ? 0 : 1;
@@ -505,13 +531,17 @@ int main(int argc, char *argv[]) {
 	failures += run_test<preset_editor_test>(argc, argv);
 	failures += run_test<screen_test>(argc, argv);
 	failures += run_test<ssh_config_test>(argc, argv);
+#ifndef _WIN32
 	failures += run_test<sshd_test>(argc, argv);
 	failures += run_test<sshd_window_test>(argc, argv);
+#endif
 	failures += run_test<command_line_test>(argc, argv);
 	failures += run_test<conn_manager_test>(argc, argv);
 	failures += run_test<output_log_test>(argc, argv);
 	failures += run_test<line_gaps_test>(argc, argv);
+#ifndef _WIN32
 	failures += run_test<session_host_test>(argc, argv);
+#endif
 	failures += run_test<conformance_test>(argc, argv);
 	failures += run_test<emulator_test>(argc, argv);
 	failures += run_test<graphics_test>(argc, argv);
@@ -522,8 +552,10 @@ int main(int argc, char *argv[]) {
 	failures += run_test<session_registry_test>(argc, argv);
 	failures += run_test<tab_status_test>(argc, argv);
 	failures += run_test<host_key_test>(argc, argv);
+#ifndef _WIN32
 	failures += run_test<pty_session_test>(argc, argv);
 	failures += run_test<handoff_test>(argc, argv);
+#endif
 	failures += run_test<input_router_test>(argc, argv);
 	failures += run_test<layout_test>(argc, argv);
 	failures += run_test<terminal_view_test>(argc, argv);

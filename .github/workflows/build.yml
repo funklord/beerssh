@@ -183,6 +183,9 @@ jobs:
       # self-test, as the linux job does.
       - name: Headless smoke test
         run: QT_QPA_PLATFORM=offscreen ./beerssh.exe --self-test
+      # The suite, less what Windows does not build (test/tests.pro).
+      - name: Test
+        run: make QMAKE=qmake6 DESKTOP_MEDIA= test
 
   android:
     runs-on: ubuntu-latest

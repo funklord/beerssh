@@ -7,7 +7,9 @@
 
 #include "emulator_test.h"
 #include "term/emulator.h"
+#ifndef _WIN32
 #include "ssh/pty_session.h"
+#endif
 #include <QElapsedTimer>
 #include "term/term_features.h"
 #include "term/colour_scheme.h"
@@ -2886,6 +2888,9 @@ void emulator_test::narrowing_past_the_prompt_keeps_the_cursor_on_it() {
 }
 
 void emulator_test::a_typed_command_survives_resizing_under_a_real_shell() {
+#ifdef _WIN32
+	QSKIP("no local shell on Windows yet (forkpty; sec 1)");
+#else
 	/*
 	 * A real bash, a two-line prompt like the holder's, and a command
 	 * typed but not entered, longer than a row: then the window narrowed
@@ -2945,6 +2950,7 @@ void emulator_test::a_typed_command_survives_resizing_under_a_real_shell() {
 	settle(300);
 	check("widened");
 	session.disconnect_from_host();
+#endif
 }
 
 void emulator_test::the_cursors_line_keeps_its_rows_for_the_shell_to_redraw() {

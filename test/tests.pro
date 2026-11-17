@@ -341,3 +341,33 @@ HEADERS += \
 QMAKE_CFLAGS   += -MMD -MP
 QMAKE_CXXFLAGS += -MMD -MP
 QMAKE_CLEAN    += *.d
+
+# Windows (sec 1, best-effort): what beerssh.pro leaves out there, and the
+# classes that test only it -- the local shell (forkpty), moving a session
+# between processes (SCM_RIGHTS), the session helper's host side, and
+# beersshd, which is not built there. test/main.cpp skips their classes
+# under _WIN32; the rest of the suite runs as on Linux.
+win32 {
+    CONFIG -= debug_and_release debug_and_release_target
+    SOURCES -= \
+        session_host_test.cpp live_ssh_test.cpp handoff_test.cpp \
+        pty_session_test.cpp sshd_test.cpp sshd_window_test.cpp \
+        ../src/ssh/pty_session.cpp ../src/model/handoff_wire.cpp \
+        ../src/session/session_host.c \
+        ../src/sshd/root_path.cpp ../src/sshd/sftp_handler.cpp \
+        ../src/sshd/sshd.cpp ../src/sshd/sshd_demo.cpp \
+        ../src/sshd/sshd_keeper.cpp ../src/sshd/sshd_platform.cpp \
+        ../src/sshd/sshd_remote.cpp ../src/sshd/sshd_platform_desktop.cpp \
+        ../src/sshd/sshd_window.cpp
+    HEADERS -= \
+        session_host_test.h live_ssh_test.h handoff_test.h pty_host.h \
+        pty_session_test.h sshd_test.h sshd_window_test.h \
+        ../src/ssh/pty_session.h ../src/model/handoff_wire.h \
+        ../src/session/session_host.h \
+        ../src/sshd/root_path.h ../src/sshd/sftp_handler.h \
+        ../src/sshd/login_throttle.h ../src/sshd/sshd.h \
+        ../src/sshd/sshd_platform.h ../src/sshd/sshd_control.h \
+        ../src/sshd/sshd_demo.h ../src/sshd/sshd_keeper.h \
+        ../src/sshd/sshd_remote.h ../src/sshd/sshd_window.h
+    SOURCES += ../src/ssh/no_local_shell.cpp
+}
