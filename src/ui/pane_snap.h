@@ -25,6 +25,19 @@ static const int BSSH_COLUMN_SNAP_RADIUS = 8;
  */
 static const int BSSH_MAX_COLUMN_SNAP_RADIUS = 20;
 
+/*
+ * The whole-cell extent nearest an even share of `total` among `count`
+ * panes, for equalizing. Not bssh_snap_pane_extent of the share, which
+ * rounds down: the last pane then took what every other one gave up, and
+ * two panes ended up to two cells apart instead of at most one.
+ */
+inline int bssh_equal_pane_extent(int total, int count, int cell) {
+	if (count < 1) return total;
+	if (cell <= 1) return total / count;
+	const int columns = (total + count * cell / 2) / (count * cell);
+	return (columns < 1 ? 1 : columns) * cell;
+}
+
 /* Round a pane's extent down to whole character cells (sec 8.3), never
  * below one cell. */
 inline int bssh_snap_pane_extent(int extent, int cell) {

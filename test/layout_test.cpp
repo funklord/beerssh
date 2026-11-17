@@ -10943,9 +10943,6 @@ void layout_test::clicking_a_pane_focuses_it() {
 }
 
 void layout_test::a_divider_equalizes_on_a_double_click() {
-#ifdef Q_OS_WIN
-	QSKIP("open on Windows (project.md sec 12.2): panes left 16px apart with a 14px cell");
-#endif
 	/*
 	 * sec 8.3 asks for double-click/double-tap to equalize, and nothing
 	 * implemented it -- QSplitter raises no signal for a double click on
@@ -10996,6 +10993,26 @@ void layout_test::a_divider_equalizes_on_a_double_click() {
 	QVERIFY2(difference <= cell,
 	          qPrintable(QStringLiteral("panes differ by %1px, one cell is %2px")
 	                             .arg(difference).arg(cell)));
+
+	/*
+	 * And at every width across two cells' worth, not the one above. The
+	 * first pane was rounded DOWN to whole cells, so the second took up
+	 * to two cells more than the first: 16px apart with a 14px cell on
+	 * Windows, and at some widths here too -- the fixed 1200 above was
+	 * one where it happened not to show (2026-11-17).
+	 */
+	QStringList uneven;
+	for (int width = 1200; width < 1200 + 2 * cell + 2; ++width) {
+		container.resize(width, 400);
+		QCoreApplication::processEvents();
+		splitter->setSizes({ width * 3 / 4, width / 4 });
+		QCoreApplication::processEvents();
+		QApplication::sendEvent(handle, &click);
+		QCoreApplication::processEvents();
+		const int apart = qAbs(splitter->sizes().at(0) - splitter->sizes().at(1));
+		if (apart > cell) uneven << QStringLiteral("%1: %2px").arg(width).arg(apart);
+	}
+	QVERIFY2(uneven.isEmpty(), qPrintable(QStringLiteral("cell %1px; ").arg(cell) + uneven.join(QStringLiteral(", "))));
 }
 
 void layout_test::dividers_in_line_are_linked_end_to_end() {

@@ -1199,11 +1199,29 @@ void bssh_pane_container::equalize_splitter(QSplitter *splitter) {
 	splitter->setSizes(sizes);
 
 	/*
-	 * And then back onto whole cells, because equal halves of an odd
-	 * width are not both a whole number of columns -- equalizing without
-	 * this would undo the snap the drag handler exists to apply.
+	 * And then onto whole cells, because equal halves of an odd width
+	 * are not both a whole number of columns -- equalizing without this
+	 * would undo the snap the drag handler exists to apply. To the
+	 * NEAREST whole cell: snap_splitter rounds each pane down, and the
+	 * last took the difference, so a double-click could leave two panes
+	 * nearly two columns apart (16px with a 14px cell, first seen on
+	 * Windows; at some widths on any platform).
 	 */
-	snap_splitter(splitter);
+	const bool vertical = splitter->orientation() == Qt::Vertical;
+	const int cell = m_views.size() < 2 ? 0
+	                 : vertical ? m_views.first()->cell_height() : m_views.first()->cell_width();
+	sizes = splitter->sizes();
+	int total = 0;
+	for (int each : sizes) total += each;
+	const int extent = bssh_equal_pane_extent(total, count, cell);
+	const int last = total - (count - 1) * extent;
+	if (cell <= 1 || last < cell) {
+		snap_splitter(splitter);
+		return;
+	}
+	for (int i = 0; i < count - 1; ++i) sizes[i] = extent;
+	sizes[count - 1] = last;
+	splitter->setSizes(sizes);
 }
 
 QList<bssh_pane_container::divider_ref_t> bssh_pane_container::all_dividers() const {
