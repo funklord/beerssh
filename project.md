@@ -1434,6 +1434,26 @@ holds a socket open simply keeps holding it. What still needs deciding is what
   broken thing -- and only running them says which one you have. That is
   the argument for the harness rather than for care: it removes the
   moment where being careful is a choice.
+- **The visual bell [BUILT 2026-11-17].** A bell rung in a session ON
+  screen did nothing at all: not missed, so no dot and no notification,
+  and nothing else answered it. The holder, the same day: the bell is
+  "mostly used as a direct signal for attention, it is not really supposed
+  to be a notification ... it rarely carries value afterwards". So the
+  pane it rang in inverts for 120 ms -- xterm's `visualBell`, the old
+  answer to the same question -- and keeps nothing. Painted as reverse
+  video on top of DECSCNM, so a screen the remote reversed flashes back
+  to normal; a burst of bells is one flash held from the last, not a
+  strobe; `bell_enabled` off silences it like the dot. The session emits
+  `bell_on_screen` where it already holds both conditions, beside
+  `bell_while_away`, and the pane container wires it to that pane's view.
+  `layout_test::a_bell_on_screen_flashes_its_own_pane`.
+  **Open, the holder's: the off-screen half.** By the same reading the
+  dot that waits until the tab is seen, and the desktop notification
+  (decided 2026-09-29, above and sec 8.3), are the lingering kind. A
+  transient alternative is the window manager's urgency hint
+  (`QApplication::alert`, xterm's `bellIsUrgent`), which clears itself
+  when the window is raised. Not changed without the holder's word,
+  since it reverses a decision of theirs.
 
 ---
 

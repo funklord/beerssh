@@ -455,6 +455,21 @@ void bssh_terminal_view::set_reverse_video(bool reverse) {
 	update();
 }
 
+void bssh_terminal_view::flash_bell() {
+	if (!m_bell_timer) {
+		m_bell_timer = new QTimer(this);
+		m_bell_timer->setSingleShot(true);
+		connect(m_bell_timer, &QTimer::timeout, this, [this] {
+			m_bell_flash = false;
+			update();
+		});
+	}
+	/* A burst of bells is one flash, held from the last, not a strobe. */
+	m_bell_flash = true;
+	m_bell_timer->start(bell_flash_ms);
+	update();
+}
+
 void bssh_terminal_view::sync_blink_timer() {
 	/*
 	 * Only the FOCUSED terminal blinks (sec 10.2). Four panes each
@@ -2261,7 +2276,7 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 			 * effective_background(), so a default cell now matches the
 			 * base fill and is not redundantly repainted.
 			 */
-			if (m_reverse_video) std::swap(fg, bg);
+			if (painted_reverse()) std::swap(fg, bg);
 
 			/*
 			 * Selection inverts rather than tinting: it stays visible

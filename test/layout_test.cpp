@@ -11553,6 +11553,46 @@ void layout_test::a_bell_in_a_visible_pane_is_not_a_missed_one() {
 	QVERIFY2(!b->has_unseen_bell(), "showing the pane again means it has been seen");
 }
 
+void layout_test::a_bell_on_screen_flashes_its_own_pane() {
+	/*
+	 * The visual bell (sec 5.5). A bell rang in a session on screen did
+	 * nothing at all: it was not missed, so it marked no tab, and nothing
+	 * else answered it. The holder (2026-11-17): the bell is "a direct
+	 * signal for attention", so it shows where the eyes are -- the pane it
+	 * rang in, not its neighbour -- and goes again by itself.
+	 */
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+	bssh_session *b = registry.create(named(QStringLiteral("b")));
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(1200, 400);
+	layout.set_intent({a, b});
+	QCoreApplication::processEvents();
+	QCOMPARE(container.pane_count(), 2);
+	bssh_terminal_view *view_a = container.view_for(a);
+	bssh_terminal_view *view_b = container.view_for(b);
+	QVERIFY(view_a && view_b);
+
+	const QColor background = view_b->effective_background();
+	const QColor foreground = view_b->effective_foreground();
+	b->emulator()->feed(QByteArrayLiteral("\a"));
+	QVERIFY2(view_b->bell_flashing(), "the pane the bell rang in flashes");
+	QCOMPARE(view_b->effective_background(), foreground);
+	QVERIFY2(!view_a->bell_flashing(), "its neighbour does not");
+	QTRY_VERIFY_WITH_TIMEOUT(!view_b->bell_flashing(), 2000);
+	QCOMPARE(view_b->effective_background(), background);
+
+	/* A host that silences the bell gets no flash either (sec 10.2). */
+	QJsonObject quiet = b->settings();
+	quiet.insert(QStringLiteral("bell_enabled"), false);
+	b->set_settings(quiet);
+	b->emulator()->feed(QByteArrayLiteral("\a"));
+	QVERIFY2(!view_b->bell_flashing(), "bell_enabled off means no signal at all");
+}
+
 void layout_test::a_bell_with_the_window_away_is_a_missed_one() {
 	/*
 	 * The case sec 8.3's dot most exists for, and the one having a pane

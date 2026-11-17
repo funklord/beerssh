@@ -1,0 +1,28 @@
+# The visual bell (project.md sec 5.5): a bell rung in a session on screen
+# inverts that pane for a moment. Three seams: the session reporting the
+# bell it did not count as missed, the pane wired to it, and the flash
+# reaching what is painted rather than only a flag.
+
+# The session drops a bell rung on screen.
+[[sabotage]]
+name = "a bell on screen is not reported"
+file = "src/model/session.cpp"
+find = "\t\t\temit bell_on_screen();"
+replace = "\t\t\t;"
+expect = "a_bell_on_screen_flashes_its_own_pane"
+
+# The pane never hears it.
+[[sabotage]]
+name = "the pane ignores the bell"
+file = "src/ui/pane_container.cpp"
+find = "\tconnect(session, &bssh_session::bell_on_screen, view, &bssh_terminal_view::flash_bell);"
+replace = "\t;"
+expect = "a_bell_on_screen_flashes_its_own_pane"
+
+# The flash is recorded and painted nowhere.
+[[sabotage]]
+name = "the flash does not reach the paint"
+file = "src/ui/terminal_view.h"
+find = "\tbool painted_reverse() const { return m_reverse_video != m_bell_flash; }"
+replace = "\tbool painted_reverse() const { return m_reverse_video; }"
+expect = "a_bell_on_screen_flashes_its_own_pane"

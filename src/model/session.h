@@ -425,6 +425,9 @@ signals:
 	 */
 	void bell_while_away();
 
+	/* And one rang while it IS on screen: the view flashes (sec 5.5). */
+	void bell_on_screen();
+
 	/* Asked a person something nobody is looking at; `what` says what. */
 	void asking_while_away(const QString &what);
 

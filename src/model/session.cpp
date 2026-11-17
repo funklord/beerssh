@@ -95,7 +95,10 @@ bssh_session::bssh_session(const bssh_profile_t &profile, QObject *parent)
 		 */
 		if (!m_settings.value(QStringLiteral("bell_enabled")).toBool(true)) return;
 
-		if (m_on_screen) return;
+		if (m_on_screen) {
+			emit bell_on_screen();
+			return;
+		}
 
 		m_unseen_bell = true;
 		emit state_changed();

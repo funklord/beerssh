@@ -350,11 +350,24 @@ public:
 	void set_reverse_video(bool reverse);
 	bool reverse_video() const { return m_reverse_video; }
 	QColor effective_background() const {
-		return m_reverse_video ? m_foreground : m_background;
+		return painted_reverse() ? m_foreground : m_background;
 	}
 	QColor effective_foreground() const {
-		return m_reverse_video ? m_background : m_foreground;
+		return painted_reverse() ? m_background : m_foreground;
 	}
+
+	/*
+	 * The visual bell (sec 5.5): a bell rung in a session on screen
+	 * inverts the whole view for a moment, as xterm's visualBell does.
+	 * The bell is a call for attention NOW (the holder, 2026-11-17: "a
+	 * direct signal for attention ... it rarely carries value
+	 * afterwards"), so it is shown where the eyes are and leaves nothing
+	 * behind. Painted as reverse video on top of DECSCNM, so a screen the
+	 * remote already reversed flashes back to normal rather than staying.
+	 */
+	void flash_bell();
+	bool bell_flashing() const { return m_bell_flash; }
+	static constexpr int bell_flash_ms = 120;
 
 	/*
 	 * The host's low sixteen, for the emulator to answer OSC 4 with. The
@@ -1386,6 +1399,9 @@ private:
 	QColor m_background;
 	QColor m_foreground;
 	bool m_reverse_video;
+	bool m_bell_flash = false;
+	class QTimer *m_bell_timer = nullptr;
+	bool painted_reverse() const { return m_reverse_video != m_bell_flash; }
 	quint64 m_content_revision;
 	bool m_raise_contrast;
 	int m_text_brightness;

@@ -569,6 +569,9 @@ bssh_terminal_view *bssh_pane_container::add_pane_view(bssh_session *session,
 	connect(session->emulator(), &bssh_emulator::reverse_video_changed,
 	         view, &bssh_terminal_view::set_reverse_video);
 
+	/* The visual bell, in the pane the bell rang in (sec 5.5). */
+	connect(session, &bssh_session::bell_on_screen, view, &bssh_terminal_view::flash_bell);
+
 	m_views.append(view);
 	view->show();
 

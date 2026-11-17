@@ -36,6 +36,6 @@ expect = "reverse_video_reaches_the_pane_and_flips_it"
 [[sabotage]]
 name = "reverse video does not swap the colours"
 file = "src/ui/terminal_view.h"
-find = "\t\treturn m_reverse_video ? m_foreground : m_background;"
+find = "\t\treturn painted_reverse() ? m_foreground : m_background;"
 replace = "\t\treturn m_background;"
 expect = "reverse_video_reaches_the_pane_and_flips_it"
