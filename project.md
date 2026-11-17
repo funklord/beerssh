@@ -1629,9 +1629,28 @@ checks a client that had other text on its primary screen and was given
 only the repaint. It leaves the program onto the same cells, rows and cursor
 as one that saw the whole stream. Four sabotages fail it.
 
+**And Live answers a large backlog with a keyframe too** (the same day). A
+Live client coming back to more than 64 KiB that the log still holds is sent
+the lines it missed and the screen, as on a gap, instead of every byte. That
+is Live's guarantee, "latest first, every line's final text arrives later,
+skipped states dropped", and it is the default mode. Under 64 KiB a replay
+costs about a second on a slow mobile link at worst and keeps every state,
+so it is still replayed. Serial is never answered this way.
+
+The client now sends its mode ahead of the attach, since the host decides at
+the attach and a split read could otherwise let the old mode decide.
+`session_host_test::a_live_client_far_behind_is_sent_the_screen_not_every_byte`
+covers the three cases over 30,000 lines in a 1 MB log:
+- Live gets the history and the screen, in under 8 KB of repaint;
+- Serial gets every byte;
+- Live 200 bytes behind gets those 200 bytes.
+
+Still not "latest first" in order: history goes ahead of the screen, because
+the client's scrollback is filled from the bottom. Sending the screen first
+and the history above it after would need the scrollback to take lines in
+front of the ones it has.
+
 **Not yet:**
-- History before the screen when the log does hold the bytes, which is Live
-  mode's "latest first" proper. Today a keyframe answers only a gap.
 - The client's own rewrap of its scrollback on a narrower resize, which the
   model does not copy.
 - A client that resized itself while away has already pushed its stale screen,

@@ -22,6 +22,16 @@
 
 #define CHUNK 16384u
 
+/*
+ * In Live mode, a backlog the log still holds but larger than this is
+ * answered with a keyframe -- the lines missed and the screen now -- rather
+ * than every byte, which is Live's "latest first" (project.md sec 5.6). Under
+ * it a replay is cheap, a second at worst on a slow mobile link, and keeps
+ * every state between; over it the states between are what a bad link
+ * cannot afford and Live does not promise.
+ */
+#define KEYFRAME_BACKLOG 65536u
+
 typedef struct host {
 	bssh_output_log_t log;
 	int pty;              /* -1 once the program has gone */
@@ -75,6 +85,8 @@ typedef struct host {
 } host_t;
 
 enum { KEYFRAME_NONE, KEYFRAME_HEADER, KEYFRAME_HISTORY, KEYFRAME_REPAINT };
+
+static int start_keyframe(host_t *host);
 
 static int64_t now_ms(void) {
 	struct timespec at;
@@ -195,6 +207,11 @@ static int handle_frame(host_t *host, const bssh_wire_frame_t *frame) {
 		host->caught_up_due = 1;
 		bssh_output_log_ack(&host->log, host->sent);
 		set_size(host, columns, rows);
+
+		/* Live, and further behind than a replay is worth: latest first. */
+		if (!host->restarted_due && !host->log.faithful && host->sent >= host->log.start
+		    && host->log.end - host->sent > KEYFRAME_BACKLOG)
+			start_keyframe(host);
 		return 0;
 	case BSSH_WIRE_KEYFRAMES:
 		host->keyframes = 1;

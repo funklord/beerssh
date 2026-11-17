@@ -686,12 +686,16 @@ void bssh_session::answer_resume_probe(const QByteArray &output) {
 	uint8_t frame[32];
 	m_transport->send(QByteArray(reinterpret_cast<const char *>(frame),
 	                             int(bssh_session_client_put_keyframes(frame, sizeof(frame)))));
+
+	/*
+	 * Every attach: a host started anew knows nothing of the last one's.
+	 * Ahead of the attach too, since how a backlog is answered -- every
+	 * byte, or the screen and the lines missed -- depends on it.
+	 */
+	send_output_mode();
 	m_transport->send(QByteArray(reinterpret_cast<const char *>(frame),
 	                             int(bssh_wire_put_attach(frame, sizeof(frame), m_resume_client->next,
 	                                                      uint16_t(m_cols), uint16_t(m_rows)))));
-
-	/* Every attach: a host started anew knows nothing of the last one's. */
-	send_output_mode();
 
 	/* The same shell on a return, which has run this already. */
 	if (first && !m_resume_restored) {

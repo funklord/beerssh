@@ -770,6 +770,66 @@ void session_host_test::a_client_that_takes_keyframes_is_sent_the_screen_and_the
 	         qPrintable(terminal.screen().to_text()));
 }
 
+void session_host_test::a_live_client_far_behind_is_sent_the_screen_not_every_byte() {
+	/*
+	 * 30,000 lines while away, about 170 KB, all of it still in a 1 MB log.
+	 * Live answers that with the lines and the screen; Serial with every
+	 * byte, which is its promise; and a backlog a replay can afford is
+	 * replayed in Live too.
+	 */
+	QTemporaryDir scratch;
+	const QByteArray marker = (scratch.path() + QStringLiteral("/done")).toUtf8();
+	const QByteArray command = "seq 1 30000; echo finished; touch " + marker + "; read wait";
+	host_process_t host(command.constData());
+	QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(QString::fromUtf8(marker)), 20000);
+	QTest::qSleep(300); /* what seq still had in the pty, into the host */
+
+	auto come_back = [&](uint8_t mode, uint64_t from, received_t &received) {
+		client_t link;
+		if (!link.connect_to(host.path)) return false;
+		uint8_t frame[32];
+		link.send_raw(frame, bssh_session_client_put_keyframes(frame, sizeof(frame)));
+		link.set_mode(mode);
+		link.attach(from);
+		received.client.next = from;
+		bssh_session_client_reset_link(&received.client);
+		QElapsedTimer timer;
+		timer.start();
+		while (!received.caught_up && timer.elapsed() < 10000) {
+			pollfd one = { link.fd, POLLIN, 0 };
+			if (poll(&one, 1, 100) <= 0) continue;
+			uint8_t chunk[65536];
+			const ssize_t got = read(link.fd, chunk, sizeof(chunk));
+			if (got <= 0 || bssh_session_client_feed(&received.client, chunk, size_t(got)) != 0) return false;
+		}
+		return received.caught_up == 1;
+	};
+
+	received_t live;
+	QVERIFY(come_back(BSSH_WIRE_MODE_LIVE, 0, live));
+	QVERIFY2(live.text.size() < 8192, "Live replayed the backlog rather than sending the screen");
+	QVERIFY(live.history.size() >= BSSH_SCREEN_HISTORY_LINES);
+	QCOMPARE(live.history.last().toULongLong() + 1 > 29000, true);
+	bssh_emulator terminal(80, 24);
+	terminal.feed(live.text);
+	QVERIFY2(terminal.screen().to_text().contains(QStringLiteral("30000\nfinished")),
+	         qPrintable(terminal.screen().to_text()));
+	QVERIFY(live.gaps.isEmpty());
+
+	received_t serial;
+	QVERIFY(come_back(BSSH_WIRE_MODE_SERIAL, 0, serial));
+	QVERIFY(serial.history.isEmpty());
+	QVERIFY(serial.text.startsWith("1\r\n2\r\n3\r\n"));
+	QVERIFY(serial.text.contains("29999\r\n30000\r\nfinished"));
+
+	/* Live, a few lines behind: those bytes, not a keyframe. */
+	received_t near;
+	const uint64_t end = serial.client.next;
+	QVERIFY(come_back(BSSH_WIRE_MODE_LIVE, end - 200, near));
+	QVERIFY(near.history.isEmpty());
+	QCOMPARE(near.text.size(), 200);
+}
+
 void session_host_test::a_history_line_round_trips_with_its_styles() {
 	bssh_screen_cell_t cells[6];
 	memset(cells, 0, sizeof(cells));
@@ -1125,6 +1185,10 @@ void session_host_test::a_kept_session_puts_the_lines_it_missed_into_its_scrollb
 	const QList<int> kinds = kept.kinds_written();
 	QVERIFY(kinds.indexOf(BSSH_WIRE_KEYFRAMES) >= 0);
 	QVERIFY(kinds.indexOf(BSSH_WIRE_KEYFRAMES) < kinds.indexOf(BSSH_WIRE_ATTACH));
+
+	/* And its mode, which decides how the host answers a backlog at the attach. */
+	QVERIFY(kinds.indexOf(BSSH_WIRE_MODE) >= 0);
+	QVERIFY(kinds.indexOf(BSSH_WIRE_MODE) < kinds.indexOf(BSSH_WIRE_ATTACH));
 
 	uint8_t out[256];
 	auto frame = [&](size_t len) { return QByteArray(reinterpret_cast<const char *>(out), int(len)); };

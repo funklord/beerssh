@@ -76,3 +76,34 @@ file = "src/session/session_client.c"
 find = "\tif (step < 0) return -1;\n"
 replace = "\t;\n"
 expect = "a_malformed_history_line_is_refused"
+
+# Live's latest first for a backlog the log still holds
+# (a_live_client_far_behind_is_sent_the_screen_not_every_byte).
+[[sabotage]]
+name = "a large Live backlog is replayed byte by byte"
+file = "src/session/session_host.c"
+find = "\t\t    && host->log.end - host->sent > KEYFRAME_BACKLOG)\n"
+replace = "\t\t    && 0)\n"
+expect = "a_live_client_far_behind_is_sent_the_screen_not_every_byte"
+
+[[sabotage]]
+name = "a Serial client is sent a keyframe and loses states"
+file = "src/session/session_host.c"
+find = "\t\tif (!host->restarted_due && !host->log.faithful && host->sent >= host->log.start\n"
+replace = "\t\tif (!host->restarted_due && host->sent >= host->log.start\n"
+expect = "a_live_client_far_behind_is_sent_the_screen_not_every_byte"
+
+[[sabotage]]
+name = "a backlog of a few lines is keyframed too"
+file = "src/session/session_host.c"
+find = "\t\t    && host->log.end - host->sent > KEYFRAME_BACKLOG)\n"
+replace = "\t\t    && host->log.end - host->sent > 0)\n"
+expect = "a_live_client_far_behind_is_sent_the_screen_not_every_byte"
+
+# The mode after the attach, so a split read lets the last one decide.
+[[sabotage]]
+name = "the session says its mode after the attach"
+file = "src/model/session.cpp"
+find = "\tsend_output_mode();\n\tm_transport->send(QByteArray(reinterpret_cast<const char *>(frame),\n\t                             int(bssh_wire_put_attach(frame, sizeof(frame), m_resume_client->next,\n\t                                                      uint16_t(m_cols), uint16_t(m_rows)))));\n"
+replace = "\tm_transport->send(QByteArray(reinterpret_cast<const char *>(frame),\n\t                             int(bssh_wire_put_attach(frame, sizeof(frame), m_resume_client->next,\n\t                                                      uint16_t(m_cols), uint16_t(m_rows)))));\n\tsend_output_mode();\n"
+expect = "a_kept_session_puts_the_lines_it_missed_into_its_scrollback"
