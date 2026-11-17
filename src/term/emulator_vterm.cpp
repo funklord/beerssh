@@ -104,6 +104,10 @@ struct bssh_emulator_private {
 
 	/* Inside feed(): announced once at its end, not per callback. */
 	bool in_feed = false;
+
+	/* What is fed is a replay: set_quiet(). */
+	bool quiet = false;
+	bool replaying() const { return quiet && in_feed; }
 	QTimer *sync_timeout;
 
 	bssh_image_store images;
@@ -1309,7 +1313,7 @@ int on_selection_set(VTermSelectionMask mask, VTermStringFragment frag, void *us
 		return 1;
 	}
 
-	if (!self->selection_oversized && !self->selection_buffer.isEmpty()) {
+	if (!self->selection_oversized && !self->selection_buffer.isEmpty() && !self->replaying()) {
 		emit self->owner->clipboard_write_requested(
 		        QString::fromUtf8(self->selection_buffer));
 	}
@@ -1748,12 +1752,14 @@ int on_sb_popline4(int cols, VTermScreenCell *cells, bool *continuation, void *u
 
 int on_bell(void *user) {
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
-	emit self->owner->bell();
+	if (!self->replaying()) emit self->owner->bell();
 	return 1;
 }
 
 void on_output(const char *bytes, size_t len, void *user) {
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
+	/* A key pressed is never fed, so only an answer is dropped here. */
+	if (self->replaying()) return;
 	self->pending_output.append(bytes, static_cast<int>(len));
 	emit self->owner->output_ready();
 }
@@ -2176,6 +2182,7 @@ const bssh_screen &bssh_emulator::screen() const {
 }
 
 void bssh_emulator_private::reply(const QByteArray &bytes) {
+	if (replaying()) return;
 	pending_output.append(bytes);
 	emit owner->output_ready();
 }
@@ -2668,6 +2675,10 @@ void bssh_emulator::push_history(const bssh_screen_cell_t *cells, int count, boo
 		if (source.width == 2) line.append(continuation_of(cell));
 	}
 	push_history(line, continuation);
+}
+
+void bssh_emulator::set_quiet(bool quiet) {
+	m_private->quiet = quiet;
 }
 
 void bssh_emulator::set_image_budget(qint64 bytes) {

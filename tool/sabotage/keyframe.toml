@@ -160,3 +160,40 @@ file = "src/term/emulator_vterm.cpp"
 find = "\t\tif (end < line.size() && end - at > 1 && line.at(end - 1).width == 2) --end;\n"
 replace = "\t\t;\n"
 expect = "a_history_line_wider_than_the_terminal_is_wrapped_to_it"
+
+# A replayed backlog asking questions and ringing bells
+# (a_backlog_is_drawn_but_not_answered).
+[[sabotage]]
+name = "a backlog's questions are answered into the live program"
+file = "src/term/emulator_vterm.cpp"
+find = "\tif (self->replaying()) return;\n\tself->pending_output.append(bytes, static_cast<int>(len));\n"
+replace = "\tself->pending_output.append(bytes, static_cast<int>(len));\n"
+expect = "a_backlog_is_drawn_but_not_answered"
+
+[[sabotage]]
+name = "a backlog's bell rings"
+file = "src/term/emulator_vterm.cpp"
+find = "\tif (!self->replaying()) emit self->owner->bell();\n"
+replace = "\temit self->owner->bell();\n"
+expect = "a_backlog_is_drawn_but_not_answered"
+
+[[sabotage]]
+name = "the session never quiets a backlog"
+file = "src/model/session.cpp"
+find = "\tm_resume_backlog = true;\n"
+replace = "\tm_resume_backlog = false;\n"
+expect = "a_backlog_is_drawn_but_not_answered"
+
+[[sabotage]]
+name = "every answer made while feeding is dropped, backlog or not"
+file = "src/term/emulator_vterm.cpp"
+find = "\tbool replaying() const { return quiet && in_feed; }"
+replace = "\tbool replaying() const { return quiet || in_feed; }"
+expect = "a_backlog_is_drawn_but_not_answered"
+
+[[sabotage]]
+name = "a backlog's questions this terminal answers itself are answered"
+file = "src/term/emulator_vterm.cpp"
+find = "\tif (replaying()) return;\n\tpending_output.append(bytes);\n"
+replace = "\tpending_output.append(bytes);\n"
+expect = "a_backlog_is_drawn_but_not_answered"

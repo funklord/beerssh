@@ -624,7 +624,9 @@ void bssh_session::answer_resume_probe(const QByteArray &output) {
 			session->m_resume_flowing = true;
 			session->m_away_history_kept = false;
 			session->m_away_history.clear();
+			session->m_emulator->set_quiet(session->m_resume_backlog);
 			session->m_emulator->feed(QByteArray(reinterpret_cast<const char *>(bytes), int(len)));
+			session->m_emulator->set_quiet(false);
 		};
 		events.gap = [](void *self, uint64_t count, uint64_t lines) {
 			const QString lost = lines == 1 ? QStringLiteral("1 line")
@@ -643,6 +645,7 @@ void bssh_session::answer_resume_probe(const QByteArray &output) {
 		};
 		events.caught_up = [](void *self) {
 			static_cast<bssh_session *>(self)->m_resume_replaying = false;
+			static_cast<bssh_session *>(self)->m_resume_backlog = false;
 		};
 
 		/* What scrolled off while away, into the scrollback where it belongs. */
@@ -682,6 +685,9 @@ void bssh_session::answer_resume_probe(const QByteArray &output) {
 	}
 	bssh_session_client_reset_link(m_resume_client.get());
 	m_resume_flowing = false;
+
+	/* What the host sends before it says it has caught up was written while away. */
+	m_resume_backlog = true;
 
 	/*
 	 * From the start of the log, for a name a saved layout gave back: the shell

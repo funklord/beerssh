@@ -13,6 +13,7 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QTemporaryDir>
+#include <QSignalSpy>
 #include <QTest>
 
 #include <poll.h>
@@ -1358,6 +1359,39 @@ void session_host_test::a_resize_while_away_does_not_bring_lines_back_twice() {
 	}
 	QCOMPARE(logical(rows, continues), logical(theirs_rows, theirs_continues));
 	bssh_screen_model_free(host);
+}
+
+void session_host_test::a_backlog_is_drawn_but_not_answered() {
+	/*
+	 * What a program wrote while nobody watched, sent before the host says
+	 * it has caught up: drawn, but a question in it was asked long ago and
+	 * its answer would be typed into whatever runs now, and its bell rang
+	 * for nobody. What the user types meanwhile still goes. After the host
+	 * has caught up, the same bytes are answered and ring. Two questions,
+	 * since the two are answered by different code: device attributes by
+	 * this terminal's own reply, the cursor's place by libvterm's.
+	 */
+	kept_t kept;
+	kept.answer_probe();
+	QSignalSpy rang(kept.session, &bssh_session::bell_rang);
+	auto inputs = [&kept] { return int(kept.kinds_written().count(BSSH_WIRE_INPUT)); };
+	const int before = inputs();
+
+	kept.host_says(kept.hello() + kept.output(0, "from-the-backlog\x1b[c\x1b[6n\x07"));
+	QVERIFY(kept.screen().contains(QStringLiteral("from-the-backlog")));
+	QCOMPARE(inputs(), before);
+	QCOMPARE(rang.count(), 0);
+
+	kept.session->emulator()->send_paste(QStringLiteral("typed"));
+	const int typed = inputs();
+	QVERIFY(typed > before);
+
+	uint8_t frame[8];
+	const size_t len = bssh_wire_put(frame, sizeof(frame), BSSH_WIRE_CAUGHT_UP, nullptr, 0);
+	const qsizetype end = qsizetype(strlen("from-the-backlog\x1b[c\x1b[6n\x07"));
+	kept.host_says(QByteArray(reinterpret_cast<const char *>(frame), int(len)) + kept.output(uint64_t(end), "\x1b[c\x1b[6n\x07"));
+	QVERIFY(inputs() > typed);
+	QCOMPARE(rang.count(), 1);
 }
 
 void session_host_test::a_host_without_the_program_gets_a_plain_shell() {

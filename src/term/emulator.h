@@ -342,6 +342,15 @@ public:
 	void reset_modes();
 
 	void feed(const QByteArray &bytes);
+
+	/*
+	 * Bytes fed while quiet are a replay of what a program wrote while
+	 * nobody watched (sec 5.6): drawn, but what they ask is not answered --
+	 * the answer would be typed into whatever runs now -- their bell does
+	 * not ring, and their clipboard write is not made. Keys pressed are
+	 * never fed, so they still go.
+	 */
+	void set_quiet(bool quiet);
 	void resize(int cols, int rows);
 
 	const bssh_screen &screen() const;

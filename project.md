@@ -1701,10 +1701,31 @@ to the next row, which is what the scrollback's own rewrap does.
 `emulator_test::a_history_line_wider_than_the_terminal_is_wrapped_to_it`
 checks it, and two sabotages fail it.
 
+**And a backlog is drawn but not answered** (the same day). "During replay
+only the server's emulator answers terminal queries, and side effects do not
+fire", above. Until now only the replay into a restored layout's new screen
+was silent, and it dropped everything the terminal sent, keystrokes
+included. A reconnect's backlog was answered: a cursor or device query a
+program wrote while away was answered into whatever ran by then, as typed
+input. Its bell rang, and its clipboard write was made.
+
+Now the emulator has a quiet switch, `set_quiet`. Bytes fed while it is on
+are drawn, but they make no answer, ring no bell and write no clipboard. A
+key pressed is never fed, so typing still goes. The session turns the switch
+on for what the host sends from an attach until it says it has caught up.
+
+`session_host_test::a_backlog_is_drawn_but_not_answered` asks two
+questions, because device attributes are answered by the emulator's own
+`reply()` and the cursor's place by libvterm. It checks both, the bell, a
+paste meanwhile, and the same bytes answered after catch-up. Five sabotages
+fail it.
+
 **Not yet:**
 - The model's own rewrap of its history on a narrower resize. A client's
   wrapping of what it is sent covers it, so only the numbering differs.
-- Answering terminal queries from the server during a replay.
+- Answering terminal queries from the server during a replay. A program
+  that asks while nobody watches is not answered, and waits until it gives
+  up.
 
 **BeerSSH uses it over SSH, per host, off by default**: *Keep the shell on the
 server*, `resume_session`. Off because the probe is a round trip on every

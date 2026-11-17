@@ -512,6 +512,7 @@ private:
 	QByteArray m_resume_name;
 	bool m_resume_restored = false;
 	bool m_resume_replaying = false;
+	bool m_resume_backlog = false;  /* from an attach until the host has caught up */
 
 	/*
 	 * The history as it stood when this kept session's screen stopped
