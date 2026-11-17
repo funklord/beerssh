@@ -4,6 +4,11 @@
 #include "model/ssh_config.h"
 
 #include "ssh/jump_tunnel.h"
+#ifdef _WIN32
+#include <winsock2.h>
+#else
+#include <unistd.h>
+#endif
 #include "model/profile_store.h"
 #include "ui/ssh_config_import.h"
 
@@ -410,4 +415,47 @@ void ssh_config_test::an_import_never_overwrites_an_existing_host() {
 	}
 	QVERIFY2(found_original, "the host the user already had must survive untouched");
 	QVERIFY2(found_imported, "the imported one must arrive under a distinct name");
+}
+
+/*
+ * The pair the tunnel pumps through: a socketpair on POSIX, two loopback
+ * TCP sockets on Windows, which has none. Bytes cross in both directions,
+ * and closing one end is end-of-stream at the other -- which is how the
+ * target session hears that the bastion went away.
+ */
+namespace {
+#ifdef _WIN32
+long pair_send(int fd, const char *data, int size) { return send(SOCKET(fd), data, size, 0); }
+long pair_receive(int fd, char *data, int size) { return recv(SOCKET(fd), data, size, 0); }
+void pair_close(int fd) { closesocket(SOCKET(fd)); }
+#else
+long pair_send(int fd, const char *data, int size) { return long(::write(fd, data, size_t(size))); }
+long pair_receive(int fd, char *data, int size) { return long(::read(fd, data, size_t(size))); }
+void pair_close(int fd) { ::close(fd); }
+#endif
+}  // namespace
+
+void ssh_config_test::the_jump_pair_carries_both_ways_and_ends() {
+#ifdef _WIN32
+	WSADATA data;
+	QCOMPARE(WSAStartup(MAKEWORD(2, 2), &data), 0);
+#endif
+	int pair[2] = {-1, -1};
+	QCOMPARE(bssh_jump_tunnel::make_pair(pair), 0);
+	QVERIFY(pair[0] >= 0 && pair[1] >= 0 && pair[0] != pair[1]);
+
+	char buffer[16] = {};
+	QCOMPARE(pair_send(pair[0], "ping", 4), 4L);
+	QCOMPARE(pair_receive(pair[1], buffer, int(sizeof(buffer))), 4L);
+	QCOMPARE(QByteArray(buffer, 4), QByteArray("ping"));
+	QCOMPARE(pair_send(pair[1], "pong!", 5), 5L);
+	QCOMPARE(pair_receive(pair[0], buffer, int(sizeof(buffer))), 5L);
+	QCOMPARE(QByteArray(buffer, 5), QByteArray("pong!"));
+
+	pair_close(pair[0]);
+	QCOMPARE(pair_receive(pair[1], buffer, int(sizeof(buffer))), 0L);
+	pair_close(pair[1]);
+#ifdef _WIN32
+	WSACleanup();
+#endif
 }

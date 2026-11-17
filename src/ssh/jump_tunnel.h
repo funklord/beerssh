@@ -71,6 +71,13 @@ public:
 	void close();
 
 	/*
+	 * A connected stream pair: pair[0] for the pump, pair[1] for libssh.
+	 * socketpair(AF_UNIX) on POSIX, two loopback TCP sockets on Windows,
+	 * which has no socketpair. 0, or -1 with neither end open.
+	 */
+	static int make_pair(int pair[2]);
+
+	/*
 	 * Moving the tunnel with its session to another process (sec 8.4).
 	 *
 	 * pause() stops the pump between transfers -- never part-way through

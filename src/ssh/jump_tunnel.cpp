@@ -5,11 +5,126 @@
 
 #include "ssh/ssh_session_libssh.h"
 
-#ifndef _WIN32
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
 #include <errno.h>
 #include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#endif
+
+/*
+ * The pump's few socket calls, spelled once for each platform. Windows
+ * (sec 1, best-effort) has no socketpair(AF_UNIX) and no poll(): its pair
+ * is two loopback TCP sockets, and its descriptors are Winsock SOCKETs,
+ * kept in the class's ints as Winsock's own small handle values are.
+ */
+namespace {
+
+#ifdef _WIN32
+int pump_poll(struct pollfd *fds, unsigned count, int ms) {
+	return WSAPoll(fds, ULONG(count), ms);
+}
+bool pump_try_again() {
+	const int e = WSAGetLastError();
+	return e == WSAEWOULDBLOCK || e == WSAEINTR;
+}
+long pump_read(int fd, char *buffer, int size) {
+	return recv(SOCKET(fd), buffer, size, 0);
+}
+long pump_write(int fd, const char *buffer, int size) {
+	return send(SOCKET(fd), buffer, size, 0);
+}
+void pump_shutdown(int fd) {
+	shutdown(SOCKET(fd), SD_BOTH);
+}
+void pump_close(int fd) {
+	closesocket(SOCKET(fd));
+}
+#else
+int pump_poll(struct pollfd *fds, unsigned count, int ms) {
+	return poll(fds, nfds_t(count), ms);
+}
+bool pump_try_again() {
+	return errno == EINTR || errno == EAGAIN;
+}
+long pump_read(int fd, char *buffer, int size) {
+	return long(::read(fd, buffer, size_t(size)));
+}
+long pump_write(int fd, const char *buffer, int size) {
+	return long(::write(fd, buffer, size_t(size)));
+}
+void pump_shutdown(int fd) {
+	::shutdown(fd, SHUT_RDWR);
+}
+void pump_close(int fd) {
+	::close(fd);
+}
+#endif
+
+}  // namespace
+
+#ifdef _WIN32
+/*
+ * A connected pair on 127.0.0.1: listen on a port the system picks,
+ * connect, accept, and stop listening. Between the listen and the accept
+ * another local process could connect first, so the accepted socket must
+ * be the one this connect made -- its peer is checked against the
+ * connecting socket's own address, and anything else refused. No Nagle
+ * on either end: these carry keystrokes, and a 40 ms wait for an ACK on
+ * every one is exactly the lag a terminal must not have.
+ */
+int bssh_jump_tunnel::make_pair(int pair[2]) {
+	pair[0] = pair[1] = -1;
+	SOCKET listener = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (listener == INVALID_SOCKET) return -1;
+	sockaddr_in address = {};
+	address.sin_family = AF_INET;
+	address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	address.sin_port = 0;
+	int length = int(sizeof(address));
+	SOCKET client = INVALID_SOCKET;
+	SOCKET server = INVALID_SOCKET;
+	bool ok = ::bind(listener, reinterpret_cast<sockaddr *>(&address), length) == 0
+	          && ::getsockname(listener, reinterpret_cast<sockaddr *>(&address), &length) == 0
+	          && ::listen(listener, 1) == 0;
+	if (ok) {
+		client = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+		ok = client != INVALID_SOCKET
+		     && ::connect(client, reinterpret_cast<sockaddr *>(&address), int(sizeof(address))) == 0;
+	}
+	if (ok) {
+		server = ::accept(listener, nullptr, nullptr);
+		ok = server != INVALID_SOCKET;
+	}
+	if (ok) {
+		sockaddr_in mine = {};
+		sockaddr_in theirs = {};
+		int mine_length = int(sizeof(mine));
+		int theirs_length = int(sizeof(theirs));
+		ok = ::getsockname(client, reinterpret_cast<sockaddr *>(&mine), &mine_length) == 0
+		     && ::getpeername(server, reinterpret_cast<sockaddr *>(&theirs), &theirs_length) == 0
+		     && mine.sin_port == theirs.sin_port && mine.sin_addr.s_addr == theirs.sin_addr.s_addr;
+	}
+	::closesocket(listener);
+	if (!ok) {
+		if (client != INVALID_SOCKET) ::closesocket(client);
+		if (server != INVALID_SOCKET) ::closesocket(server);
+		return -1;
+	}
+	const BOOL on = TRUE;
+	::setsockopt(client, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char *>(&on), sizeof(on));
+	::setsockopt(server, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char *>(&on), sizeof(on));
+	pair[0] = int(server);
+	pair[1] = int(client);
+	return 0;
+}
+#else
+int bssh_jump_tunnel::make_pair(int pair[2]) {
+	return socketpair(AF_UNIX, SOCK_STREAM, 0, pair);
+}
 #endif
 
 bssh_jump_tunnel::bssh_jump_tunnel(QObject *parent) : QThread(parent) {
@@ -86,7 +201,6 @@ bssh_jump_tunnel::hop_t bssh_jump_tunnel::parse(const QString &spec,
 	return hop;
 }
 
-#ifndef _WIN32
 bool bssh_jump_tunnel::authenticate() {
 	/*
 	 * Keys and the agent only, deliberately.
@@ -212,7 +326,7 @@ int bssh_jump_tunnel::open(const hop_t &hop, const QString &target_host, quint16
 	}
 
 	int pair[2] = {-1, -1};
-	if (socketpair(AF_UNIX, SOCK_STREAM, 0, pair) != 0) {
+	if (make_pair(pair) != 0) {
 		m_why = QStringLiteral("cannot create the local socket pair");
 		close();
 		return -1;
@@ -267,14 +381,14 @@ void bssh_jump_tunnel::run() {
 		fds[1].events = POLLIN;
 		fds[1].revents = 0;
 
-		const int ready = poll(fds, 2, 200);
+		const int ready = pump_poll(fds, 2, 200);
 		if (m_stop) break;
-		if (ready < 0 && errno != EINTR) break;
+		if (ready < 0 && !pump_try_again()) break;
 
 		if (ready > 0 && (fds[0].revents & POLLIN)) {
-			const ssize_t n = ::read(m_ours, buffer, sizeof(buffer));
+			const long n = pump_read(m_ours, buffer, int(sizeof(buffer)));
 			if (n == 0) break;
-			if (n < 0 && errno != EINTR && errno != EAGAIN) break;
+			if (n < 0 && !pump_try_again()) break;
 			if (n > 0 && !write_to_channel(buffer, int(n))) break;
 		}
 		if (ready > 0 && (fds[0].revents & (POLLHUP | POLLERR))) break;
@@ -307,7 +421,7 @@ void bssh_jump_tunnel::run() {
 	 * into the ordinary drop it already handles.
 	 */
 	/* Paused, the pair is left exactly as it is: it is about to move. */
-	if (m_ours >= 0 && !m_pause) ::shutdown(m_ours, SHUT_RDWR);
+	if (m_ours >= 0 && !m_pause) pump_shutdown(m_ours);
 }
 
 bool bssh_jump_tunnel::write_to_channel(const char *data, int size) {
@@ -327,7 +441,7 @@ bool bssh_jump_tunnel::write_to_channel(const char *data, int size) {
 			fd.fd = ssh_get_fd(m_session);
 			fd.events = POLLIN;
 			fd.revents = 0;
-			if (poll(&fd, 1, 200) < 0 && errno != EINTR) return false;
+			if (pump_poll(&fd, 1, 200) < 0 && !pump_try_again()) return false;
 			continue;
 		}
 		written += n;
@@ -344,8 +458,8 @@ bool bssh_jump_tunnel::drain_channel(char *buffer, int size) {
 
 		int written = 0;
 		while (written < n) {
-			const ssize_t w = ::write(m_ours, buffer + written, size_t(n - written));
-			if (w < 0 && (errno == EINTR || errno == EAGAIN)) continue;
+			const long w = pump_write(m_ours, buffer + written, n - written);
+			if (w < 0 && pump_try_again()) continue;
 			if (w <= 0) return false;
 			written += int(w);
 		}
@@ -361,7 +475,7 @@ void bssh_jump_tunnel::close() {
 	 * Our end first: the pump is waiting on it, and shutting it down is
 	 * what wakes the thread.
 	 */
-	if (m_ours >= 0) ::shutdown(m_ours, SHUT_RDWR);
+	if (m_ours >= 0) pump_shutdown(m_ours);
 
 	if (isRunning() && !wait(5000)) {
 		/*
@@ -396,7 +510,7 @@ void bssh_jump_tunnel::close() {
 	}
 
 	if (m_ours >= 0) {
-		::close(m_ours);
+		pump_close(m_ours);
 		m_ours = -1;
 	}
 
@@ -414,11 +528,12 @@ void bssh_jump_tunnel::close() {
 	 * it takes -- until socketpair() itself starts failing.
 	 */
 	if (m_theirs >= 0) {
-		::close(m_theirs);
+		pump_close(m_theirs);
 		m_theirs = -1;
 	}
 }
 
+#ifndef _WIN32
 /* ---- moving the tunnel with its session (sec 8.4) --------------------- */
 
 namespace {
@@ -554,29 +669,9 @@ bool bssh_jump_tunnel::adopt(const QByteArray &state, int jump_fd, int ours_fd, 
 #else
 
 /*
- * Windows (project.md sec 1, best-effort): the tunnel hands libssh one end
- * of a socketpair(AF_UNIX), which Windows has not, and pumps it with
- * poll(). Until it has a loopback pair of its own, a jump host is refused
- * at open() with a reason, which the session shows as it shows any other
- * failure to connect -- absent, not faked.
+ * Windows (project.md sec 1, best-effort) moves no session between
+ * processes (no SCM_RIGHTS), so the tunnel never moves either.
  */
-int bssh_jump_tunnel::open(const hop_t &hop, const QString &target_host, quint16 target_port,
-                            const QString &known_hosts, const QString &identity_file) {
-	Q_UNUSED(hop);
-	Q_UNUSED(target_host);
-	Q_UNUSED(target_port);
-	Q_UNUSED(known_hosts);
-	Q_UNUSED(identity_file);
-	m_why = QStringLiteral("Jump hosts are not available on Windows yet");
-	return -1;
-}
-
-void bssh_jump_tunnel::run() {
-}
-
-void bssh_jump_tunnel::close() {
-}
-
 bool bssh_jump_tunnel::pause() {
 	return false;
 }

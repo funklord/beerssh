@@ -1165,7 +1165,13 @@ void bssh_libssh_worker::do_connect(const QString &host, quint16 port, const QSt
 		 * below opens its own socket to the target and the jump host is
 		 * silently skipped -- see set_option.
 		 */
-		if (!set_option(SSH_OPTIONS_FD, &fd, "the jump host's connection")) return;
+		/*
+		 * As libssh's socket_t, which it reads the value as: a SOCKET,
+		 * eight bytes, on Windows, where an int's address had it read
+		 * four bytes past the descriptor.
+		 */
+		const socket_t descriptor = socket_t(fd);
+		if (!set_option(SSH_OPTIONS_FD, &descriptor, "the jump host's connection")) return;
 	}
 
 	if (ssh_connect(m_session) != SSH_OK) {

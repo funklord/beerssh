@@ -25,8 +25,8 @@ expect = "a_live_ssh_session_moves_to_another_session"
 [[sabotage]]
 name = "a paused pump shuts the pair it is handing over"
 file = "src/ssh/jump_tunnel.cpp"
-find = "\tif (m_ours >= 0 && !m_pause) ::shutdown(m_ours, SHUT_RDWR);\n"
-replace = "\tif (m_ours >= 0) ::shutdown(m_ours, SHUT_RDWR);\n"
+find = "\tif (m_ours >= 0 && !m_pause) pump_shutdown(m_ours);\n"
+replace = "\tif (m_ours >= 0) pump_shutdown(m_ours);\n"
 expect = "a_session_through_a_jump_host_moves_too"
 
 # The adopted tunnel's pump never started: the target session is imported
