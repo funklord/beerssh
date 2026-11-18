@@ -2170,7 +2170,12 @@ BeerSSH's Android build links the client -- fuzznet's archive built a second
 time, at API 28 in the `embedded-device` preset (beersshd's is at 30), and the
 link over it -- and the pairing is in the terminal's long-press menu under
 Terminal, the phone having no menu bar. The arm64 APK declares minSdk 28 and
-takes `getrandom` from bionic's `LIBC_P`; not yet run on a phone or emulator.
+takes `getrandom` from bionic's `LIBC_P`. **Run on the API 36 emulator
+(2026-11-18 evening), BeerSSH and beersshd on the one device:** a host at the
+server's Wi-Fi address with *Keep the shell on the server* On came up in a kept
+shell (plain, beersshd refuses `pty-req`); Pair Over Fuzznet from the long-press
+menu answered "Added 10.0.2.16 (fuzznet)"; and that host's tab ran commands. Not
+yet on the Fold or with two devices.
 A build directory made before a switch like this moved kept objects compiled
 without its define, since qmake's objects do not depend on its Makefile, so the
 Android build keeps `config.source`, which `tool/qmake-deps.mk` makes every
@@ -20536,7 +20541,8 @@ unless started with `--sessions`, the first bullet.
   own "Pair a BeerSSH device" button is not offered on Android, rightly:
   the window drives the server through `bssh_sshd_remote`, two files and
   no request channel, so a phone is paired from BeerSSH's side. **Not
-  seen:** a whole kept session through it on a device, and the Fold.
+  seen:** the Fold. (A whole kept session through it, from BeerSSH on the same
+  emulator, over SSH and then over fuzznet, is recorded in sec 5.6.)
   Uploading the helper to plain `sshd` hosts stays open (sec 5.6).
 
 - **Keys, and a password once one is set — [password added 2026-10-09,
