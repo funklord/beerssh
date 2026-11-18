@@ -55,17 +55,19 @@ trap 'exit 130' INT TERM
 # content. It also omits submodules, so vterm comes separately.
 git archive --format=tar HEAD > "$STAGE/src.tar"
 
-# From the submodule's own HEAD, unpatched -- the build applies
-# vterm-patch/ in place, so the working tree is never what a checkout
-# gives. Unconditional here, unlike check-ci: that script asks the workflow
-# whether the runner wants submodules because its job is to reproduce the
-# runner exactly, empty vterm/ included. This one builds the app to test
-# dead-peer detection and always needs libvterm.
-git -C vterm archive --format=tar --prefix=vterm/ HEAD > "$STAGE/vterm.tar"
-
-# softkeys at the commit HEAD's gitlink names, which is what a checkout gives.
-git -C softkeys archive --format=tar --prefix=softkeys/ \
-	"$(git rev-parse HEAD:softkeys)" > "$STAGE/softkeys.tar"
+# Every submodule at the commit HEAD's gitlink names, which is what a
+# checkout gives, unpatched -- the build applies vterm-patch/ and
+# libssh-patch/ itself -- and listed from .gitmodules rather than by hand:
+# a list here had vterm and softkeys alone, so once the build vendored
+# libssh (2026-11-10) it could not build at all (found 2026-11-18, with
+# check-deb's same miss). An extracted tree is no git checkout, so the
+# build cannot fetch what is missing.
+mkdir "$STAGE/sub"
+for path in $(git config -f .gitmodules --get-regexp 'submodule\..*\.path' | awk '{print $2}'); do
+	git -C "$path" archive --format=tar --prefix="$path/" "$(git rev-parse "HEAD:$path")" \
+		| tar -xf - -C "$STAGE/sub" || exit 1
+done
+tar -cf "$STAGE/submodules.tar" -C "$STAGE/sub" . || exit 1
 
 echo "check-keepalive: building and running inside $IMAGE"
 
@@ -73,16 +75,19 @@ docker run --rm --name "$CONTAINER" --cap-add=NET_ADMIN -v "$STAGE":/in:ro "$IMA
 set -e
 apt-get update -qq >/dev/null 2>&1
 DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-	qt6-base-dev libgl1-mesa-dev libssh-dev libsixel-dev libssl-dev libsecret-1-dev libxcb1-dev \
+	qt6-base-dev libgl1-mesa-dev cmake zlib1g-dev libsixel-dev libssl-dev libsecret-1-dev libxcb1-dev \
 	build-essential pkg-config python3 git openssh-server iptables >/dev/null 2>&1
 
 mkdir -p /build && cd /build
-tar xf /in/src.tar && tar xf /in/vterm.tar && tar xf /in/softkeys.tar
-# No patch stamp: vterm.tar is the submodule at its gitlink commit, so make
+tar xf /in/src.tar && tar xf /in/submodules.tar
+# No patch stamp: vterm is staged at its gitlink commit, so make
 # applies vterm-patch/ here rather than being handed a patched tree with
 # the step stamped away. git is installed above for it; git apply needs no
 # repository, and an extracted tree is not one.
-make -j"$(nproc)" test >/tmp/build.log 2>&1 || { tail -20 /tmp/build.log; exit 1; }
+# Without the media player and fuzznet: neither is what this checks, and
+# each would want packages this container does not need for it.
+make -j"$(nproc)" DESKTOP_MEDIA= FUZZNET= test >/tmp/build.log 2>&1 || {
+	grep -E "error|Error [0-9]|FAIL" /tmp/build.log | head -20; tail -5 /tmp/build.log; exit 1; }
 
 # Named ONCE, and checked, because it was written out three times and all
 # three were wrong. The singular-directory pass of 2026-08-25 rewrote
@@ -116,6 +121,7 @@ PasswordAuthentication no
 PubkeyAuthentication yes
 UsePAM no
 StrictModes no
+Subsystem sftp internal-sftp
 EOF
 /usr/sbin/sshd -f $D/sshd_config -E $D/sshd.log
 sleep 1

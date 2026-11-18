@@ -225,20 +225,31 @@ PY
 # that HEAD, and the runner checks out the GITLINK. So it is staged from
 # the commit the staged tree names, $STAGED:softkeys, not from whatever
 # the submodule has checked out.
+#
+# Every submodule the staged tree's .gitmodules names, by its gitlink, as
+# the runner's recursive checkout gives -- listed by hand here before, and
+# the hand list had no snurra and no fuzznet once the desktop build linked
+# them (found 2026-11-18, with check-deb's and check-keepalive's same miss).
+# fuzznet's own flog and monocypher with it, which the node compiles.
 if [ "$WANTS_SUBMODULES" = yes ]; then
-	git -C vterm archive --format=tar --prefix=vterm/ HEAD > "$STAGE/vterm.tar"
-	git -C softkeys archive --format=tar --prefix=softkeys/ \
-		"$(git rev-parse "$STAGED:softkeys")" > "$STAGE/softkeys.tar"
-	# libssh by its gitlink too, unpatched, so the container applies
-	# libssh-patch/ itself -- the proof the patches still apply from
-	# clean, which the working tree cannot give (sec 8.4).
-	git -C libssh archive --format=tar --prefix=libssh/ \
-		"$(git rev-parse "$STAGED:libssh")" > "$STAGE/libssh.tar"
+	mkdir "$STAGE/sub"
+	for path in $(git config --blob "$STAGED:.gitmodules" --get-regexp 'submodule\..*\.path' \
+	              | awk '{print $2}'); do
+		git -C "$path" archive --format=tar --prefix="$path/" "$(git rev-parse "$STAGED:$path")" \
+			| tar -xf - -C "$STAGE/sub" || exit 1
+	done
+	if fuzznet=$(git rev-parse "$STAGED:fuzznet" 2>/dev/null); then
+		for sub in flog monocypher; do
+			[ -e "fuzznet/$sub/.git" ] || git -C fuzznet submodule update --init "$sub" >&2 || exit 1
+			git -C "fuzznet/$sub" archive --format=tar --prefix="fuzznet/$sub/" \
+				"$(git -C fuzznet rev-parse "$fuzznet:$sub")" | tar -xf - -C "$STAGE/sub" || exit 1
+		done
+	fi
+	tar -cf "$STAGE/submodules.tar" -C "$STAGE/sub" . || exit 1
+	rm -rf "$STAGE/sub"
 else
 	echo "check-ci: the linux job does not ask for submodules, so neither does this"
-	tar -cf "$STAGE/vterm.tar" --files-from /dev/null
-	tar -cf "$STAGE/softkeys.tar" --files-from /dev/null
-	tar -cf "$STAGE/libssh.tar" --files-from /dev/null
+	tar -cf "$STAGE/submodules.tar" --files-from /dev/null
 fi
 
 # What the job runs, the same for both engines, from the image with the
@@ -249,10 +260,8 @@ echo "check-ci: Qt $(pkg-config --modversion Qt6Core), libssh vendored (libssh/)
 
 mkdir -p /build && cd /build
 tar xf /in/src.tar
-tar xf /in/vterm.tar
-tar xf /in/softkeys.tar
-tar xf /in/libssh.tar
-# No patch stamp here any more. vterm.tar is the submodule at its gitlink
+tar xf /in/submodules.tar
+# No patch stamp here any more. vterm is staged at its gitlink
 # commit, so the patches are NOT applied and make has to apply them --
 # which is the point, since that is what the runner does too. git is
 # installed above for it: 'git apply' needs no repository, and the
@@ -365,7 +374,7 @@ else
 	# of its own namespace has, and a test that reached further is a test
 	# the runner may not reproduce either.
 	mkdir "$STAGE/in" "$STAGE/build"
-	for f in src.tar vterm.tar softkeys.tar libssh.tar run.sh; do
+	for f in src.tar submodules.tar run.sh; do
 		mv "$STAGE/$f" "$STAGE/in/"
 	done
 	# A bare name is docker's library, which hull spells out.

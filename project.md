@@ -16648,6 +16648,24 @@ and the entry above said it was unverified for about an hour before that
 run happened; the sentence is rewritten rather than appended to, because
 a reader who finds both believes the more cautious one.
 
+**And then it could not build for eight days, found 2026-11-18.** Its
+container was given vterm and softkeys by a list written out by hand, so
+once the build vendored libssh (2026-11-10) the export had no libssh and
+the build stopped -- the same miss check-deb had, three times over. All
+three containers' scripts (check-deb, check-keepalive, check-ci) now stage
+every submodule `.gitmodules` names, at its gitlink, with fuzznet's flog
+and monocypher. Building again, check-keepalive found two more things a
+build nobody ran had hidden: `session_host_test` used a QString
+constructor from Qt 6.5 that its Ubuntu 24.04 image's 6.4 lacks (CI's
+`ubuntu-latest` has a newer Qt now, so CI never met it), and its sshd
+had no SFTP subsystem, which three file tests in the tunnel phase need
+(`check-ssh` has had `Subsystem sftp internal-sftp` all along). It builds
+without the media player and fuzznet, which it does not check, and
+passes all three phases: a black-holed link noticed, a reconnect after
+it, and the same through a jump host. **check-ci's container was not run**
+-- its image is not cached here and the disk has under 5 GB -- so its
+staging is checked only by running that half on its own.
+
 What the keepalive run establishes, and it is more than the path fix.
 Three tests ran that `make test` and `make check-ssh` can BOTH only skip,
 because each needs packets to vanish rather than be refused:
