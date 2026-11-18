@@ -83,15 +83,27 @@ else
 	STAGE=$(mktemp -d)
 
 	git archive --format=tar --prefix=src/ HEAD | tar -xf - -C "$STAGE"
-	git -C vterm archive --format=tar --prefix=src/vterm/ HEAD \
-		| tar -xf - -C "$STAGE"
-	git -C softkeys archive --format=tar --prefix=src/softkeys/ \
-		"$(git rev-parse HEAD:softkeys)" | tar -xf - -C "$STAGE"
-	# libssh by its gitlink, unpatched, as check-ci stages it: the build
-	# applies libssh-patch/ itself, and an export is not a git checkout,
-	# so a missing submodule could not be fetched there (project.md 8.4).
-	git -C libssh archive --format=tar --prefix=src/libssh/ \
-		"$(git rev-parse HEAD:libssh)" | tar -xf - -C "$STAGE"
+	# Every submodule by its gitlink, from .gitmodules rather than a list:
+	# an export is no git checkout, so the build cannot fetch one that is
+	# missing, and stops naming it. A list by hand missed libssh, then
+	# snurra (2026-11-13), then fuzznet (2026-11-18). Unpatched, as
+	# check-ci stages them: the build applies vterm-patch/ and libssh-patch/
+	# itself (project.md 8.4).
+	for path in $(git config -f .gitmodules --get-regexp 'submodule\..*\.path' | awk '{print $2}'); do
+		git -C "$path" archive --format=tar --prefix="src/$path/" \
+			"$(git rev-parse "HEAD:$path")" | tar -xf - -C "$STAGE" || exit 1
+	done
+	# And fuzznet's own two the node compiles, at the commits its tree names.
+	fuzznet=$(git rev-parse HEAD:fuzznet)
+	# Its own submodules fetched first where they are not: an empty one is
+	# no repository, and git asked inside it answers for fuzznet's instead.
+	for sub in flog monocypher; do
+		[ -e "fuzznet/$sub/.git" ] || git -C fuzznet submodule update --init "$sub" >&2 || exit 1
+	done
+	for sub in flog monocypher; do
+		git -C "fuzznet/$sub" archive --format=tar --prefix="src/fuzznet/$sub/" \
+			"$(git -C fuzznet rev-parse "$fuzznet:$sub")" | tar -xf - -C "$STAGE"
+	done
 	ln -s "$PWD/fonts" "$STAGE/src/fonts"
 
 	echo "check-deb: building $(git rev-parse --short HEAD) in a throwaway export"
@@ -344,6 +356,19 @@ if ! zcat -f /usr/share/man/man1/beersshd.1* 2>/dev/null | grep -q "host.-key"; 
 	exit 1
 fi
 echo "check-deb: beersshd runs and its manual page is installed"
+# And it carries fuzznet (sec 5.6), on the Linux build that links it.
+if ! beersshd --help 2>&1 | grep -q -- "--fuzznet-pair"; then
+	echo "check-deb: the packaged beersshd has no fuzznet" >&2
+	exit 1
+fi
+d=$(mktemp -d)
+if ! XDG_DATA_HOME=$d timeout 20 beersshd --fuzznet --new-root > /tmp/fuzznet.log 2>&1 \
+   || ! XDG_DATA_HOME=$d timeout 60 beersshd --fuzznet-pair 2>>/tmp/fuzznet.log | grep -q "^FZD1:"; then
+	echo "check-deb: the packaged beersshd could not pair a device over fuzznet" >&2
+	cat /tmp/fuzznet.log >&2
+	exit 1
+fi
+echo "check-deb: the packaged beersshd pairs a device over fuzznet"
 
 # beerssh-session, what a server needs for a kept shell (sec 5.6). The exact
 # line, since it is what BeerSSH reads. Static is the promise that lets it be
@@ -366,7 +391,8 @@ echo "check-deb: beerssh-session answers, is static, and has its manual page"
 # depends on beerssh-session so that it is there: started, it serves (and
 # timeout ends it) rather than refusing for want of the helper.
 mkdir -p /tmp/served
-timeout 3 beersshd --root /tmp/served --port 0 --sessions > /tmp/sessions.log 2>&1
+# Ended by the timeout, which is its exit status: a server serves until stopped.
+timeout 3 beersshd --root /tmp/served --port 0 --sessions > /tmp/sessions.log 2>&1 || true
 if ! grep -q "^serving " /tmp/sessions.log; then
 	echo "check-deb: beersshd --sessions did not start" >&2
 	cat /tmp/sessions.log >&2

@@ -9291,6 +9291,16 @@ covered shape's divisions changed nothing measurable, so it went.
      export is no git checkout, so the build stopped at
      "libssh/ is empty". With libssh staged from its gitlink, check-deb
      passes on a clean debian:trixie.
+     **The same miss twice more, so the list is gone (2026-11-18):** the
+     export was not given snurra when the desktop build began linking it
+     (2026-11-13) nor fuzznet when beersshd did, so check-deb could not
+     build from then on, and nothing ran it to see. It now stages every
+     submodule `.gitmodules` names, at its gitlink, plus the two of
+     fuzznet's own the node compiles. The same run found the
+     `beersshd --sessions` step it had gained (`de63836`) unable to pass:
+     under the container's `set -e`, the `timeout` that ends the server is
+     its exit status. Both fixed; check-deb passes on a clean debian:trixie,
+     the packaged beersshd now shown to pair a device over fuzznet.
      The submodule is fetched from libssh's GitLab mirror,
      `https://gitlab.com/libssh/libssh-mirror.git`, since 2026-11-10 on the
      holder's word. git.libssh.org was unreachable from GitHub's runners
