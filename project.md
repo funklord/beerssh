@@ -20798,9 +20798,14 @@ caught.
   POSIX write with all-files access is not indexed, unlike the shell's on
   the emulator. My Files browsing Internal storage > Download still shows
   them, so a person looking in the folder finds an upload; what MediaStore
-  feeds -- categories, recents, another app's picker -- does not. Whether
-  the 2026-11-17 upload was missed that way or was gone from the disk is
-  not known; the decoys were left in place to see. The fix for the gap is
+  feeds -- categories, recents, another app's picker -- does not. **The
+  2026-11-17 APK itself was gone from the disk, and adbd removed it**
+  (fuzzypickles' 2050Z, its `2f8afde`): six minutes before the `scp`, an
+  `adb push` to the same path failed mid-copy, and adbd unlinks an aborted
+  push's target by path, whatever is there by then -- shown on an API 36
+  emulator, where a file put in its place during a push was gone once the
+  push was killed. The same bytes copied by beersshd survived. So beersshd
+  lost nothing; only the indexing gap was its own. The fix for the gap is
   to announce each file a session wrote when it is closed
   (`MediaScannerConnection.scanFile`). **Built 2026-11-18:** the SFTP handler
   reports a file written and closed (or left open by a client that went),
