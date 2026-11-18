@@ -33,9 +33,9 @@
 #include "conn_manager_test.h"
 #include "output_log_test.h"
 #include "line_gaps_test.h"
+#include "stream_test.h"
 #ifndef _WIN32
 #include "session_host_test.h"
-#include "stream_test.h"
 #endif
 #include "emulator_bench.h"
 #ifndef _WIN32
