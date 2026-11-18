@@ -100,6 +100,14 @@ public:
 	virtual QString session_helper() const { return QString(); }
 
 	/*
+	 * The fuzznet host this build carries for kept sessions over fuzznet
+	 * (project.md sec 5.6, src/sshd/fuzznet_main.c), as an executable path,
+	 * or empty where it carries none. Run as `PATH --fuzznet OPTIONS...`,
+	 * which beersshd's own command line also is.
+	 */
+	virtual QString fuzznet_node() const { return QString(); }
+
+	/*
 	 * What the platform calls, on whatever thread it is on, when it will
 	 * no longer keep the server alive -- before time_limit_reached, which
 	 * is only queued to Qt's thread.

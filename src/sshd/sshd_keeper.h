@@ -6,6 +6,7 @@
 #include "sshd/sshd.h"
 #include "sshd/sshd_control.h"
 
+class QProcess;
 class QTimer;
 class bssh_sshd_platform;
 
@@ -39,6 +40,13 @@ public:
 	void switch_off() override;
 	void follow() override { follow_address(); }
 	void resumed() override;
+	bool can_pair() const override;
+	QString pair_device(QString *why) override;
+
+	/* The fuzznet host is running beside the server (sec 5.6). */
+	bool fuzznet_running() const;
+	/* Its store, in the app's own data. */
+	QString fuzznet_store() const;
 
 	/* Listens, if it can; a refusal is logged. Not the user's Start: see switch_on. */
 	void start();
@@ -63,6 +71,9 @@ public:
 
 private:
 	void log(const QString &line);
+	void start_fuzznet(int port);
+	void stop_fuzznet();
+	bool ensure_fuzznet_store(QString *why);
 	void report();
 
 	bssh_sshd_platform *m_platform;
@@ -70,6 +81,7 @@ private:
 	QHostAddress m_bound;
 	bool m_held_by_system = false;   /* stopped by Android; see time_limit_reached */
 	QTimer *m_address_timer = nullptr;
+	QProcess *m_fuzznet = nullptr;
 };
 
 #endif /* BSSH_SSHD_KEEPER_H */

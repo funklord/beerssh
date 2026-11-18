@@ -2141,9 +2141,19 @@ fuzznet's archive built by fuzznet's make with the NDK's clang in its
 `getrandom()` is bionic's from 28. The node finds the helper under either name.
 Run on this machine's kernel, the x86_64 pair answered the desktop probe over
 fuzznet; the APK itself was not rebuilt or run (no emulator room, as before).
-**Not yet, and why:** the app starting the node and a pairing button in its
-window waited on beerssh's product number, which fuzznet has now assigned
-(above), and are the next step. BeerSSH's own Android build
+**And the app runs it (2026-11-18), once beerssh had its numbers.** With
+sessions on, serving starts the fuzznet host beside the SSH server -- the same
+port number, UDP, its store and log in the app's data, an estate root made the
+first time since the store is the app's own and no path can be mistyped -- and
+stops it with the server. The window offers "Pair a BeerSSH device over fuzznet"
+there: the image is copied and shown, for BeerSSH's host editor. A host already
+serving read its store when it started and does not know a device paired after,
+so a pairing starts it again; the same holds for `beersshd --fuzznet` on the
+desktop, which has to be restarted to take a device paired while it runs.
+`with_sessions_the_fuzznet_host_runs_and_pairs_a_device` runs it with the desktop
+beersshd standing in for the app's program -- one command line, `PATH --fuzznet
+...` -- and reaches the helper through it with BeerSSH's transport; it failed
+before the restart, which is how that was found. BeerSSH's own Android build
 linking the client waits on a choice: fuzznet's randomness is `getrandom()`,
 bionic's from API 28, and BeerSSH's floor is 26 -- raise the floor (the
 holder's) or a fallback in fuzznet (fuzznet's; reported there). Also not yet:

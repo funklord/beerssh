@@ -1,7 +1,9 @@
 #include "sshd/sshd_keeper.h"
+#include "sshd/fuzznet_pair.h"
 
 #include <QDir>
 #include <QFile>
+#include <QProcess>
 #include <QSettings>
 #include <QTimer>
 
@@ -177,7 +179,109 @@ void bssh_sshd_keeper::start() {
 	m_bound = address;
 	m_platform->request_notifications();
 	log(tr("Listening on %1:%2").arg(address.toString()).arg(m_server.port()));
+	if (!config.session_helper.isEmpty()) start_fuzznet(m_server.port());
 	report();
+}
+
+QString bssh_sshd_keeper::fuzznet_store() const {
+	return m_platform->data_directory() + QStringLiteral("/fuzznet");
+}
+
+bool bssh_sshd_keeper::fuzznet_running() const {
+	return m_fuzznet && m_fuzznet->state() != QProcess::NotRunning;
+}
+
+bool bssh_sshd_keeper::can_pair() const {
+	return !m_platform->fuzznet_node().isEmpty();
+}
+
+/*
+ * The host's own estate, made the first time: this app's store in its own
+ * data, so there is no mistyped directory to become one by accident -- the
+ * reason beersshd's command line will not make one (fuzznet_pair.h).
+ */
+bool bssh_sshd_keeper::ensure_fuzznet_store(QString *why) {
+	const QString store = fuzznet_store();
+	if (QDir(store).exists() && !QDir(store).isEmpty()) return true;
+	QProcess root;
+	root.start(m_platform->fuzznet_node(), { QStringLiteral("--fuzznet"),
+	                                         QStringLiteral("--fuzznet-dir=") + store,
+	                                         QStringLiteral("--new-root") });
+	if (!root.waitForFinished(30000) || root.exitStatus() != QProcess::NormalExit || root.exitCode() != 0) {
+		root.kill();
+		root.waitForFinished(2000);
+		*why = tr("could not make this server's fuzznet store: %1")
+		               .arg(QString::fromLocal8Bit(root.readAllStandardError()).trimmed());
+		return false;
+	}
+	log(tr("Made this server's fuzznet store"));
+	return true;
+}
+
+QString bssh_sshd_keeper::pair_device(QString *why) {
+	QString ignored;
+	if (!why) why = &ignored;
+	if (!can_pair()) return bssh_sshd_control::pair_device(why);
+	if (!ensure_fuzznet_store(why)) return QString();
+	const QString image = bssh_fuzznet_pair(m_platform->fuzznet_node(),
+	                                        { QStringLiteral("--fuzznet-dir=") + fuzznet_store() }, why);
+	if (image.isEmpty()) return image;
+	log(tr("Paired a device for BeerSSH over fuzznet"));
+	/*
+	 * A host already serving read its store when it started and does not
+	 * know the device yet: started again, as the pairing is written. The
+	 * sessions it carried are attachments; each goes on in its own process.
+	 */
+	if (fuzznet_running()) {
+		stop_fuzznet();
+		start_fuzznet(m_server.port());
+	}
+	return image;
+}
+
+/*
+ * Kept sessions over fuzznet beside those over SSH (sec 5.6), where this
+ * build carries the host: on the same port number, UDP, with the helper the
+ * SSH side uses, which the host finds beside itself. Its own process, as
+ * fuzznet's node runs one per process; it ends with the server.
+ */
+void bssh_sshd_keeper::start_fuzznet(int port) {
+	const QString node = m_platform->fuzznet_node();
+	if (node.isEmpty() || fuzznet_running()) return;
+	QString why;
+	if (!ensure_fuzznet_store(&why)) {
+		log(why);
+		return;
+	}
+	const QString runtime = qEnvironmentVariable("XDG_RUNTIME_DIR", m_platform->data_directory());
+	if (!m_fuzznet) {
+		m_fuzznet = new QProcess(this);
+		/* Its log is fuzznet's own, in the app's data; a pipe nobody read would stop it once full. */
+		m_fuzznet->setStandardOutputFile(QProcess::nullDevice());
+		m_fuzznet->setStandardErrorFile(QProcess::nullDevice());
+		connect(m_fuzznet, &QProcess::finished, this, [this](int code) {
+			log(tr("The fuzznet host stopped (%1)").arg(code));
+		});
+	}
+	m_fuzznet->start(node, { QStringLiteral("--fuzznet"), QStringLiteral("--fuzznet-dir=") + fuzznet_store(),
+	                         QStringLiteral("--socket=") + runtime + QStringLiteral("/fuzznet.sock"),
+	                         QStringLiteral("--udp-port=%1").arg(port),
+	                         QStringLiteral("--log-dir=") + m_platform->data_directory()
+	                                 + QStringLiteral("/fuzznet-log"),
+	                         QStringLiteral("--sessions") });
+	if (m_fuzznet->waitForStarted(5000))
+		log(tr("Keeping sessions over fuzznet too, on UDP port %1").arg(port));
+	else
+		log(tr("The fuzznet host did not start: %1").arg(m_fuzznet->errorString()));
+}
+
+void bssh_sshd_keeper::stop_fuzznet() {
+	if (!fuzznet_running()) return;
+	m_fuzznet->terminate();
+	if (!m_fuzznet->waitForFinished(3000)) {
+		m_fuzznet->kill();
+		m_fuzznet->waitForFinished(2000);
+	}
 }
 
 /*
@@ -210,6 +314,7 @@ void bssh_sshd_keeper::stop() {
 	 * owed -- the notification gone, the log told.
 	 */
 	if (m_bound.isNull()) return;
+	stop_fuzznet();
 	m_server.stop();
 	m_bound = QHostAddress();
 	m_platform->set_serving(false, QString());

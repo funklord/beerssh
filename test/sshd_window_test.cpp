@@ -24,6 +24,11 @@
 #include "sshd/sshd_keeper.h"
 #include "sshd/sshd_remote.h"
 #include "sshd/sshd_window.h"
+#ifdef BSSH_FUZZNET
+#include "ssh/fuzznet_session.h"
+#endif
+#include <QApplication>
+#include <QSignalSpy>
 
 namespace {
 
@@ -49,6 +54,7 @@ public:
 	void request_battery_exemption() override { ++battery_requests; }
 
 	QString session_helper() const override { return helper; }
+	QString fuzznet_node() const override { return node; }
 
 	void start_server_process() override { ++process_starts; }
 	void stop_server_process() override { ++process_stops; }
@@ -77,6 +83,7 @@ public:
 	int process_stops = 0;
 	QString last_status;
 	QString helper;
+	QString node;
 
 private:
 	QString m_root;
@@ -522,4 +529,78 @@ void sshd_window_test::sessions_are_offered_only_with_a_helper_and_off_until_ask
 	QVERIFY(runtime.startsWith(platform.data_directory()));
 	QCOMPARE(QFileInfo(runtime).permissions() & (QFileDevice::ReadGroup | QFileDevice::ReadOther),
 	         QFileDevice::Permissions());
+}
+
+void sshd_window_test::with_sessions_the_fuzznet_host_runs_and_pairs_a_device() {
+#ifndef BSSH_FUZZNET
+	QSKIP("fuzznet is not built here");
+#else
+	/*
+	 * beersshd's app over fuzznet (sec 5.6), with the desktop beersshd
+	 * standing in for the app's libbeersshd_fuzznet.so -- the same command
+	 * line, `PATH --fuzznet ...` -- and the helper beside it, as the app's
+	 * native library directory holds both: serving with sessions on starts
+	 * the host, the window pairs a device, and BeerSSH's transport reaches
+	 * the helper through it.
+	 */
+	const QString sshd = qEnvironmentVariable("BSSH_TEST_SSHD_BIN");
+	const QString helper = qEnvironmentVariable("BSSH_TEST_SESSION_BIN");
+	if (!QFile::exists(sshd) || !QFile::exists(helper))
+		QSKIP("needs BSSH_TEST_SSHD_BIN and BSSH_TEST_SESSION_BIN, as make test gives");
+
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	struct restore_t {
+		QByteArray runtime = qgetenv("XDG_RUNTIME_DIR");
+		~restore_t() {
+			qputenv("XDG_RUNTIME_DIR", runtime);
+			QSettings().remove(QStringLiteral("sessions"));
+		}
+	} restore;
+	qunsetenv("XDG_RUNTIME_DIR");
+	QSettings().setValue(QStringLiteral("sessions"), true);
+
+	const QString bin = dir.filePath(QStringLiteral("lib"));
+	QVERIFY(QDir().mkpath(bin));
+	QVERIFY(QFile::copy(sshd, bin + QStringLiteral("/libbeersshd_fuzznet.so")));
+	QVERIFY(QFile::copy(helper, bin + QStringLiteral("/libbeerssh_session.so")));
+	for (const char *name : { "/libbeersshd_fuzznet.so", "/libbeerssh_session.so" })
+		QFile::setPermissions(bin + QLatin1String(name),
+		                      QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+
+	fake_platform platform(dir.filePath(QStringLiteral("data")));
+	platform.helper = bin + QStringLiteral("/libbeerssh_session.so");
+	platform.node = bin + QStringLiteral("/libbeersshd_fuzznet.so");
+	bssh_sshd_window window(&platform);
+	QVERIFY2(child<QPushButton>(window, "sshd-pair"), "no pairing where the build carries the host");
+
+	const int port = free_port();
+	child<QSpinBox>(window, "sshd-port")->setValue(port);
+	child<QPushButton>(window, "sshd-toggle")->click();
+	QVERIFY(window.serving());
+	const QString socket = qEnvironmentVariable("XDG_RUNTIME_DIR") + QStringLiteral("/fuzznet.sock");
+	QTRY_VERIFY2_WITH_TIMEOUT(QFile::exists(socket), "the fuzznet host did not start", 10000);
+
+	window.pair_device();
+	const QString image = window.paired();
+	QVERIFY2(image.startsWith(QLatin1String("FZD1:")), "no device image from the pairing");
+	if (QWidget *shown = window.findChild<QWidget *>(QStringLiteral("sshd-paired"))) shown->close();
+
+	bssh_fuzznet_session session(image);
+	QByteArray heard;
+	connect(&session, &bssh_ssh_session::bytes_received, &session,
+	        [&heard](const QByteArray &bytes) { heard += bytes; });
+	session.connect_to_host(QStringLiteral("127.0.0.1"), quint16(port), QString());
+	QTRY_COMPARE_WITH_TIMEOUT(session.state(), bssh_ssh_session::CONNECTED, 15000);
+	session.set_raw_channel(true);
+	session.set_command({ QStringLiteral("beerssh-session"), QStringLiteral("version") });
+	session.open_shell(80, 24);
+	QTRY_COMPARE_WITH_TIMEOUT(heard, QByteArray("beerssh-session 1\n"), 15000);
+	session.disconnect_from_host();
+
+	/* Stopping the server stops the host: nothing of it outlives the switch. */
+	child<QPushButton>(window, "sshd-toggle")->click();
+	QVERIFY(!window.serving());
+	QTRY_VERIFY_WITH_TIMEOUT(!QFile::exists(socket), 5000);
+#endif
 }

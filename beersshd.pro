@@ -65,7 +65,8 @@ android {
         src/sshd/sshd_platform.cpp \
         src/sshd/sshd_remote.cpp \
         src/sshd/sshd_platform_android.cpp \
-        src/sshd/sshd_window.cpp
+        src/sshd/sshd_window.cpp \
+        src/sshd/fuzznet_pair.cpp
     HEADERS += \
         src/sshd/sshd_platform.h \
         src/sshd/sshd_control.h \

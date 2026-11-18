@@ -124,6 +124,7 @@ SOURCES += \
     ../src/sshd/sshd_remote.cpp \
     ../src/sshd/sshd_platform_desktop.cpp \
     ../src/sshd/sshd_window.cpp \
+    ../src/sshd/fuzznet_pair.cpp \
     ../src/term/emulator_vterm.cpp \
     ../src/term/colour_scheme.cpp \
     ../src/term/font_catalog.cpp \

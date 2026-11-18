@@ -25,6 +25,7 @@ private slots:
 	void saved_keys_are_counted_by_the_login_parse();
 	void the_keys_box_follows_the_file_but_not_over_edits();
 	void sessions_are_offered_only_with_a_helper_and_off_until_asked();
+	void with_sessions_the_fuzznet_host_runs_and_pairs_a_device();
 };
 
 #endif /* BSSH_SSHD_WINDOW_TEST_H */

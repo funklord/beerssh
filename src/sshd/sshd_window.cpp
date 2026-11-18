@@ -1,6 +1,8 @@
 #include "sshd/sshd_window.h"
 
 #include <QCheckBox>
+#include <QClipboard>
+#include <QMessageBox>
 #include <QDir>
 #include <QFile>
 #include <QFormLayout>
@@ -135,6 +137,22 @@ bssh_sshd_window::bssh_sshd_window(bssh_sshd_platform *platform, bssh_sshd_contr
 		layout->addWidget(wrapped_label(tr("This lets a login run a shell as beersshd, with the "
 		                                   "access to your files it has. Takes effect the next "
 		                                   "time serving starts.")));
+
+		/*
+		 * And over fuzznet as well as SSH, where this build carries the
+		 * host (sec 5.6): pairing is what lets a BeerSSH reach it, so the
+		 * button is here beside the switch it serves.
+		 */
+		if (m_control->can_pair()) {
+			auto *pair = new QPushButton(tr("Pair a BeerSSH device over fuzznet"));
+			pair->setObjectName(QStringLiteral("sshd-pair"));
+			connect(pair, &QPushButton::clicked, this, [this] { pair_device(); });
+			layout->addWidget(pair);
+			layout->addWidget(wrapped_label(tr("With sessions on, BeerSSH can keep them over fuzznet "
+			                                   "too, on the same port. Pairing gives a device image to "
+			                                   "paste into BeerSSH's host editor; it is that device's "
+			                                   "keys, so pass it on as you would a password.")));
+		}
 	}
 
 	/*
@@ -369,4 +387,28 @@ void bssh_sshd_window::log(const QString &line) {
 
 void bssh_sshd_window::log_at(const QTime &when, const QString &line) {
 	m_log->appendPlainText(when.toString(QStringLiteral("HH:mm:ss ")) + line);
+}
+
+void bssh_sshd_window::pair_device() {
+	QString why;
+	const QString image = m_control->pair_device(&why);
+	m_paired = image;
+	if (image.isEmpty()) {
+		QMessageBox::warning(this, tr("Not paired"), why);
+		return;
+	}
+	/*
+	 * Shown to be copied, and copied already: a device image is a long
+	 * line nobody types, and the person is about to paste it elsewhere.
+	 */
+	if (QClipboard *clipboard = QGuiApplication::clipboard()) clipboard->setText(image);
+	auto *box = new QMessageBox(QMessageBox::Information, tr("Paired"),
+	                            tr("Copied. Paste it into the Device field of a host in BeerSSH, "
+	                               "with \"Reach over fuzznet\" on:"),
+	                            QMessageBox::Ok, this);
+	box->setObjectName(QStringLiteral("sshd-paired"));
+	box->setInformativeText(image);
+	box->setTextInteractionFlags(Qt::TextSelectableByMouse);
+	box->setAttribute(Qt::WA_DeleteOnClose);
+	box->open();
 }

@@ -9,6 +9,13 @@
 
 #include "sshd/fuzznet_node.h"
 
+#include <string.h>
+
+/* `--fuzznet` first is taken and dropped, so this is run as beersshd's own is. */
 int main(int argc, char **argv) {
+	if (argc > 1 && !strcmp(argv[1], "--fuzznet")) {
+		argv[1] = argv[0];
+		return bssh_fuzznet_main(argc - 1, argv + 1);
+	}
 	return bssh_fuzznet_main(argc, argv);
 }

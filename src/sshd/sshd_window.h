@@ -44,6 +44,10 @@ public:
 	/* The server, where this window runs it itself; not for a remote one. */
 	const bssh_sshd &server() const;
 
+	/* A device paired over fuzznet (sec 5.6): the image shown and copied, or why not. */
+	void pair_device();
+	QString paired() const { return m_paired; }
+
 	/* Where the authorized keys are kept: the platform's data directory. */
 	QString authorized_keys_path() const;
 	QString password_path() const;
@@ -75,6 +79,8 @@ private:
 
 	bssh_sshd_platform *m_platform;
 	bssh_sshd_control *m_control;
+	/* The last device image a pairing gave, for the tests; empty after a failure. */
+	QString m_paired;
 	bssh_sshd_keeper *m_keeper = nullptr;   /* m_control, where it runs here */
 
 	QLabel *m_status = nullptr;

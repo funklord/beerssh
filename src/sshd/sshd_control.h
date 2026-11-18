@@ -43,6 +43,17 @@ public:
 	 */
 	virtual void resumed() {}
 
+	/*
+	 * A device for BeerSSH paired to this server's fuzznet host (sec 5.6),
+	 * where it carries one: its image, for BeerSSH's host editor, or empty
+	 * with `why` saying what stopped it.
+	 */
+	virtual bool can_pair() const { return false; }
+	virtual QString pair_device(QString *why) {
+		if (why) *why = QStringLiteral("this server has no fuzznet host");
+		return QString();
+	}
+
 signals:
 	/* One line, stamped when it happened rather than when it was shown. */
 	void logged(const QTime &when, const QString &line);

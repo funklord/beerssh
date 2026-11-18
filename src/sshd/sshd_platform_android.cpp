@@ -172,6 +172,16 @@ public:
 	 * write, so it cannot be copied out and run instead.
 	 */
 	QString session_helper() const override {
+		return native_program(QStringLiteral("libbeerssh_session.so"));
+	}
+
+	/* The fuzznet host, shipped the same way beside it (sec 5.6). */
+	QString fuzznet_node() const override {
+		return native_program(QStringLiteral("libbeersshd_fuzznet.so"));
+	}
+
+	/* A program in the native library directory, or empty where it is not there to run. */
+	static QString native_program(const QString &name) {
 		const QJniObject context = android_context();
 		if (!context.isValid()) return QString();
 		const QJniObject info = context.callObjectMethod("getApplicationInfo",
@@ -179,8 +189,8 @@ public:
 		QJniEnvironment().checkAndClearExceptions();
 		if (!info.isValid()) return QString();
 		const QString directory = info.getObjectField<jstring>("nativeLibraryDir").toString();
-		const QString helper = directory + QStringLiteral("/libbeerssh_session.so");
-		return QFileInfo(helper).isExecutable() ? helper : QString();
+		const QString program = directory + QLatin1Char('/') + name;
+		return QFileInfo(program).isExecutable() ? program : QString();
 	}
 
 	bool can_start_at_boot() const override { return true; }
