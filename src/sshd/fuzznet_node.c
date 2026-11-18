@@ -104,7 +104,8 @@ static int name_is_safe(const char *name, size_t len) {
 static void end_link(link_t *link) {
 	if (link->io >= 0) close(link->io);
 	if (link->pid > 0) {
-		kill(link->pid, SIGHUP);
+		/* As the SSH side does (sshd.cpp): the session lives in its own process. */
+		kill(link->pid, SIGKILL);
 		while (waitpid(link->pid, NULL, 0) < 0 && errno == EINTR) {
 		}
 	}
