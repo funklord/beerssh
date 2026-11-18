@@ -23,6 +23,9 @@
 extern "C" {
 #endif
 
+/* The UDP port beersshd's fuzznet host serves on unless told another: its SSH port's number. */
+#define BSSH_FUZZNET_PORT 8022
+
 /* fuzznet's node with beersshd's extension; `argv[0]` is the program. */
 int bssh_fuzznet_main(int argc, char **argv);
 

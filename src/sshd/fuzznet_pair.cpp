@@ -36,6 +36,13 @@ QString bssh_fuzznet_pair(const QString &program, const QStringList &options, QS
 		if (option.startsWith(QLatin1String("--fuzznet-dir="))) host_dir = option.mid(14);
 		else rest << option;
 	}
+	/* None named: fuzznet's own default store, where a host started without one keeps it. */
+	if (host_dir.isEmpty()) {
+		const QString data = qEnvironmentVariable("XDG_DATA_HOME");
+		const QString home = qEnvironmentVariable("HOME");
+		if (!data.isEmpty()) host_dir = data + QStringLiteral("/fuzznet");
+		else if (!home.isEmpty()) host_dir = home + QStringLiteral("/.local/share/fuzznet");
+	}
 	if (host_dir.isEmpty()) {
 		*why = QStringLiteral("--fuzznet-pair needs --fuzznet-dir=DIR, this host's fuzznet store");
 		return QString();

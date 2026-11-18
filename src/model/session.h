@@ -188,6 +188,14 @@ public:
 	 */
 	void reconnect();
 
+	/*
+	 * A device for BeerSSH paired to this host's beersshd over fuzznet
+	 * (sec 5.6), asked over this SSH connection: `beersshd --fuzznet-pair`
+	 * run beside the shell, in fuzznet's default store there. Answered by
+	 * fuzznet_paired, with the image, or empty and why not.
+	 */
+	void pair_over_fuzznet();
+
 	void disconnect_from_host();
 
 	/* True when the last disconnect was asked for rather than suffered. */
@@ -408,6 +416,9 @@ signals:
 	/* The offer was declined, or nothing is running any more: it goes. */
 	void multiplexers_settled();
 
+	/* pair_over_fuzznet()'s answer: the device image, or empty and `why`. */
+	void fuzznet_paired(const QString &image, const QString &why);
+
 	/*
 	 * The program rang the bell and this host wants bells (sec 5.5): every
 	 * pane showing the session flashes and its window asks for attention.
@@ -494,6 +505,7 @@ private:
 	QList<bssh_mux_session_t> m_mux_pending;
 	bool m_mux_answered = false;
 	bool m_mux_listing = false;
+	bool m_fuzznet_pairing = false;
 
 	/* A session kept on the server (sec 5.6). */
 	enum resume_t { RESUME_NONE, RESUME_PROBING, RESUME_ACTIVE, RESUME_REFUSED };

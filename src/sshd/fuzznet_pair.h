@@ -17,7 +17,8 @@
  * `beersshd --fuzznet`, since fuzznet's node runs once per process.
  *
  * `program` is this beersshd; `options` are fuzznet's, --fuzznet-dir= naming
- * the host's store, and the service and product numbers where it uses them.
+ * the host's store -- fuzznet's default store, $XDG_DATA_HOME/fuzznet, where
+ * none does, which is how BeerSSH asks over SSH without knowing a path.
  * The image, or empty with `why` saying what stopped it.
  */
 QString bssh_fuzznet_pair(const QString &program, const QStringList &options, QString *why);

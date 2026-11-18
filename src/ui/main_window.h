@@ -1191,6 +1191,9 @@ private:
 	int maximise_state(bssh_session *front) const;
 	void show_corner_tabs(bssh_session *front, const QPoint &global);
 	void show_corner_menu(const QPoint &global);
+
+	/* A pairing over fuzznet answered: a host beside `asked` that reaches it so (sec 5.6). */
+	void add_fuzznet_twin(bssh_session *asked, const QString &image, const QString &why);
 	QAction *m_menu_bar_action = nullptr;
 
 	/*

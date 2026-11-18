@@ -3,6 +3,7 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QHash>
+#include <QPointer>
 #include <QRegularExpression>
 #include <QFile>
 #include <QProcess>
@@ -17,6 +18,7 @@
 #include "ssh/fuzznet_session.h"
 #include "term/emulator.h"
 #include "ui/host_editor.h"
+#include "fake_ssh_session.h"
 
 #include <QCheckBox>
 #include <QLineEdit>
@@ -323,5 +325,66 @@ void fuzznet_session_test::the_editor_takes_a_device_image_and_keeps_it_out_of_t
 	QVERIFY(editor.profile().fuzznet);
 	over->setChecked(false);
 	QVERIFY(!editor.profile().fuzznet);
+#endif
+}
+
+void fuzznet_session_test::a_host_is_paired_over_its_ssh_connection() {
+#ifndef BSSH_FUZZNET
+	QSKIP("fuzznet is not built here");
+#else
+	/*
+	 * Pairing without a paste: the host's beersshd asked over this SSH
+	 * connection, beside the shell, and its image handed back -- or why not.
+	 */
+	QPointer<bssh_fake_ssh_session> fake;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+	struct factory_left_t {
+		~factory_left_t() { bssh_ssh_session::set_factory(nullptr); }
+	} put_back;
+
+	bssh_profile_t profile;
+	profile.host = QStringLiteral("10.0.0.7");
+	profile.resume_choice = bssh_profile_t::RESUME_NEVER;
+	bssh_session session(profile);
+	QSignalSpy paired(&session, &bssh_session::fuzznet_paired);
+
+	/* Not connected: refused, saying so, and nothing asked. */
+	session.pair_over_fuzznet();
+	QCOMPARE(paired.size(), 1);
+	QVERIFY(paired.at(0).at(0).toString().isEmpty());
+
+	session.connect_to_host();
+	QVERIFY(fake);
+	fake->simulate_key_auth_success();
+	const qsizetype asked_before = fake->side_commands().size();
+	session.pair_over_fuzznet();
+	QCOMPARE(fake->side_commands().size(), asked_before + 1);
+	QCOMPARE(fake->side_commands().last(), QStringLiteral("beersshd --fuzznet-pair"));
+	/* A second ask while the first is out is refused, not sent. */
+	session.pair_over_fuzznet();
+	QCOMPARE(fake->side_commands().size(), asked_before + 1);
+	QCOMPARE(paired.size(), 2);
+
+	fake->simulate_side_output("FZD1:00ff\n");
+	QCOMPARE(paired.size(), 3);
+	QCOMPARE(paired.at(2).at(0).toString(), QStringLiteral("FZD1:00ff"));
+
+	/* Anything else is not an image, and says what to look at. */
+	session.pair_over_fuzznet();
+	fake->simulate_side_output("sh: beersshd: not found\n");
+	QCOMPARE(paired.size(), 4);
+	QVERIFY(paired.at(3).at(0).toString().isEmpty());
+	QVERIFY2(paired.at(3).at(1).toString().contains(QLatin1String("beersshd")),
+	         qPrintable(paired.at(3).at(1).toString()));
+
+	/* And one still out when the connection goes is answered by that. */
+	session.pair_over_fuzznet();
+	fake->simulate_connection_lost();
+	QCOMPARE(paired.size(), 5);
+	QVERIFY(paired.at(4).at(0).toString().isEmpty());
+	session.disconnect_from_host();
 #endif
 }

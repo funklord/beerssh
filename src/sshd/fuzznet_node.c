@@ -390,11 +390,19 @@ int bssh_fuzznet_main(int argc, char **argv) {
 	static char product[24];
 	snprintf(service, sizeof(service), "--fuzznet-service=%u", (unsigned)FZN_SERVICE_NODE);
 	snprintf(product, sizeof(product), "--fuzznet-product=%u", (unsigned)FZN_PRODUCT_BEERSSH);
-	char *with[argc + 3];
+	/*
+	 * And the port, beersshd's own over UDP, so a client can count on it
+	 * as it counts on 8022 over SSH: the app serves fuzznet on the port its
+	 * SSH server has, and BeerSSH's pairing over SSH assumes this one.
+	 */
+	static char port[24];
+	snprintf(port, sizeof(port), "--udp-port=%u", (unsigned)BSSH_FUZZNET_PORT);
+	char *with[argc + 4];
 	int n = 0;
 	for (int i = 0; i < argc; ++i) with[n++] = argv[i];
 	if (!given(argc, argv, "--fuzznet-service=")) with[n++] = service;
 	if (!given(argc, argv, "--fuzznet-product=")) with[n++] = product;
+	if (!given(argc, argv, "--udp-port=")) with[n++] = port;
 	with[n] = NULL;
 	return fzn_daemon_main(n, with, &extension);
 }

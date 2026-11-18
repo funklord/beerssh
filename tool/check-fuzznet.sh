@@ -53,6 +53,13 @@ if timeout 60 "$bin" --fuzznet-pair --fuzznet-dir="$dir/nobody" >/dev/null 2>&1;
 	echo "check-fuzznet: FAILED -- --fuzznet-pair paired with no host to pair to" >&2
 	exit 1
 fi
+# And with no directory named, as BeerSSH asks over SSH: fuzznet's default
+# store, $XDG_DATA_HOME/fuzznet, the one a host started without one keeps.
+if ! XDG_DATA_HOME="$dir/xdg" timeout 20 "$bin" --fuzznet --new-root >/dev/null 2>"$dir/err" \
+   || ! XDG_DATA_HOME="$dir/xdg" timeout 60 "$bin" --fuzznet-pair 2>"$dir/err" | grep -q '^FZD1:'; then
+	echo "check-fuzznet: FAILED -- no pairing in fuzznet's default store: $(head -c 300 "$dir/err")" >&2
+	exit 1
+fi
 if ! image=$(timeout 60 "$bin" --fuzznet-pair --fuzznet-dir="$dir/server" 2>"$dir/err"); then
 	echo "check-fuzznet: beersshd --fuzznet-pair failed: $(head -c 400 "$dir/err")" >&2
 	exit 1

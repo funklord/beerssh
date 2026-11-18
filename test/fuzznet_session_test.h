@@ -20,6 +20,7 @@ private slots:
 	void a_fuzznet_host_keeps_its_shell_through_a_drop();
 	void a_fuzznet_host_without_its_device_says_so();
 	void the_editor_takes_a_device_image_and_keeps_it_out_of_the_profile();
+	void a_host_is_paired_over_its_ssh_connection();
 };
 
 #endif

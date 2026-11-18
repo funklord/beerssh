@@ -487,6 +487,17 @@ void bssh_session::wire_transport() {
 			answer_resume_probe(output);
 			return;
 		}
+		if (m_fuzznet_pairing) {
+			m_fuzznet_pairing = false;
+			const QString line = QString::fromLatin1(output).trimmed();
+			if (line.startsWith(QLatin1String("FZD1:")) && !line.contains(QLatin1Char('\n')))
+				emit fuzznet_paired(line, QString());
+			else
+				emit fuzznet_paired(QString(), tr("%1 did not pair: is beersshd installed there, with a "
+				                                  "fuzznet host made by beersshd --fuzznet --new-root?")
+				                                       .arg(m_profile.host));
+			return;
+		}
 		if (!m_mux_listing) return;
 		m_mux_listing = false;
 		if (m_mux_answered) return;
@@ -516,6 +527,13 @@ void bssh_session::wire_transport() {
 		/* A kept session's screen stops following the host here. */
 		if (state == bssh_ssh_session::DISCONNECTED || state == bssh_ssh_session::FAILED)
 			m_resume_flowing = false;
+
+		/* A pairing still asked goes with the connection, and is said to have. */
+		if ((state == bssh_ssh_session::DISCONNECTED || state == bssh_ssh_session::FAILED)
+		    && m_fuzznet_pairing) {
+			m_fuzznet_pairing = false;
+			emit fuzznet_paired(QString(), tr("the connection went before %1 answered").arg(m_profile.host));
+		}
 
 		if (state == bssh_ssh_session::CONNECTED) {
 			/*
@@ -788,6 +806,24 @@ void bssh_session::take_resume_bytes(const QByteArray &bytes) {
 	const size_t len = bssh_session_client_ack_due(m_resume_client.get(), BSSH_RESUME_ACK_EVERY, frame,
 	                                               sizeof(frame));
 	if (len) m_transport->send(QByteArray(reinterpret_cast<const char *>(frame), int(len)));
+}
+
+void bssh_session::pair_over_fuzznet() {
+	/*
+	 * One question beside the shell at a time: a listing or the helper's
+	 * probe still out would take this one's answer.
+	 */
+	if (!m_transport || m_transport->state() != bssh_ssh_session::CONNECTED || m_profile.local
+	    || m_profile.fuzznet) {
+		emit fuzznet_paired(QString(), tr("pairing over fuzznet needs this host connected over SSH"));
+		return;
+	}
+	if (m_fuzznet_pairing || m_mux_listing || m_resume == RESUME_PROBING) {
+		emit fuzznet_paired(QString(), tr("this connection is busy asking something else; try again"));
+		return;
+	}
+	m_fuzznet_pairing = true;
+	m_transport->run_on_the_side(QStringLiteral("beersshd --fuzznet-pair"));
 }
 
 void bssh_session::disconnect_from_host() {

@@ -2985,6 +2985,12 @@ void bssh_main_window::wire_session(bssh_session *session) {
 	 * where a session nobody is looking at reports itself, and
 	 * bssh_tab_status::state_for() already answers DISCONNECTED for it.
 	 */
+	/* Queued: answering opens a message box, and the host list reloads under it. */
+	connect(session, &bssh_session::fuzznet_paired, this,
+	        [this, held = QPointer<bssh_session>(session)](const QString &image, const QString &why) {
+		if (held) add_fuzznet_twin(held, image, why);
+	}, Qt::QueuedConnection);
+
 	connect(session, &bssh_session::failed, this,
 	         [this, session](const QString &reason) {
 		if (!session->profile().local)
@@ -5848,6 +5854,20 @@ void bssh_main_window::build_menu_bar() {
 	});
 	m_session_actions.append(close_tab);
 
+#ifdef BSSH_FUZZNET
+	/*
+	 * The same host over fuzznet as well (sec 5.6), paired through the SSH
+	 * connection this tab has: the host's beersshd asked for a device, and
+	 * a second host made beside this one that reaches it that way.
+	 */
+	QAction *pair = file->addAction(QStringLiteral("&Pair Over Fuzznet..."));
+	pair->setObjectName(QStringLiteral("menu_pair_over_fuzznet"));
+	connect(pair, &QAction::triggered, this, [this] {
+		if (m_current) m_current->pair_over_fuzznet();
+	});
+	m_session_actions.append(pair);
+#endif
+
 	file->addSeparator();
 
 	/*
@@ -7899,4 +7919,39 @@ bool bssh_main_window::start_this_program(const QStringList &arguments, QString 
 	                                       : QProcess::startDetached(program, arguments);
 	if (!started && why) *why = QStringLiteral("could not start %1").arg(program);
 	return started;
+}
+
+/*
+ * A pairing over fuzznet answered (sec 5.6): a host beside the one it was
+ * asked over, reaching the same machine through its beersshd's fuzznet
+ * host -- the same address, beersshd's port over UDP (8022, as it serves
+ * unless told otherwise), the session always kept -- its image in the
+ * secret store. Beside, not instead: the SSH host stays what it was.
+ */
+void bssh_main_window::add_fuzznet_twin(bssh_session *asked, const QString &image, const QString &why) {
+	if (image.isEmpty()) {
+		QMessageBox::warning(this, QStringLiteral("Not paired"), why);
+		return;
+	}
+	const bssh_profile_t from = asked->profile();
+	bssh_profile_t twin;
+	twin.name = (from.name.isEmpty() ? from.host : from.name) + QStringLiteral(" (fuzznet)");
+	twin.host = from.host;
+	twin.user = from.user;
+	twin.folder = from.folder;
+	twin.preset_id = from.preset_id;
+	twin.port = 8022;
+	const int id = m_profile_store->save(twin);
+	const bool kept = id != 0 && unlock_secret_store()
+	                  && bssh_remember_fuzznet_device(id, image, m_profile_store) == BSSH_REMEMBER_SAVED;
+	if (!kept) {
+		if (id != 0) m_profile_store->remove(id);
+		QMessageBox::warning(this, QStringLiteral("Not paired"),
+		                     QStringLiteral("The host paired, but its device could not be kept in the "
+		                                    "secret store, so nothing was added."));
+		return;
+	}
+	if (m_host_list) m_host_list->reload();
+	QMessageBox::information(this, QStringLiteral("Paired"),
+	                         QStringLiteral("Added %1, which keeps its sessions over fuzznet.").arg(twin.name));
 }

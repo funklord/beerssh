@@ -70,11 +70,13 @@ const sshd_option_t SSHD_OPTIONS[] = {
 	                           "--new-root, --pair=CARD and the rest, as fuzznetd "
 	                           "--help lists them -- and --sessions, which carries "
 	                           "BeerSSH's sessions to paired hosts as --sessions does "
-	                           "over SSH. Only as the first option." },
+	                           "over SSH. Serves UDP port 8022 unless --udp-port=N says "
+	                           "another. Only as the first option." },
 #endif
 #ifdef BSSH_FUZZNET
 	{ "fuzznet-pair", "OPTIONS...", "Pair a device for BeerSSH to the fuzznet host whose "
-	                                "store --fuzznet-dir=DIR names, and print its device "
+	                                "store --fuzznet-dir=DIR names -- fuzznet's default "
+	                                "store where none is -- and print its device "
 	                                "image, for the host editor's Device field; OPTIONS as "
 	                                "for --fuzznet. It is the device's keys: hand it over as "
 	                                "you would a private key. Only as the first option." },

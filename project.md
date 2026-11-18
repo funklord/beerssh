@@ -2153,7 +2153,20 @@ desktop, which has to be restarted to take a device paired while it runs.
 `with_sessions_the_fuzznet_host_runs_and_pairs_a_device` runs it with the desktop
 beersshd standing in for the app's program -- one command line, `PATH --fuzznet
 ...` -- and reaches the helper through it with BeerSSH's transport; it failed
-before the restart, which is how that was found. BeerSSH's own Android build
+before the restart, which is how that was found. **And BeerSSH pairs a host itself (2026-11-18):** File → Pair Over Fuzznet on a
+tab connected over SSH runs `beersshd --fuzznet-pair` beside the shell, in
+fuzznet's default store there (`$XDG_DATA_HOME/fuzznet`, which `--fuzznet-pair`
+now uses when no directory is named, as a host started without one keeps it),
+and adds a host beside the SSH one -- "NAME (fuzznet)", same address, UDP 8022,
+its image in the secret store -- so nothing is pasted. Beside rather than
+instead, because the SSH host is still how its files and plain shells are
+reached. **8022 is beersshd's fuzznet port unless told another**, its SSH port's
+number: fuzznet has no default, and a client pairing over SSH has no other way to
+learn it; the app serves on its SSH port, 8022 unless changed. One question is
+asked beside the shell at a time, so a pairing while a listing or the helper's
+probe is out is refused, and one still out when the connection drops is said to
+have failed. Desktop only, as fuzznet is: the menu entry is there where fuzznet
+builds. BeerSSH's own Android build
 linking the client waits on a choice: fuzznet's randomness is `getrandom()`,
 bionic's from API 28, and BeerSSH's floor is 26 -- raise the floor (the
 holder's) or a fallback in fuzznet (fuzznet's; reported there). Also not yet:
