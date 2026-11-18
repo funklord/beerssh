@@ -81,6 +81,19 @@ struct bssh_profile_t {
 	bool has_stored_password;
 
 	/*
+	 * Reached over fuzznet rather than SSH (sec 5.6): this device paired to
+	 * the host's `beersshd --fuzznet --sessions`, the host and port the
+	 * address and UDP port it serves on. The pairing's device image -- the
+	 * device's keys -- is in bssh_secret_store under
+	 * bssh_profile_fuzznet_key(); this is the flag that says so, as
+	 * has_stored_password is for a password, and no more a secret.
+	 *
+	 * Such a host keeps its session always: beersshd answers nothing over
+	 * fuzznet but the session helper.
+	 */
+	bool fuzznet;
+
+	/*
 	 * Whether releasing this host's remembered password needs the user to
 	 * prove it is them first -- BiometricPrompt on Android (sec 11).
 	 *
@@ -138,6 +151,7 @@ struct bssh_profile_t {
 
 	static bool resume_by_default() { return false; }
 	bool resume_session() const {
+		if (fuzznet) return true;
 		return resume_choice == RESUME_FOLLOW_DEFAULT ? resume_by_default() : resume_choice == RESUME_ALWAYS;
 	}
 
@@ -197,7 +211,7 @@ struct bssh_profile_t {
 	bool hold;
 
 	bssh_profile_t()
-	    : id(0), port(22), has_stored_password(false), require_biometric(false),
+	    : id(0), port(22), has_stored_password(false), fuzznet(false), require_biometric(false),
 	      font_zoom(0), keep_scrollback(false), keep_awake(false), resume_choice(RESUME_FOLLOW_DEFAULT), preset_id(0), local(false),
 	      hold(false) {}
 
@@ -303,6 +317,11 @@ struct bssh_profile_t {
  */
 inline QString bssh_profile_password_key(int id) {
 	return QStringLiteral("profile:%1:password").arg(id);
+}
+
+/* Where a host reached over fuzznet keeps its device image, by the same rule. */
+inline QString bssh_profile_fuzznet_key(int id) {
+	return QStringLiteral("profile:%1:fuzznet-image").arg(id);
 }
 
 

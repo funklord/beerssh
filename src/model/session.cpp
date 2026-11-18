@@ -21,6 +21,10 @@
 #include "term/term_features.h"
 #include "model/preset.h"
 #include "model/app_settings.h"
+#include "platform/secret_store.h"
+#ifdef BSSH_FUZZNET
+#include "ssh/fuzznet_session.h"
+#endif
 
 /* What a host runs for a session that outlives its connection (sec 5.6). */
 #define BSSH_RESUME_PROGRAM "beerssh-session"
@@ -235,10 +239,27 @@ void bssh_session::connect_to_host() {
 	 * The injected factory still wins for both, so a test can fake a
 	 * local session exactly as it fakes an SSH one.
 	 */
-	m_transport = m_profile.local
-	        ? bssh_ssh_session::create_local(m_profile.shell,
-	                                          m_profile.working_directory, this)
-	        : bssh_ssh_session::create(this);
+#ifdef BSSH_FUZZNET
+	/*
+	 * A host reached over fuzznet (sec 5.6): its device image read from
+	 * the secret store now, for this connection, and held no longer than
+	 * the transport holds it. A store that is locked or has none gives an
+	 * empty one, which the transport refuses saying why.
+	 */
+	if (m_profile.fuzznet) {
+		const bssh_secret_store *secrets = bssh_secret_store::instance();
+		const QString image = secrets && secrets->is_unlocked()
+		                              ? secrets->load(bssh_profile_fuzznet_key(m_profile.id))
+		                              : QString();
+		m_transport = new bssh_fuzznet_session(image, this);
+	}
+#endif
+	if (!m_transport) {
+		m_transport = m_profile.local
+		        ? bssh_ssh_session::create_local(m_profile.shell,
+		                                          m_profile.working_directory, this)
+		        : bssh_ssh_session::create(this);
+	}
 
 	/*
 	 * The interval is applied HERE as well as in set_settings, because the

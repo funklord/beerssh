@@ -2108,9 +2108,29 @@ reconnects as from any drop. The client link is an archive of its own,
 headers, passed to both .pro files through `fuzznet.pri`. `fuzznet_session_test`
 pairs with a real `beersshd --fuzznet --sessions` and asks the helper its version
 through the transport, as an attach is opened; the Makefile hands it beersshd and
-the helper. **Not yet:** a host that is reached this way -- the profile holding
-the device image in the secret store, the editor's field and the session choosing
-this transport -- which is the next step.
+the helper.
+
+**A host reached over fuzznet (2026-11-18).** The host editor has "Reach over
+fuzznet, keeping the session" and a password-style field for the device image the
+pairing ends with; the image goes into the secret store under
+`bssh_profile_fuzznet_key()`, as a remembered password does (one helper now does
+both), and the row carries only a `fuzznet` flag -- no key material in
+`hosts.ini`, and removing the host erases the image. Such a host always keeps its
+session, since beersshd answers nothing else over fuzznet. The session reads the
+image at each connect and picks the fuzznet transport; a store that is locked or
+holds none is said in those words. Two things the transport learned from the first
+end-to-end run, both now in it: the session probes the helper with
+`run_on_the_side()` before attaching, so the probe is asked on the link's first
+stream and the attach gets a stream of its own (beersshd holds one per host), the
+fuzznet session itself standing throughout; and keystrokes typed while it
+connects go nowhere until a shell is open, as over SSH -- the first run sent them
+ahead of the command line and beersshd refused the "command". `fuzznet_session_test`
+now runs a `bssh_session` for such a host: a shell through beersshd, a reconnect,
+and what the shell wrote meanwhile arriving from the same shell, in about five
+seconds. **Not yet:** pairing from inside the apps (today it is beersshd's command
+line and a paste), Android on either side, and a host key-style check that the
+gateway named in the image is the host at that address -- fuzznet's session
+authenticates the gateway, so a wrong address fails rather than reaching another.
 
 **One situ runtime on beersshd's link line, and a guard on it.** The stream
 brings this tree's `situ.c` and `libfuzznetd.a` carries fuzznet's; the linker

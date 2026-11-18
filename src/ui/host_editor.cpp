@@ -175,6 +175,30 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 	form->addRow(QStringLiteral("Folder"), m_folder);
 	form->addRow(QStringLiteral("Key file"), m_identity);
 	form->addRow(QStringLiteral("Via"), m_jump);
+
+#ifdef BSSH_FUZZNET
+	/*
+	 * Over fuzznet rather than SSH (sec 5.6): a host running beersshd
+	 * --fuzznet --sessions, at the host and UDP port above, this device
+	 * paired to it. The image is what the pairing ends with
+	 * (`beersshd --fuzznet --device-image=...`), pasted here once and kept
+	 * in the secret store -- a password field, since it is the device's keys.
+	 * Left empty on an edit, the stored one stays.
+	 */
+	m_fuzznet = new QCheckBox(QStringLiteral("Reach over fuzznet, keeping the session"), this);
+	m_fuzznet->setObjectName(QStringLiteral("host_fuzznet"));
+	m_fuzznet->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
+	m_fuzznet_image = new QLineEdit(this);
+	m_fuzznet_image->setObjectName(QStringLiteral("host_fuzznet_image"));
+	m_fuzznet_image->setEchoMode(QLineEdit::Password);
+	m_fuzznet_image->setPlaceholderText(QStringLiteral("device image, FZD1:..."));
+	m_fuzznet_image->setAccessibleName(QStringLiteral("Fuzznet device image"));
+	m_fuzznet_image->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
+	m_fuzznet_image->setEnabled(false);
+	connect(m_fuzznet, &QCheckBox::toggled, m_fuzznet_image, &QWidget::setEnabled);
+	form->addRow(QString(), m_fuzznet);
+	form->addRow(QStringLiteral("Device"), m_fuzznet_image);
+#endif
 	body->addLayout(form);
 
 	/*
@@ -406,6 +430,12 @@ void bssh_host_editor::set_profile(const bssh_profile_t &profile) {
 	m_folder->setCurrentText(profile.folder);
 	m_identity->setText(profile.identity_file);
 	m_jump->setText(profile.proxy_jump);
+	if (m_fuzznet) {
+		m_fuzznet->setChecked(profile.fuzznet);
+		m_fuzznet_image->clear();
+		m_fuzznet_image->setPlaceholderText(profile.fuzznet ? QStringLiteral("kept; paste another to replace it")
+		                                                    : QStringLiteral("device image, FZD1:..."));
+	}
 	if (m_biometric) m_biometric->setChecked(profile.require_biometric);
 	m_keep_scrollback->setChecked(profile.keep_scrollback);
 	m_resume_session->setCurrentIndex(m_resume_session->findData(int(profile.resume_choice)));
@@ -538,6 +568,12 @@ void bssh_host_editor::revert_font_to_preset() {
 	update_override_badge();
 }
 
+QString bssh_host_editor::fuzznet_image() const {
+	if (!m_fuzznet || !m_fuzznet->isChecked()) return QString();
+	const QString image = m_fuzznet_image->text().trimmed();
+	return image.startsWith(QLatin1String("FZD1:")) ? image : QString();
+}
+
 bssh_profile_t bssh_host_editor::profile() const {
 	bssh_profile_t edited = m_profile;
 
@@ -548,6 +584,9 @@ bssh_profile_t bssh_host_editor::profile() const {
 	edited.folder = m_folder->currentText().trimmed();
 	edited.identity_file = m_identity->text().trimmed();
 	edited.proxy_jump = m_jump->text().trimmed();
+	/* Over fuzznet only with a device to speak as: one kept, or one pasted now. */
+	if (m_fuzznet)
+		edited.fuzznet = m_fuzznet->isChecked() && (m_profile.fuzznet || !fuzznet_image().isEmpty());
 
 	/*
 	 * Left as it was found where the control is absent, never forced to

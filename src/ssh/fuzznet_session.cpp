@@ -51,12 +51,34 @@ void bssh_fuzznet_session::connect_to_host(const QString &host, quint16 port, co
 	Q_UNUSED(user);
 	stop();
 	set_state(CONNECTING);
+	m_host = host;
+	m_port = port;
+	m_probing = false;
+	m_probe_answer.clear();
+	m_stream_spent = false;
+	m_shell_open = false;
+	start_link();
+}
+
+/* A link, and with it a new stream: a new epoch, which beersshd answers anew. */
+void bssh_fuzznet_session::start_link() {
 	{
 		QMutexLocker held(&m_lock);
 		m_outgoing.clear();
 	}
 	m_stopping = false;
-	m_worker = std::thread(&bssh_fuzznet_session::run, this, m_image.toLatin1(), host.toUtf8(), port);
+	m_worker = std::thread(&bssh_fuzznet_session::run, this, m_image.toLatin1(), m_host.toUtf8(), m_port);
+}
+
+void bssh_fuzznet_session::run_on_the_side(const QString &command) {
+	if (command != QLatin1String("beerssh-session version") || m_stream_spent || state() != CONNECTED) {
+		bssh_ssh_session::run_on_the_side(command);
+		return;
+	}
+	m_probing = true;
+	m_probe_answer.clear();
+	m_stream_spent = true;
+	queue(command.toUtf8() + '\n');
 }
 
 void bssh_fuzznet_session::open_shell(int cols, int rows) {
@@ -69,11 +91,28 @@ void bssh_fuzznet_session::open_shell(int cols, int rows) {
 		set_state(FAILED);
 		return;
 	}
+	/*
+	 * A stream a probe has used carries the probe's helper, which ends
+	 * having answered: the attach gets a stream of its own. The state
+	 * stays CONNECTED -- the fuzznet session with the host stands, only
+	 * the stream inside it is new.
+	 */
+	if (m_stream_spent) {
+		stop();
+		m_probing = false;
+		m_stream_spent = false;
+		start_link();
+	}
 	/* The command line first, as an exec request would name it, then the frames. */
-	send(m_command.join(QLatin1Char(' ')).toUtf8() + '\n');
+	queue(m_command.join(QLatin1Char(' ')).toUtf8() + '\n');
+	m_shell_open = true;
 }
 
 void bssh_fuzznet_session::send(const QByteArray &bytes) {
+	if (m_shell_open) queue(bytes);
+}
+
+void bssh_fuzznet_session::queue(const QByteArray &bytes) {
 	QMutexLocker held(&m_lock);
 	m_outgoing.append(bytes);
 }
@@ -89,8 +128,18 @@ void bssh_fuzznet_session::stop() {
 }
 
 void bssh_fuzznet_session::post_bytes(const QByteArray &bytes) {
-	QMetaObject::invokeMethod(this, [this, bytes] { emit bytes_received(bytes); },
-	                          Qt::QueuedConnection);
+	QMetaObject::invokeMethod(this, [this, bytes] {
+		if (!m_probing) {
+			emit bytes_received(bytes);
+			return;
+		}
+		/* The probe's answer is a line, handed back whole. */
+		m_probe_answer += bytes;
+		const int end = m_probe_answer.indexOf('\n');
+		if (end < 0 && m_probe_answer.size() < 256) return;
+		m_probing = false;
+		emit side_output_ready(m_probe_answer.left(end < 0 ? m_probe_answer.size() : end + 1));
+	}, Qt::QueuedConnection);
 }
 
 void bssh_fuzznet_session::post_connected() {

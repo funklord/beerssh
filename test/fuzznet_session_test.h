@@ -17,6 +17,9 @@ class fuzznet_session_test : public QObject {
 private slots:
 	void the_helper_answers_through_the_transport();
 	void a_shell_not_kept_is_refused();
+	void a_fuzznet_host_keeps_its_shell_through_a_drop();
+	void a_fuzznet_host_without_its_device_says_so();
+	void the_editor_takes_a_device_image_and_keeps_it_out_of_the_profile();
 };
 
 #endif

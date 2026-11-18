@@ -51,7 +51,7 @@ namespace {
  */
 const char *const BSSH_HOST_KEYS[] = {
 	"name", "host", "user", "port", "preset", "has_password", "identity_file",
-	"proxy_jump"
+	"proxy_jump", "fuzznet"
 };
 
 QString slug_for(const QString &name) {
@@ -530,6 +530,7 @@ void bssh_profile_store::load_profiles() {
 		profile.proxy_jump = file.value(QStringLiteral("proxy_jump")).toString();
 		profile.has_stored_password =
 		        file.value(QStringLiteral("has_password"), false).toBool();
+		profile.fuzznet = file.value(QStringLiteral("fuzznet"), false).toBool();
 		profile.require_biometric =
 		        file.value(QStringLiteral("require_biometric"), false).toBool();
 		profile.font_zoom = file.value(QStringLiteral("font_zoom"), 0).toInt();
@@ -764,6 +765,10 @@ bool bssh_profile_store::write_profiles_once() {
 		if (profile.has_stored_password) {
 			file.setValue(QStringLiteral("has_password"), true);
 		}
+		/* The same kind of flag: the image itself is in the secret store. */
+		if (profile.fuzznet) {
+			file.setValue(QStringLiteral("fuzznet"), true);
+		}
 		if (profile.require_biometric) {
 			file.setValue(QStringLiteral("require_biometric"), true);
 		}
@@ -911,6 +916,7 @@ bool bssh_profile_store::remove(int id) {
 
 	/* Read while the row still exists; see the erase below. */
 	const bool had_password = profile(id).has_stored_password;
+	const bool had_device = profile(id).fuzznet;
 
 	const qsizetype before = m_profiles.size();
 	m_profiles.erase(std::remove_if(m_profiles.begin(), m_profiles.end(),
@@ -976,6 +982,16 @@ bool bssh_profile_store::remove(int id) {
 			m_last_error = QStringLiteral(
 			        "removed the host, but could not remove or schedule its "
 			        "saved password");
+		}
+	}
+	/* Its fuzznet device's keys the same way, and for the same reason after. */
+	if (had_device) {
+		const QString key = bssh_profile_fuzznet_key(id);
+		bssh_secret_store *secrets = bssh_secret_store::instance();
+		if ((!secrets || !secrets->erase(key)) && !bssh_note_orphaned_secret(key)) {
+			m_last_error = QStringLiteral(
+			        "removed the host, but could not remove or schedule its "
+			        "fuzznet device's keys");
 		}
 	}
 
@@ -1435,6 +1451,7 @@ void bssh_sweep_orphaned_secrets(const bssh_profile_store *store) {
 	QSet<QString> live;
 	for (const bssh_profile_t &profile : owner->profiles()) {
 		live.insert(bssh_profile_password_key(profile.id));
+		live.insert(bssh_profile_fuzznet_key(profile.id));
 	}
 
 	/*
@@ -1459,9 +1476,12 @@ void bssh_sweep_orphaned_secrets(const bssh_profile_store *store) {
 	if (still_pending != pending) settings.set_orphaned_secrets(still_pending);
 }
 
-bssh_remember_result_t bssh_remember_profile_password(int profile_id,
-                                                       const QString &password,
-                                                       bssh_profile_store *store) {
+namespace {
+
+/* A secret written and the flag that says so set, for one of the two keys a host owns. */
+bssh_remember_result_t remember_secret(int profile_id, const QString &password,
+                                       bssh_profile_store *store, const QString &key,
+                                       bool bssh_profile_t::*flag) {
 	/*
 	 * A session with no host behind it, and an empty password, share an
 	 * answer with the row that went away: nothing was written, and there
@@ -1487,11 +1507,10 @@ bssh_remember_result_t bssh_remember_profile_password(int profile_id,
 	const bssh_profile_t row = owner->profile(profile_id);
 	if (row.id != profile_id) return BSSH_REMEMBER_NO_HOST;
 
-	const QString key = bssh_profile_password_key(profile_id);
 	if (!secrets->store(key, password)) return BSSH_REMEMBER_NOT_STORED;
 
 	bssh_profile_t updated = row;
-	updated.has_stored_password = true;
+	updated.*flag = true;
 	if (owner->save(updated) == profile_id) return BSSH_REMEMBER_SAVED;
 
 	/*
@@ -1502,4 +1521,18 @@ bssh_remember_result_t bssh_remember_profile_password(int profile_id,
 	 * profile owns and would keep this one for ever.
 	 */
 	return secrets->erase(key) ? BSSH_REMEMBER_NOT_FLAGGED : BSSH_REMEMBER_STRAY;
+}
+
+} /* namespace */
+
+bssh_remember_result_t bssh_remember_profile_password(int profile_id, const QString &password,
+                                                       bssh_profile_store *store) {
+	return remember_secret(profile_id, password, store, bssh_profile_password_key(profile_id),
+	                       &bssh_profile_t::has_stored_password);
+}
+
+bssh_remember_result_t bssh_remember_fuzznet_device(int profile_id, const QString &image,
+                                                    bssh_profile_store *store) {
+	return remember_secret(profile_id, image, store, bssh_profile_fuzznet_key(profile_id),
+	                       &bssh_profile_t::fuzznet);
 }

@@ -30,10 +30,8 @@ find = '''
 	const bssh_profile_t row = owner->profile(profile_id);
 	if (row.id != profile_id) return BSSH_REMEMBER_NO_HOST;
 
-	const QString key = bssh_profile_password_key(profile_id);
 	if (!secrets->store(key, password)) return BSSH_REMEMBER_NOT_STORED;'''
 replace = '''
-	const QString key = bssh_profile_password_key(profile_id);
 	if (!secrets->store(key, password)) return BSSH_REMEMBER_NOT_STORED;
 
 	const bssh_profile_t row = owner->profile(profile_id);

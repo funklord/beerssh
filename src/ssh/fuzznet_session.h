@@ -46,6 +46,15 @@ public:
 	void disconnect_from_host() override;
 	QString kind() const override { return QStringLiteral("fuzznet"); }
 
+	/*
+	 * The helper's probe, "beerssh-session version", which a session asks
+	 * before it attaches: asked on this link's stream and its answer handed
+	 * back, the attach that follows then getting a stream of its own, as
+	 * beersshd holds one per host. Anything else has no side to run on and
+	 * is answered with nothing, as the base does.
+	 */
+	void run_on_the_side(const QString &command) override;
+
 	/* What SSH has and fuzznet does not need: its pairing is the trust. */
 	void authenticate_password(const QString &password) override { Q_UNUSED(password); }
 	void set_keepalive(int seconds) override { Q_UNUSED(seconds); }
@@ -58,15 +67,28 @@ public:
 
 private:
 	void run(QByteArray image, QByteArray address, quint16 port);
+	void start_link();
 	void stop();
 	/* From the link's thread, onto this object's. */
 	void post_bytes(const QByteArray &bytes);
 	void post_connected();
 	void post_failed(const QString &reason);
+	void queue(const QByteArray &bytes);
 
 	QString m_image;
+	QString m_host;
+	quint16 m_port = 0;
 	QStringList m_command;
 	bool m_raw = false;
+
+	/* A probe asked and not yet answered, what of its answer has come, and
+	 * whether the stream it used is spent. This object's thread only. */
+	bool m_probing = false;
+	QByteArray m_probe_answer;
+	bool m_stream_spent = false;
+	/* A shell is open: what send() is given goes to it. Before that, as on an
+	 * SSH connection with no channel yet, it goes nowhere. */
+	bool m_shell_open = false;
 
 	std::thread m_worker;
 	std::atomic<bool> m_stopping{ false };

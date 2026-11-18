@@ -993,13 +993,37 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 			 * returning to the list as though it had worked is how
 			 * a host is lost between here and the next start.
 			 */
-			if (m_profile_store->save(profile) == 0) {
+			const bool had_device = profile.id && m_profile_store->profile(profile.id).fuzznet;
+			const int id = m_profile_store->save(profile);
+			if (id == 0) {
 				QMessageBox::warning(
 				        this, QStringLiteral("Not saved"),
 				        QStringLiteral("This host could not be written to "
 				                        "your configuration.\n\n%1")
 				                .arg(m_profile_store->last_error()));
 				return;
+			}
+
+			/*
+			 * A fuzznet device's keys (sec 5.6), into the secret store
+			 * now that the host has an id; and out of it for a host no
+			 * longer reached that way, whose keys nothing will read.
+			 */
+			const QString image = m_host_editor->fuzznet_image();
+			if (!image.isEmpty()) {
+				const bool stored = unlock_secret_store()
+				                    && bssh_remember_fuzznet_device(id, image, m_profile_store)
+				                               == BSSH_REMEMBER_SAVED;
+				if (!stored) {
+					QMessageBox::warning(
+					        this, QStringLiteral("Device not kept"),
+					        QStringLiteral("The host was saved, but its fuzznet device could "
+					                        "not be put in the secret store, so it cannot be "
+					                        "reached over fuzznet yet."));
+				}
+			} else if (had_device && !profile.fuzznet) {
+				bssh_secret_store *secrets = bssh_secret_store::instance();
+				if (secrets && unlock_secret_store()) secrets->erase(bssh_profile_fuzznet_key(id));
 			}
 
 			m_host_list->reload();

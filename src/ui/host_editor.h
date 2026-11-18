@@ -65,6 +65,14 @@ public:
 	/* Add or Edit -- the heading and the save button both say which. */
 	void set_editing(bool editing);
 
+	/*
+	 * A device image pasted for a host reached over fuzznet (sec 5.6), for
+	 * the caller to put in the secret store once the host has an id; empty
+	 * when none was pasted, or what was pasted is not one. The image is the
+	 * device's keys, so it never goes into the profile.
+	 */
+	QString fuzznet_image() const;
+
 signals:
 	void save_requested(const bssh_profile_t &profile);
 	void cancelled();
@@ -95,6 +103,9 @@ private:
 	QComboBox *m_folder = nullptr;
 	QLineEdit *m_identity;
 	QLineEdit *m_jump;
+	/* Reached over fuzznet, and the device image pasted; null where fuzznet is not built. */
+	QCheckBox *m_fuzznet = nullptr;
+	QLineEdit *m_fuzznet_image = nullptr;
 
 	/*
 	 * sec 11's per-host biometric release, or nullptr where the device

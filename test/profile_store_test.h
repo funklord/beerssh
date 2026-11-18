@@ -26,6 +26,7 @@ private slots:
 	void an_id_is_never_reissued_to_another_host();
 	void a_sweep_does_not_erase_a_password_a_live_host_now_owns();
 	void remembering_a_password_writes_the_secret_and_the_flag();
+	void a_fuzznet_device_is_kept_flagged_and_taken_with_its_host();
 	void a_password_whose_flag_cannot_be_written_is_taken_back();
 	void a_host_deleted_while_its_session_lived_gets_no_credential();
 	void a_delete_that_cannot_be_written_keeps_the_password_too();

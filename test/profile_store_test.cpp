@@ -11,6 +11,7 @@
 #include "platform/secret_store.h"
 #include <QHash>
 #include <QDir>
+#include <QDirIterator>
 #include <QSet>
 #include "profile_store_test.h"
 #include "store_writers.h"
@@ -2091,6 +2092,48 @@ static bssh_secret_store *unlocked_store_for_remembering() {
 		if (!secrets->unlock(QStringLiteral("passphrase for the suite"))) return nullptr;
 	}
 	return secrets->is_unlocked() ? secrets : nullptr;
+}
+
+void profile_store_test::a_fuzznet_device_is_kept_flagged_and_taken_with_its_host() {
+	/*
+	 * A host reached over fuzznet (sec 5.6) keeps its device image -- the
+	 * device's keys -- the way a remembered password is kept: the secret in
+	 * the store, a flag in the row that is no secret, a fresh read of both
+	 * after a restart, and both gone with the host.
+	 */
+	bssh_secret_store *secrets = unlocked_store_for_remembering();
+	QVERIFY2(secrets, "the store has to be open for this to mean anything");
+
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	int id = 0;
+	{
+		bssh_profile_store store(dir.path());
+		id = store.save(make_profile(QStringLiteral("over fuzznet"), QStringLiteral("10.0.0.7")));
+		QVERIFY(id != 0);
+		const QString key = bssh_profile_fuzznet_key(id);
+		secrets->erase(key);
+		QVERIFY(!store.profile(id).fuzznet);
+
+		QCOMPARE(bssh_remember_fuzznet_device(id, QStringLiteral("FZD1:00ff"), &store), BSSH_REMEMBER_SAVED);
+		QCOMPARE(secrets->load(key), QStringLiteral("FZD1:00ff"));
+		QVERIFY(store.profile(id).fuzznet);
+		QVERIFY2(store.profile(id).resume_session(), "a host over fuzznet must keep its session");
+	}
+
+	/* Read back fresh: the flag is in the file, and the image is not. */
+	bssh_profile_store reread(dir.path());
+	QVERIFY(reread.profile(id).fuzznet);
+	QDirIterator files(dir.path(), QDir::Files, QDirIterator::Subdirectories);
+	while (files.hasNext()) {
+		QFile file(files.next());
+		QVERIFY(file.open(QIODevice::ReadOnly));
+		QVERIFY2(!file.readAll().contains("FZD1:"), qPrintable(file.fileName() + " holds the device's keys"));
+	}
+
+	QVERIFY(reread.remove(id));
+	QVERIFY2(secrets->load(bssh_profile_fuzznet_key(id)).isEmpty(),
+	         "the device's keys outlived the host they reach");
 }
 
 void profile_store_test::remembering_a_password_writes_the_secret_and_the_flag() {

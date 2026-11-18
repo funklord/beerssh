@@ -393,4 +393,12 @@ bssh_remember_result_t bssh_remember_profile_password(int profile_id,
                                                        const QString &password,
                                                        bssh_profile_store *store = nullptr);
 
+/*
+ * The same for a host reached over fuzznet (sec 5.6): its device image --
+ * the device's keys from the pairing -- into the secret store under
+ * bssh_profile_fuzznet_key(), and the host's `fuzznet` flag set.
+ */
+bssh_remember_result_t bssh_remember_fuzznet_device(int profile_id, const QString &image,
+                                                    bssh_profile_store *store = nullptr);
+
 #endif /* BSSH_PROFILE_STORE_H */
