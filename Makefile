@@ -834,7 +834,10 @@ media-check: $(SNURRA_DIR)/snurra.pri
 # default build so check-ci compiles it against the runner's older Qt and
 # libssh, which is where an API it leans on would first be missing.
 SSHD_BUILD_DIR = build-sshd
-SSHD_SOURCES   = $(wildcard src/sshd/*.cpp src/sshd/*.c src/sshd/*.h)
+SSHD_SOURCES   = $(wildcard src/sshd/*.cpp src/sshd/*.c src/sshd/*.h) \
+                 src/session/stream.c src/session/stream.h \
+                 src/session/generated/frame.c src/session/generated/frame.h \
+                 src/session/generated/situ.c src/session/generated/situ.h
 
 # fuzznet, vendored (project.md sec 5.6): beersshd links its node, the
 # libfuzznetd.a fuzznet's own Makefile builds for a consumer (its sec 907),
@@ -866,15 +869,32 @@ $(FUZZNET_LIB): FORCE
 		|| { echo "make: the $(FUZZNET_DIR) submodule could not be fetched;" \
 		          "FUZZNET= builds beersshd without it" >&2; exit 1; }; \
 	fi
+	@# One situ runtime on the link line: beersshd's stream brings this
+	@# tree's situ.c and libfuzznetd.a carries fuzznet's, so the linker takes
+	@# the first and never pulls the archive's. That is safe only while the
+	@# two are the same code, which is refused here when they stop being.
+	@sed -n '/^#include/,$$p' src/session/generated/situ.c > $(FUZZNET_BUILD_DIR).situ-ours 2>/dev/null; \
+	 sed -n '/^#include/,$$p' $(FUZZNET_DIR)/wire/generated/situ.c > $(FUZZNET_BUILD_DIR).situ-theirs; \
+	 if ! cmp -s $(FUZZNET_BUILD_DIR).situ-ours $(FUZZNET_BUILD_DIR).situ-theirs; then \
+		rm -f $(FUZZNET_BUILD_DIR).situ-ours $(FUZZNET_BUILD_DIR).situ-theirs; \
+		echo "make: src/session/generated/situ.c and $(FUZZNET_DIR)/wire/generated/situ.c differ" >&2; \
+		echo "make:   below their headers. beersshd links both, and the linker would use" >&2; \
+		echo "make:   one for both; regenerate this tree's with the situ fuzznet's names." >&2; \
+		exit 1; \
+	 fi; rm -f $(FUZZNET_BUILD_DIR).situ-ours $(FUZZNET_BUILD_DIR).situ-theirs
 	@mkdir -p $(FUZZNET_BUILD_DIR)
 	@$(MAKE) -s --no-print-directory -C $(FUZZNET_DIR) BUILD_DIR=$(abspath $(FUZZNET_BUILD_DIR)) \
 	         FZN_LOG_PACK=0 daemon-lib
 
-# The whole pairing a client needs, through `beersshd --fuzznet` alone, as
-# part of `make test` wherever beersshd links fuzznet.
-.PHONY: check-fuzznet
-check-fuzznet: $(SSHD_TARGET)
-	tool/check-fuzznet.sh ./$(SSHD_TARGET)
+# The client's end of the same, for the check: a device paired to beersshd,
+# asking the session helper its version over fuzznet (tool/fuzznet_probe.c).
+FUZZNET_PROBE = $(FUZZNET_BUILD_DIR)/bssh-fuzznet-probe
+FUZZNET_PROBE_SRCS = tool/fuzznet_probe.c src/session/fuzznet_link.c src/session/stream.c \
+                     src/session/generated/frame.c src/session/generated/situ.c
+$(FUZZNET_PROBE): $(FUZZNET_PROBE_SRCS) $(wildcard src/session/*.h src/session/generated/*.h) \
+                  $(FUZZNET_LIB)
+	$(CC) -Os -Wall -Wextra -ffunction-sections -fdata-sections \
+	      -I$(FUZZNET_DIR) -Isrc $(filter %.c,$^) $(FUZZNET_LIB) -Wl,--gc-sections -o $@
 
 ifeq ($(FUZZNET),1)
 TEST_FUZZNET = check-fuzznet
@@ -1040,6 +1060,13 @@ check-build-tree:
 # The session helper, for beersshd's kept-session test: Linux only, being
 # linked -static, which macOS cannot do. Elsewhere that one test skips.
 TEST_SESSION_BIN = $(if $(filter Linux,$(shell uname -s)),$(SESSION_BIN))
+
+# beersshd as a fuzznet host, end to end (tool/check-fuzznet.sh), as part of
+# `make test` wherever beersshd links fuzznet. Below SESSION_BIN, which a
+# prerequisite list reads as it is written.
+.PHONY: check-fuzznet
+check-fuzznet: $(SSHD_TARGET) $(SESSION_BIN) $(FUZZNET_PROBE)
+	tool/check-fuzznet.sh ./$(SSHD_TARGET) $(SESSION_BIN) $(FUZZNET_PROBE)
 
 test: check-build-tree $(TARGET) $(TEST_BIN) $(TEST_SESSION_BIN) $(TEST_FUZZNET)
 	@sandbox=$$(mktemp -d) && \

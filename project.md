@@ -2078,9 +2078,27 @@ it: **`beersshd --fuzznet ...` is a fuzznet host**, every option after the
 first fuzznetd's, so pairing, revoking and who may speak are fuzznet's own and
 work now. Its own process because fuzznet's node owns its process's loop and
 signals and does not return while it serves; main() hands over before Qt starts.
-The extension holds nothing yet -- what a session says is dropped until the
-stream reaches the session helper. The same archive carries `device/` and the
-UDP bearer the client will link, so the client needs no second build. Built
+**With `--sessions` it carries kept sessions (same day):** each paired host
+that speaks gets a reliable stream (`src/session/stream.c`) inside fuzznet's
+words, and that stream is what an SSH exec channel carries -- a first line
+naming the helper's command, word for word the two an exec request may name,
+then the helper's input, and the helper's output back. Off unless asked, as on
+the SSH side, since a paired host fuzznet lets speak would otherwise get a shell
+as this user. One loop, fuzznet's: the helpers' descriptors are polled in it and
+everything that sends runs from its tick, at least once a second, so a resend
+the stream asks for can be a second late. A link ends when its helper has ended
+and all it wrote is acknowledged, or after ten minutes of silence. The client's
+end is `src/session/fuzznet_link.c` -- fuzznet's `device/` and its UDP bearer
+with the stream inside, opaque so C++ sees none of fuzznet's headers -- which
+the same archive carries, so the client needs no second build; BeerSSH itself
+does not link it yet.
+
+**One situ runtime on beersshd's link line, and a guard on it.** The stream
+brings this tree's `situ.c` and `libfuzznetd.a` carries fuzznet's; the linker
+takes the object and never pulls the archive's member. Safe only while the two
+are the same code, which they are below their headers (fuzznet's `situ.h` is
+newer, and its inline bodies are compiled into fuzznet's own objects), so the
+build compares them and refuses when they differ. Built
 without log packing (`FZN_LOG_PACK=0`), which is libzstd for a log beersshd has
 no use for yet. **Linux only**: fuzznet's Windows and macOS builds wait on fuzznet
 (its sec 967), so `FUZZNET=` there, and the Android build is a step of its own.
@@ -2091,7 +2109,12 @@ touches -- 16 MB resident, VmSize 600 MB. A phone wants fuzznet's
 `embedded-device` preset when the Android build takes this. `make test` runs
 `tool/check-fuzznet.sh` wherever beersshd links it: the whole pairing a client
 needs -- an estate root, a prekey, the card, its acceptance and a device image --
-through `beersshd --fuzznet` alone. It pairs as fuzznet's test service and
+through `beersshd --fuzznet` alone; then beersshd serving with `--sessions`
+and `tool/fuzznet_probe.c`, a device on its UDP port, asking the helper its
+version over fuzznet and getting `beerssh-session 1` back; then the same without
+`--sessions`, which must answer nothing. Sabotaged by hand: nothing said back is caught; the
+`--sessions` gate removed is not, and cannot be from outside, since without it no
+helper path is set and the helper never starts -- two locks, either holding. It pairs as fuzznet's test service and
 product (1, 1): fuzznet assigns those numbers (its sec 813), BeerSSH has none yet,
 and asking for one is with fuzznet's session (its inbox, 2026-11-18). Found on the
 way and reported there too: a `--fuzznet-dir` that does not exist is announced

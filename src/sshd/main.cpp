@@ -67,7 +67,9 @@ const sshd_option_t SSHD_OPTIONS[] = {
 	{ "fuzznet", "OPTIONS...", "Run as a fuzznet host instead, and nothing else: every "
 	                           "option after it is fuzznetd's, --fuzznet-dir=DIR, "
 	                           "--new-root, --pair=CARD and the rest, as fuzznetd "
-	                           "--help lists them. Only as the first option." },
+	                           "--help lists them -- and --sessions, which carries "
+	                           "BeerSSH's sessions to paired hosts as --sessions does "
+	                           "over SSH. Only as the first option." },
 #endif
 	{ "version", nullptr, "Print the version and exit." },
 	{ "help", nullptr, "Print a summary of the options and exit." },

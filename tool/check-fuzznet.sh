@@ -1,26 +1,41 @@
 #!/bin/sh
-# beersshd as a fuzznet host (project.md sec 5.6): the whole pairing a client
-# needs, through `beersshd --fuzznet` alone -- an estate root on one side, a
-# device's prekey on the other, the card, its acceptance and the device image a
-# client holds. Every step is fuzznet's; what is checked is that beersshd links
-# and runs fuzznet's node as fuzznetd would.
+# beersshd as a fuzznet host, end to end (project.md sec 5.6). Through
+# `beersshd --fuzznet` alone: the pairing a client needs -- an estate root, a
+# device's prekey, the card, its acceptance and the device image -- and then
+# beersshd serving, a device on its UDP port asking the session helper its
+# version over fuzznet's words and the stream inside them, and the helper's
+# answer coming back. Then the same without --sessions, which must answer
+# nothing: a paired host gets no helper unless beersshd was told to give one.
 #
 # Service 1, product 1 is fuzznet's test pair, as its own live checks use:
 # beerssh has no product number of its own yet (asked of fuzznet 2026-11-18).
 #
-# What stops it: every command exits by itself and each has a 20 s ceiling;
-# nothing is served and nothing listens. The scratch is this script's own and
-# removed on every path out.
+# What stops it: every pairing step exits by itself under a 20 s ceiling, each
+# server is started under `timeout 60` and killed by the trap, and the probe
+# has its own 20 s deadline. The scratch is this script's own, removed on
+# every path out; the socket's directory is a short one of its own, since a
+# Unix socket's path has a length limit a deep scratch can exceed.
 set -u
 
-bin=${1:?usage: check-fuzznet.sh path/to/beersshd}
+bin=${1:?usage: check-fuzznet.sh path/to/beersshd path/to/beerssh-session path/to/probe}
+helper=${2:?usage: check-fuzznet.sh path/to/beersshd path/to/beerssh-session path/to/probe}
+probe=${3:?usage: check-fuzznet.sh path/to/beersshd path/to/beerssh-session path/to/probe}
 dir=$(mktemp -d)
-trap 'rm -rf "$dir"' EXIT INT TERM
+server=
+finish() {
+	[ -n "$server" ] && kill "$server" 2>/dev/null && wait "$server" 2>/dev/null
+	rm -rf "$dir"
+}
+trap finish EXIT
+trap 'exit 1' INT TERM
 pair="--fuzznet-service=1 --fuzznet-product=1"
 
 # Made first: fuzznet given a directory that is not there says it created an
-# identity in it and keeps none (reported to fuzznet 2026-11-18).
-mkdir "$dir/server" "$dir/client" || exit 1
+# identity in it and keeps none (reported to fuzznet 2026-11-18). beersshd
+# and the helper side by side, as --sessions finds it.
+mkdir "$dir/server" "$dir/client" "$dir/bin" "$dir/s" || exit 1
+cp "$bin" "$dir/bin/beersshd" && cp "$helper" "$dir/bin/beerssh-session" || exit 1
+bin=$dir/bin/beersshd
 
 # One step; its last line of output in $out, and the script ends on a failure.
 run() {
@@ -38,8 +53,50 @@ run --fuzznet-dir="$dir/server" --pair="$out"
 run --fuzznet-dir="$dir/client" --accept="$out"
 run --fuzznet-dir="$dir/client" --device-image="$out"
 image=$out
-
 case "$image" in
-FZD1:*) echo "check-fuzznet: paired through beersshd --fuzznet; the client's image is ${#image} characters" ;;
+FZD1:*) ;;
 *) echo "check-fuzznet: FAILED -- no device image, got: $(printf '%s' "$image" | head -c 200)" >&2; exit 1 ;;
 esac
+
+port=$((28000 + $$ % 2000))
+
+# beersshd serving, with `$@` beside fuzznet's options, until it answers on
+# its socket or 10 s pass.
+serve() {
+	# shellcheck disable=SC2086
+	timeout 60 "$bin" --fuzznet --fuzznet-dir="$dir/server" --socket="$dir/s/sock" \
+		--udp-port="$port" --no-log-file "$@" $pair >"$dir/server.log" 2>&1 &
+	server=$!
+	for _ in $(seq 1 50); do
+		[ -S "$dir/s/sock" ] && return 0
+		sleep 0.2
+	done
+	echo "check-fuzznet: beersshd --fuzznet did not start: $(tail -c 400 "$dir/server.log")" >&2
+	exit 1
+}
+stop() {
+	kill "$server" 2>/dev/null
+	wait "$server" 2>/dev/null
+	server=
+	rm -f "$dir/s/sock"
+}
+
+serve --sessions
+said=$(timeout 30 "$probe" "$image" 127.0.0.1 "$port" 2>"$dir/probe.err")
+stop
+if [ "$said" != "beerssh-session 1" ]; then
+	echo "check-fuzznet: FAILED -- the helper's version did not come back over fuzznet:" \
+	     "\"$said\"; $(head -c 300 "$dir/probe.err")" >&2
+	exit 1
+fi
+
+serve
+if said=$(timeout 30 "$probe" "$image" 127.0.0.1 "$port" 2>/dev/null); then
+	stop
+	echo "check-fuzznet: FAILED -- beersshd without --sessions answered: \"$said\"" >&2
+	exit 1
+fi
+stop
+
+echo "check-fuzznet: paired through beersshd --fuzznet; the helper answered over fuzznet with" \
+     "--sessions and nothing answered without"
