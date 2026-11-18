@@ -2141,9 +2141,14 @@ fuzznet's archive built by fuzznet's make with the NDK's clang in its
 `getrandom()` is bionic's from 28. The node finds the helper under either name.
 Run on this machine's kernel, the x86_64 pair answered the desktop probe over
 fuzznet; the APK itself was not rebuilt or run (no emulator room, as before).
-**Not yet:** the app starting the node and a pairing button in its window,
-pairing from inside BeerSSH (today the image is pasted), BeerSSH's own Android
-build linking the client, and a host key-style check that the
+**Not yet, and why:** the app starting the node and a pairing button in its
+window wait on fuzznet assigning beerssh a service and product number, since an
+app would ship whichever it used (asked in fuzznet's inbox, 2026-11-18; the
+desktop takes them on its command line meanwhile). BeerSSH's own Android build
+linking the client waits on a choice: fuzznet's randomness is `getrandom()`,
+bionic's from API 28, and BeerSSH's floor is 26 -- raise the floor (the
+holder's) or a fallback in fuzznet (fuzznet's; reported there). Also not yet:
+pairing from inside BeerSSH (today the image is pasted), and a host key-style check that the
 gateway named in the image is the host at that address -- fuzznet's session
 authenticates the gateway, so a wrong address fails rather than reaching another.
 
