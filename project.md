@@ -2061,7 +2061,12 @@ acknowledgements come and halves on a loss. The receiver keeps nothing past a
 hole and the sender goes back to it -- go-back-N, which costs resends on a
 reordering link and nothing on terminal traffic's sizes; keeping them is the
 upgrade if a measurement asks for it. No end of stream: the session's hangup
-and exited frames say it. `test/stream_test.cpp` runs two ends over a link that
+and exited frames say it. **An epoch in every segment, both ways (added the same
+day, with the client):** the client draws one at random for each stream it opens
+and the host answers with it, because a client back after a drop begins again
+from offset 0 while the host still holds the old stream -- whose segments may
+still be arriving -- and offsets alone cannot tell the two apart. The host ends
+the old link for a new epoch and ignores the one it replaced. `test/stream_test.cpp` runs two ends over a link that
 loses 20%, repeats 5% and reorders by up to 60 ms, twelve seeds, and every byte
 arrives once and in order; the fuzz harness feeds it the same bytes as
 datagrams. **Not yet:** anything carrying it -- opening a device session from the
@@ -2087,7 +2092,8 @@ the SSH side, since a paired host fuzznet lets speak would otherwise get a shell
 as this user. One loop, fuzznet's: the helpers' descriptors are polled in it and
 everything that sends runs from its tick, at least once a second, so a resend
 the stream asks for can be a second late. A link ends when its helper has ended
-and all it wrote is acknowledged, or after ten minutes of silence. The client's
+and all it wrote is acknowledged, or after ten minutes of silence, or when its
+host begins a new stream. The client's
 end is `src/session/fuzznet_link.c` -- fuzznet's `device/` and its UDP bearer
 with the stream inside, opaque so C++ sees none of fuzznet's headers -- which
 the same archive carries, so the client needs no second build; BeerSSH itself
@@ -2111,7 +2117,9 @@ touches -- 16 MB resident, VmSize 600 MB. A phone wants fuzznet's
 needs -- an estate root, a prekey, the card, its acceptance and a device image --
 through `beersshd --fuzznet` alone; then beersshd serving with `--sessions`
 and `tool/fuzznet_probe.c`, a device on its UDP port, asking the helper its
-version over fuzznet and getting `beerssh-session 1` back; then the same without
+version over fuzznet and getting `beerssh-session 1` back -- twice, the second a
+new stream to the same running server, as a client back after a drop, which the
+host failed without the epoch; then the same without
 `--sessions`, which must answer nothing. Sabotaged by hand: nothing said back is caught; the
 `--sessions` gate removed is not, and cannot be from outside, since without it no
 helper path is set and the helper never starts -- two locks, either holding. It pairs as fuzznet's test service and

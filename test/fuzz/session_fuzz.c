@@ -143,7 +143,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 	 */
 	static uint8_t ring[4096];
 	static bssh_stream_t stream;
-	bssh_stream_init(&stream, ring, sizeof(ring), 512, 65536);
+	bssh_stream_init(&stream, ring, sizeof(ring), 512, 65536, 0);
 	uint8_t out[512 + BSSH_STREAM_HEADER_MAX];
 	assert(bssh_stream_write(&stream, ring, 2000) == 2000);
 	uint64_t now = 0;

@@ -14,6 +14,8 @@
 namespace {
 
 const size_t MSS = 1100;
+/* Any number both ends agree on; a stream begun again draws another. */
+const uint64_t EPOCH = 0x5eed;
 
 /* Deterministic, so a failure is the same failure on the next run. */
 struct random_t {
@@ -43,7 +45,7 @@ struct end_t {
 	QByteArray received;
 	unsigned sent = 0;
 
-	explicit end_t() { bssh_stream_init(&stream, ring.data(), ring.size(), MSS, 1 << 20); }
+	explicit end_t() { bssh_stream_init(&stream, ring.data(), ring.size(), MSS, 1 << 20, EPOCH); }
 };
 
 void deliver(void *context, const uint8_t *bytes, size_t len) {
@@ -215,7 +217,8 @@ void stream_test::a_malformed_segment_is_refused_and_changes_nothing() {
 	QCOMPARE(bssh_stream_receive(&a.stream, segment, 3, 0, deliver, &got), -1);
 
 	/* Acknowledging bytes nobody sent. */
-	size_t len = situ_varint_put(segment, 10, 0);
+	size_t len = situ_varint_put(segment, 10, EPOCH);
+	len += situ_varint_put(segment + len, 10, 0);
 	len += situ_varint_put(segment + len, 10, 5);
 	len += situ_varint_put(segment + len, 10, 1000);
 	const bssh_stream_t before = a.stream;
@@ -223,11 +226,30 @@ void stream_test::a_malformed_segment_is_refused_and_changes_nothing() {
 	QVERIFY(std::memcmp(&before, &a.stream, sizeof before) == 0);
 	QVERIFY(got.isEmpty());
 
-	/* And a good one, data and all, to show the refusals were not for everything. */
-	len = situ_varint_put(segment, 10, 0);
+	/*
+	 * Another stream's, which is what a stream begun again after a drop
+	 * meets: the old one's segments, still arriving. Otherwise good.
+	 */
+	len = situ_varint_put(segment, 10, EPOCH + 1);
+	len += situ_varint_put(segment + len, 10, 0);
 	len += situ_varint_put(segment + len, 10, 0);
 	len += situ_varint_put(segment + len, 10, 1000);
 	std::memcpy(segment + len, "hi", 2);
+	uint64_t epoch = 0;
+	QCOMPARE(bssh_stream_segment_epoch(segment, len + 2, &epoch), 0);
+	QCOMPARE(epoch, EPOCH + 1);
+	QCOMPARE(bssh_stream_receive(&a.stream, segment, len + 2, 0, deliver, &got), -1);
+	QVERIFY(std::memcmp(&before, &a.stream, sizeof before) == 0);
+	QVERIFY(got.isEmpty());
+
+	/* And a good one, data and all, to show the refusals were not for everything. */
+	len = situ_varint_put(segment, 10, EPOCH);
+	len += situ_varint_put(segment + len, 10, 0);
+	len += situ_varint_put(segment + len, 10, 0);
+	len += situ_varint_put(segment + len, 10, 1000);
+	std::memcpy(segment + len, "hi", 2);
+	QCOMPARE(bssh_stream_segment_epoch(segment, len + 2, &epoch), 0);
+	QCOMPARE(epoch, EPOCH);
 	QCOMPARE(bssh_stream_receive(&a.stream, segment, len + 2, 0, deliver, &got), 0);
 	QCOMPARE(got, QByteArray("hi"));
 }

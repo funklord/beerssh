@@ -442,6 +442,12 @@ situ_err_t situ_bssh_segment_check(situ_view_t view, uint32_t *which)
 		*which = 0xFFFFFFFFu;
 		return SITU_ERR_BOUNDS;
 	}
+	/* bssh_segment.epoch: a varint whose bytes run out before it
+	 * ends is not one (26.778). */
+	if (situ_bssh_segment_epoch_len(view) == 0u) {
+		*which = SITU_BSSH_SEGMENT_EPOCH_CHECK;
+		return SITU_ERR_BOUNDS;
+	}
 	/* bssh_segment.offset: a varint whose bytes run out before it
 	 * ends is not one (26.778). */
 	if (situ_bssh_segment_offset_len(view) == 0u) {

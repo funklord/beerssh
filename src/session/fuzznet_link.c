@@ -2,7 +2,7 @@
  * A client's end of a session over fuzznet (fuzznet_link.h).
  */
 
-#define _POSIX_C_SOURCE 200809L
+#define _DEFAULT_SOURCE
 
 #include "fuzznet_link.h"
 
@@ -100,7 +100,15 @@ bssh_fuzznet_link_t *bssh_fuzznet_link_open(const char *image, const char *addre
 	d->heard = heard;
 	d->heard_ctx = link;
 
-	bssh_stream_init(&link->stream, link->ring, RING, SEGMENT_DATA, RING);
+	/* A new stream each link, so the host can tell it from the last one. */
+	uint64_t epoch = 0;
+	if (getentropy(&epoch, sizeof(epoch)) != 0) {
+		*why = "no random number for the stream";
+		close(link->udp.fd);
+		free(link);
+		return NULL;
+	}
+	bssh_stream_init(&link->stream, link->ring, RING, SEGMENT_DATA, RING, epoch);
 	link->deliver = deliver;
 	link->context = context;
 	return link;

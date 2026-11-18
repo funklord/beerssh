@@ -57,6 +57,9 @@ typedef struct link {
 	bssh_stream_t stream;
 	uint8_t ring[RING];
 	uint64_t heard_ms;
+	/* The stream this one replaced, whose late segments are not a third. */
+	uint64_t retired;
+	int has_retired;
 
 	/* The command line, until its newline. */
 	char command[COMMAND_MAX];
@@ -209,19 +212,35 @@ static void delivered(void *context, const uint8_t *bytes, size_t len) {
 	link->to_helper_len += len;
 }
 
-static link_t *link_for(const uint8_t host[FZN_PUBKEY_LEN], int make) {
+/*
+ * The host's link for the stream `epoch` names. A host that begins a stream
+ * again -- reconnecting after a drop -- names a new one, and its old link
+ * ends: the helper it attached is an attachment, and the session it showed
+ * goes on in the session's own process, for the new attach to find.
+ */
+static link_t *link_for(const uint8_t host[FZN_PUBKEY_LEN], uint64_t epoch) {
 	link_t *free_one = NULL;
+	uint64_t retired = 0;
+	int has_retired = 0;
 	for (size_t i = 0; i < LINKS_MAX; ++i) {
 		link_t *link = &node.links[i];
-		if (link->used && !memcmp(link->host, host, FZN_PUBKEY_LEN)) return link;
+		if (link->used && !memcmp(link->host, host, FZN_PUBKEY_LEN)) {
+			if (link->stream.epoch == epoch) return link;
+			if (link->has_retired && link->retired == epoch) return NULL;
+			retired = link->stream.epoch;
+			has_retired = 1;
+			end_link(link);
+		}
 		if (!link->used && !free_one) free_one = link;
 	}
-	if (!make || !free_one) return NULL;
+	if (!free_one) return NULL;
 	memset(free_one, 0, sizeof(*free_one));
 	free_one->used = 1;
 	free_one->io = -1;
 	memcpy(free_one->host, host, FZN_PUBKEY_LEN);
-	bssh_stream_init(&free_one->stream, free_one->ring, RING, SEGMENT_DATA, RING);
+	free_one->retired = retired;
+	free_one->has_retired = has_retired;
+	bssh_stream_init(&free_one->stream, free_one->ring, RING, SEGMENT_DATA, RING, epoch);
 	return free_one;
 }
 
@@ -229,7 +248,9 @@ static void said(void *ctx, const uint8_t host[FZN_PUBKEY_LEN], const uint8_t *b
 	(void)ctx;
 	/* An empty word is a device saying where it is, and carries no segment. */
 	if (!node.sessions || len == 0) return;
-	link_t *link = link_for(host, 1);
+	uint64_t epoch;
+	if (bssh_stream_segment_epoch(bytes, len, &epoch) != 0) return;
+	link_t *link = link_for(host, epoch);
 	if (!link) return;
 	const uint64_t now = now_ms();
 	if (bssh_stream_receive(&link->stream, bytes, len, now, delivered, link) == 0)

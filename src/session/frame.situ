@@ -107,9 +107,13 @@ struct bssh_frame_repaint {
 // fuzznet's say and heard (sec 5.6), which leave resending to the caller.
 // `offset` is where the data that follows begins in its sender's stream;
 // `ack` says every byte of the other stream before it has arrived; `window`
-// is how far past `ack` the other side may send. The rest is data, perhaps
-// none, which is an acknowledgement alone.
+// is how far past `ack` the other side may send. `epoch` names the stream: the
+// client draws it at random for each one it opens and the host answers with
+// it, so a stream begun again after a drop -- from offset 0 -- is told from the
+// one before it, whose segments may still be arriving. The rest is data,
+// perhaps none, which is an acknowledgement alone.
 struct bssh_segment {
+	bssh_varint  epoch;
 	bssh_varint  offset;
 	bssh_varint  ack;
 	bssh_varint  window;

@@ -81,14 +81,19 @@ stop() {
 	rm -f "$dir/s/sock"
 }
 
+# Twice to the same server: the second is a client come back after a drop,
+# a new stream from offset 0 while the host still holds the first.
 serve --sessions
-said=$(timeout 30 "$probe" "$image" 127.0.0.1 "$port" 2>"$dir/probe.err")
+for attempt in first second; do
+	said=$(timeout 30 "$probe" "$image" 127.0.0.1 "$port" 2>"$dir/probe.err")
+	if [ "$said" != "beerssh-session 1" ]; then
+		stop
+		echo "check-fuzznet: FAILED -- the $attempt time, the helper's version did not come" \
+		     "back over fuzznet: \"$said\"; $(head -c 300 "$dir/probe.err")" >&2
+		exit 1
+	fi
+done
 stop
-if [ "$said" != "beerssh-session 1" ]; then
-	echo "check-fuzznet: FAILED -- the helper's version did not come back over fuzznet:" \
-	     "\"$said\"; $(head -c 300 "$dir/probe.err")" >&2
-	exit 1
-fi
 
 serve
 if said=$(timeout 30 "$probe" "$image" 127.0.0.1 "$port" 2>/dev/null); then
@@ -99,4 +104,4 @@ fi
 stop
 
 echo "check-fuzznet: paired through beersshd --fuzznet; the helper answered over fuzznet with" \
-     "--sessions and nothing answered without"
+     "--sessions, again to a new stream, and nothing answered without"

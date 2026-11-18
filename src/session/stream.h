@@ -29,6 +29,12 @@
  *
  * The end of a stream is not carried: the session says hangup and exited in
  * its own frames, and the transport's session ends with it.
+ *
+ * Each stream has an EPOCH, in every segment both ways: the client draws it
+ * for each stream it opens, the host takes it from the first segment it
+ * hears, and a segment of another epoch is not this stream's. That is what
+ * tells a stream begun again after a drop, from offset 0, from the one before
+ * it, whose segments may still be arriving.
  */
 
 #include <stddef.h>
@@ -43,6 +49,9 @@ extern "C" {
 #define BSSH_STREAM_RTO_MAX_MS 60000u
 
 typedef struct bssh_stream {
+	/* Which stream this is, both ways (see above). */
+	uint64_t epoch;
+
 	/* Largest data a segment carries, which the transport's datagram decides. */
 	size_t mss;
 
@@ -88,7 +97,10 @@ typedef struct bssh_stream {
 
 /* `ring` holds what is written until it is acknowledged; `mss` at least 1. */
 void bssh_stream_init(bssh_stream_t *stream, uint8_t *ring, size_t ring_capacity, size_t mss,
-                      uint64_t window);
+                      uint64_t window, uint64_t epoch);
+
+/* The epoch a segment names, in `out`: 0, or -1 for one that is malformed. */
+int bssh_stream_segment_epoch(const uint8_t *segment, size_t len, uint64_t *out);
 
 /* Takes as much of `bytes` as there is room for, and says how much that was. */
 size_t bssh_stream_write(bssh_stream_t *stream, const uint8_t *bytes, size_t len);
@@ -99,7 +111,7 @@ size_t bssh_stream_pending(const bssh_stream_t *stream);
 /*
  * A segment that arrived. Data that is next in order goes to `deliver`, which
  * takes it all; the rest is dropped. -1, and nothing changed, for one that is
- * malformed or acknowledges bytes never sent.
+ * malformed, of another epoch, or acknowledges bytes never sent.
  */
 int bssh_stream_receive(bssh_stream_t *stream, const uint8_t *segment, size_t len, uint64_t now_ms,
                         void (*deliver)(void *context, const uint8_t *bytes, size_t len), void *context);
@@ -108,14 +120,14 @@ int bssh_stream_receive(bssh_stream_t *stream, const uint8_t *segment, size_t le
  * The next segment to send now, written to `out`, and its length; 0 when
  * there is nothing. Called until it says 0, each time something arrived,
  * something was written, or the time bssh_stream_wait gave has passed.
- * `capacity` must hold `mss` and 30 bytes of header.
+ * `capacity` must hold `mss` and BSSH_STREAM_HEADER_MAX bytes of header.
  */
 size_t bssh_stream_poll(bssh_stream_t *stream, uint64_t now_ms, uint8_t *out, size_t capacity);
 
 /* Milliseconds until poll has something to do without anything arriving, or -1. */
 int64_t bssh_stream_wait(const bssh_stream_t *stream, uint64_t now_ms);
 
-#define BSSH_STREAM_HEADER_MAX 30u
+#define BSSH_STREAM_HEADER_MAX 40u
 
 #ifdef __cplusplus
 }

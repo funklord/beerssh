@@ -18,8 +18,9 @@ static uint64_t at_most(uint64_t value, uint64_t ceiling) {
 }
 
 void bssh_stream_init(bssh_stream_t *stream, uint8_t *ring, size_t ring_capacity, size_t mss,
-                      uint64_t window) {
+                      uint64_t window, uint64_t epoch) {
 	memset(stream, 0, sizeof(*stream));
+	stream->epoch = epoch;
 	stream->mss = mss ? mss : 1;
 	stream->ring = ring;
 	stream->ring_capacity = ring_capacity;
@@ -124,16 +125,27 @@ static void acknowledged(bssh_stream_t *stream, uint64_t ack, uint64_t now_ms) {
 	}
 }
 
+int bssh_stream_segment_epoch(const uint8_t *segment, size_t len, uint64_t *out) {
+	situ_msg_t msg;
+	situ_view_t view;
+	if (len == 0 || len > UINT32_MAX) return -1;
+	situ_msg_init(&msg, (uint8_t *)(uintptr_t)segment, (uint32_t)len);
+	if (situ_bssh_segment_view(&msg, 0, (uint32_t)len, &view) != SITU_OK) return -1;
+	if (situ_bssh_segment_validate(view) != SITU_OK) return -1;
+	return situ_bssh_segment_epoch_get(view, out) == SITU_OK ? 0 : -1;
+}
+
 int bssh_stream_receive(bssh_stream_t *stream, const uint8_t *segment, size_t len, uint64_t now_ms,
                         void (*deliver)(void *context, const uint8_t *bytes, size_t len), void *context) {
 	situ_msg_t msg;
 	situ_view_t view;
-	uint64_t offset, ack, window;
+	uint64_t epoch, offset, ack, window;
 
 	if (len == 0 || len > UINT32_MAX) return -1;
 	situ_msg_init(&msg, (uint8_t *)(uintptr_t)segment, (uint32_t)len);
 	if (situ_bssh_segment_view(&msg, 0, (uint32_t)len, &view) != SITU_OK) return -1;
 	if (situ_bssh_segment_validate(view) != SITU_OK) return -1;
+	if (situ_bssh_segment_epoch_get(view, &epoch) != SITU_OK) return -1;
 	if (situ_bssh_segment_offset_get(view, &offset) != SITU_OK) return -1;
 	if (situ_bssh_segment_ack_get(view, &ack) != SITU_OK) return -1;
 	if (situ_bssh_segment_window_get(view, &window) != SITU_OK) return -1;
@@ -142,7 +154,8 @@ int bssh_stream_receive(bssh_stream_t *stream, const uint8_t *segment, size_t le
 	const uint8_t *data = segment + head;
 	const size_t data_len = len - head;
 
-	/* Nobody acknowledges what was never sent, and offsets do not wrap. */
+	/* Another stream's; nobody acknowledges what was never sent; offsets do not wrap. */
+	if (epoch != stream->epoch) return -1;
 	if (ack > stream->sent_max) return -1;
 	if (offset > UINT64_MAX - data_len) return -1;
 
@@ -185,7 +198,8 @@ int bssh_stream_receive(bssh_stream_t *stream, const uint8_t *segment, size_t le
 
 static size_t put_header(const bssh_stream_t *stream, uint64_t offset, uint8_t *out, size_t capacity) {
 	if (capacity < BSSH_STREAM_HEADER_MAX) return 0;
-	size_t len = situ_varint_put(out, 10, offset);
+	size_t len = situ_varint_put(out, 10, stream->epoch);
+	len += situ_varint_put(out + len, 10, offset);
 	len += situ_varint_put(out + len, 10, stream->received);
 	len += situ_varint_put(out + len, 10, stream->window);
 	return len;
