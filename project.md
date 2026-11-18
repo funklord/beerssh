@@ -2140,23 +2140,21 @@ with any SFTP client.
 
 **Open, and whose.**
 
-- *How the helper reaches a server*, the holder's: a package, or uploaded on
-  first use with the user's consent, which means a build per architecture and an
-  executable placed on someone's host. Without it, plain SSH as today.
-- *fuzznet or QUIC for UDP*, the holder's. The lean is fuzznet: QUIC is only a
-  transport, so its identity, trust and revocation would still have to be built.
-  fuzznet brings those and a stack we own; `spool/transfer.c` there has congestion logic, built
-  for transfers. Not established: whether it can send "only with spare bandwidth",
-  or carry an interactive stream. Its frame carries 144 bytes of fixed overhead,
-  so one keystroke is about 173 bytes with IP and UDP, against an estimated 90-100
-  for SSH over TCP and about 60 for a short session header. That is still one
-  packet, and about 12% of a full 1200-byte datagram, so it weighs on the choice
-  without ruling fuzznet out. The capability in every datagram is deliberate
-  (its §13), so a compact session frame is a request to that project. QUIC brings audited streams and migration, not
-  the revocation. Anything fuzznet needs is asked of that project (§3 of its own
-  document says who links it), not changed from here. Asked 2026-11-06, and recorded
-  in its §918: the shell and the smaller frame are open with the holder, and
-  netcfgd's work asks the same frame question, so two consumers want it.
+- *How the helper reaches a server*: **settled by the holder 2026-11-18,
+  beersshd carries it.** A host running beersshd has the session helper, so
+  nothing is uploaded to anybody's host and no per-architecture build is
+  shipped to strangers. A plain `sshd` host gets plain SSH as today. This
+  widens beersshd, whose `--help` still says it "runs no shell", and is the
+  same direction as the holder's 2026-11-06 "maybe we should put it in
+  beersshd if it links fuzznet" above. Rejected with it: uploading the helper
+  on first use.
+- *fuzznet or QUIC for UDP*: **settled by the holder 2026-11-18, fuzznet.**
+  QUIC (the UDP transport under HTTP/3) would carry bytes but bring none of
+  the identity, trust or revocation, which fuzznet already does for the
+  holder's other software; its session frame of 33 bytes (above, fuzznet
+  `55fde9e`) answered the overhead that was the one argument against it.
+  What fuzznet still lacks is a stream with resends, and §5.6's frames are a
+  byte stream: that is asked of fuzznet, not built here.
 - *Where this lives*, the holder's, and it may end up in fuzznet. A shell is
   generic: fuzznet's other consumers may want one, if only for an occasional
   command. Two layers separate here. A one-shot command needs a request, its
