@@ -42,6 +42,15 @@ size_t bssh_fuzznet_link_write(bssh_fuzznet_link_t *link, const uint8_t *bytes, 
 /* Bytes written and not yet acknowledged. */
 size_t bssh_fuzznet_link_pending(const bssh_fuzznet_link_t *link);
 
+/* A fuzznet session with the host stands. */
+int bssh_fuzznet_link_up(const bssh_fuzznet_link_t *link);
+
+/*
+ * Timeouts in a row with nothing acknowledged: each twice the last, so five
+ * is about half a minute of a host that does not answer.
+ */
+unsigned bssh_fuzznet_link_backoffs(const bssh_fuzznet_link_t *link);
+
 /*
  * Sends what the stream has to send and hears the host for up to `wait_ms`,
  * delivering what arrives. 0, or -1 when the device could not speak at all

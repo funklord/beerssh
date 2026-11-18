@@ -440,6 +440,9 @@ android {
     CONFIG += link_pkgconfig
     PKGCONFIG += libsixel libcrypto libsecret-1
     include($$PWD/libssh.pri)
+    include($$PWD/fuzznet.pri)
+    # The stream the client link carries; the tests compile it already.
+    !isEmpty(BSSH_FUZZNET_LIB): SOURCES += src/session/stream.c
 
     # The X server, asked which window is under the pointer during the
     # app's own session drag (project.md sec 8.4): the one way to tell a

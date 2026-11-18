@@ -896,9 +896,26 @@ $(FUZZNET_PROBE): $(FUZZNET_PROBE_SRCS) $(wildcard src/session/*.h src/session/g
 	$(CC) -Os -Wall -Wextra -ffunction-sections -fdata-sections \
 	      -I$(FUZZNET_DIR) -Isrc $(filter %.c,$^) $(FUZZNET_LIB) -Wl,--gc-sections -o $@
 
+# The client's end for BeerSSH and its tests (src/session/fuzznet_link.c),
+# in an archive of its own: it is the one file of theirs that includes
+# fuzznet's headers, whose session/ and wire/ the rest must not find.
+FUZZNET_CLIENT_LIB = $(FUZZNET_BUILD_DIR)/libbssh-fuzznet-link.a
+FUZZNET_CLIENT_OBJ = $(FUZZNET_BUILD_DIR)/bssh-fuzznet-link.o
+$(FUZZNET_CLIENT_OBJ): src/session/fuzznet_link.c src/session/fuzznet_link.h src/session/stream.h \
+                       $(FUZZNET_LIB)
+	$(CC) -Os -Wall -Wextra -ffunction-sections -fdata-sections -I$(FUZZNET_DIR) -Isrc \
+	      -c src/session/fuzznet_link.c -o $@
+$(FUZZNET_CLIENT_LIB): $(FUZZNET_CLIENT_OBJ)
+	rm -f $@
+	$(AR) rcs $@ $^
+
 ifeq ($(FUZZNET),1)
 TEST_FUZZNET = check-fuzznet
 SSHD_FUZZNET = $(FUZZNET_LIB)
+BSSH_FUZZNET_QMAKE = BSSH_FUZZNET_LIB=$(abspath $(FUZZNET_LIB)) \
+                     BSSH_FUZZNET_CLIENT_LIB=$(abspath $(FUZZNET_CLIENT_LIB))
+$(BUILD_DIR)/Makefile: QMAKE_CONFIG += $(BSSH_FUZZNET_QMAKE)
+$(TARGET): $(FUZZNET_CLIENT_LIB)
 $(SSHD_BUILD_DIR)/Makefile: QMAKE_CONFIG += BSSH_FUZZNET_LIB=$(abspath $(FUZZNET_LIB)) \
                                             BSSH_FUZZNET_DIR=$(abspath $(FUZZNET_DIR))
 endif
@@ -909,6 +926,9 @@ SSHD_FUZZNET_SOURCE = $(SSHD_BUILD_DIR)/fuzznet.source
 $(SSHD_FUZZNET_SOURCE): FORCE
 	@mkdir -p $(SSHD_BUILD_DIR); printf '%s\n' '$(FUZZNET)' > $@.new; \
 	if cmp -s $@.new $@; then rm -f $@.new; else mv $@.new $@; fi
+
+# BeerSSH's tree as well, which links the client's end; the tests' below.
+$(BUILD_DIR)/Makefile: $(SSHD_FUZZNET_SOURCE) fuzznet.pri
 
 $(SSHD_BUILD_DIR)/Makefile: beersshd.pro $(SSHD_FUZZNET_SOURCE) \
                             $(if $(call bssh_qmake_orphaned,$(SSHD_BUILD_DIR)),FORCE)
@@ -935,6 +955,13 @@ $(TEST_BUILD_DIR)/Makefile: test/tests.pro $(TEST_BUILD_DIR)/qmake.args \
 
 $(TEST_BIN): $(VTERM_LIB) $(LIBSSH_LIB) $(TEST_BUILD_DIR)/Makefile $(SOURCES) $(HEADERS) $(wildcard test/*.cpp test/*.h)
 	$(MAKE) -C $(TEST_BUILD_DIR) $(QMAKE_SUBMAKE)
+
+# The tests link fuzznet's client end where BeerSSH does (fuzznet.pri).
+$(TEST_BUILD_DIR)/Makefile: $(SSHD_FUZZNET_SOURCE) fuzznet.pri
+ifeq ($(FUZZNET),1)
+$(TEST_BUILD_DIR)/Makefile: QMAKE_CONFIG += $(BSSH_FUZZNET_QMAKE)
+$(TEST_BIN): $(FUZZNET_CLIENT_LIB)
+endif
 
 
 
@@ -1089,7 +1116,8 @@ test: check-build-tree $(TARGET) $(TEST_BIN) $(TEST_SESSION_BIN) $(TEST_FUZZNET)
 	@# the fix when /tmp is a tmpfs somebody else is filling.
 	@tmp=$${TMPDIR:-/tmp}; 	free=$$(df -Pm "$$tmp" 2>/dev/null | awk 'NR==2 {print $$4}'); 	if [ -n "$$free" ] && [ "$$free" -lt 64 ]; then 		echo "test: only $${free}MB free on $$tmp -- refusing to run." >&2; 		echo "test:   The suite sandboxes into a temporary directory, so a full" >&2; 		echo "test:   filesystem surfaces as failing assertions rather than as a" >&2; 		echo "test:   disk error, and looks like a regression that is not there." >&2; 		echo "test:   Free some space, or point TMPDIR somewhere with room." >&2; 		exit 1; 	fi
 	QT_QPA_PLATFORM=offscreen $(BSSH_TEST_CRASH_ENV) \
-	  $(if $(TEST_SESSION_BIN),BSSH_TEST_SESSION_BIN=$(TEST_SESSION_BIN)) ./$(TEST_BIN)
+	  $(if $(TEST_SESSION_BIN),BSSH_TEST_SESSION_BIN=$(TEST_SESSION_BIN)) \
+	  $(if $(TEST_FUZZNET),BSSH_TEST_SSHD_BIN=$(SSHD_TARGET)) ./$(TEST_BIN)
 
 # Throughput through the emulator, in MB/s (project.md sec 9.5, sec 12.3).
 # Built by `test` but not run by it: these take seconds and their numbers

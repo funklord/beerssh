@@ -48,6 +48,7 @@ CONFIG += link_pkgconfig
 PKGCONFIG += libsixel libcrypto libsecret-1
 !win32: PKGCONFIG += xcb
 include($$PWD/../libssh.pri)
+include($$PWD/../fuzznet.pri)
 CONFIG += c++17 console
 CONFIG -= app_bundle
 
@@ -78,6 +79,7 @@ SOURCES += \
     line_gaps_test.cpp \
     session_host_test.cpp \
     stream_test.cpp \
+    fuzznet_session_test.cpp \
     emulator_bench.cpp \
     live_ssh_test.cpp \
     handoff_test.cpp \
@@ -217,6 +219,7 @@ HEADERS += \
     line_gaps_test.h \
     session_host_test.h \
     stream_test.h \
+    fuzznet_session_test.h \
     emulator_bench.h \
     live_ssh_test.h \
     handoff_test.h \

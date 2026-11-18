@@ -130,6 +130,14 @@ size_t bssh_fuzznet_link_pending(const bssh_fuzznet_link_t *link) {
 	return bssh_stream_pending(&link->stream);
 }
 
+int bssh_fuzznet_link_up(const bssh_fuzznet_link_t *link) {
+	return link->device.session_up;
+}
+
+unsigned bssh_fuzznet_link_backoffs(const bssh_fuzznet_link_t *link) {
+	return link->stream.backoffs;
+}
+
 int bssh_fuzznet_link_pump(bssh_fuzznet_link_t *link, unsigned wait_ms) {
 	uint8_t segment[SEGMENT_DATA + BSSH_STREAM_HEADER_MAX];
 	size_t n;

@@ -2096,8 +2096,21 @@ and all it wrote is acknowledged, or after ten minutes of silence, or when its
 host begins a new stream. The client's
 end is `src/session/fuzznet_link.c` -- fuzznet's `device/` and its UDP bearer
 with the stream inside, opaque so C++ sees none of fuzznet's headers -- which
-the same archive carries, so the client needs no second build; BeerSSH itself
-does not link it yet.
+the same archive carries, so the client needs no second build. **BeerSSH links
+it (2026-11-18):** `src/ssh/fuzznet_session.cpp` is a transport like the SSH and
+local ones, the link on a thread of its own since fuzznet's device blocks, what
+it hears reaching the session's thread queued. Kept sessions only: it refuses at
+`open_shell` a shell that is not the helper's, saying so, since beersshd over
+fuzznet answers nothing else. A host that acknowledges nothing through five
+timeouts in a row -- about half a minute -- is taken for gone and the session
+reconnects as from any drop. The client link is an archive of its own,
+`build-fuzznet/libbssh-fuzznet-link.a`, the one file that includes fuzznet's
+headers, passed to both .pro files through `fuzznet.pri`. `fuzznet_session_test`
+pairs with a real `beersshd --fuzznet --sessions` and asks the helper its version
+through the transport, as an attach is opened; the Makefile hands it beersshd and
+the helper. **Not yet:** a host that is reached this way -- the profile holding
+the device image in the secret store, the editor's field and the session choosing
+this transport -- which is the next step.
 
 **One situ runtime on beersshd's link line, and a guard on it.** The stream
 brings this tree's `situ.c` and `libfuzznetd.a` carries fuzznet's; the linker

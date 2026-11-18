@@ -34,6 +34,7 @@
 #include "output_log_test.h"
 #include "line_gaps_test.h"
 #include "stream_test.h"
+#include "fuzznet_session_test.h"
 #ifndef _WIN32
 #include "session_host_test.h"
 #endif
@@ -594,6 +595,7 @@ int main(int argc, char *argv[]) {
 	failures += run_test<output_log_test>(argc, argv);
 	failures += run_test<line_gaps_test>(argc, argv);
 	failures += run_test<stream_test>(argc, argv);
+	failures += run_test<fuzznet_session_test>(argc, argv);
 #ifndef _WIN32
 	failures += run_test<session_host_test>(argc, argv);
 #endif
