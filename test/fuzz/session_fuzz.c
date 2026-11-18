@@ -2,13 +2,15 @@
  * What the network can say to a session (project.md sec 5.6). Run with `make
  * fuzz-session`: libFuzzer under ASan and UBSan, bounded by FUZZ_SECONDS.
  *
- * Two doors. Every reader over whatever frame the bytes make, and the client
+ * Three doors. Every reader over whatever frame the bytes make, the client
  * fed them in pieces after a real hello, which is what a hostile host or a
- * corrupted link gets to do. The first byte chooses the size of the pieces, so
+ * corrupted link gets to do, and the reliable stream under the frames taking
+ * them as datagrams of the same pieces (src/session/stream.h). The first byte chooses the size of the pieces, so
  * a frame split across reads is reached as often as a whole one.
  */
 
 #include "session/session_client.h"
+#include "session/stream.h"
 #include "session/wire.h"
 
 #include <assert.h>
@@ -132,6 +134,32 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 
 		uint8_t ack[16];
 		(void)bssh_session_client_ack_due(&client, 1, ack, sizeof(ack));
+	}
+
+	/*
+	 * The stream, with something of its own in flight so that an
+	 * acknowledgement has bytes to move: what it delivers must be a span
+	 * inside the datagram, which on_output reads to the end.
+	 */
+	static uint8_t ring[4096];
+	static bssh_stream_t stream;
+	bssh_stream_init(&stream, ring, sizeof(ring), 512, 65536);
+	uint8_t out[512 + BSSH_STREAM_HEADER_MAX];
+	assert(bssh_stream_write(&stream, ring, 2000) == 2000);
+	uint64_t now = 0;
+	while (bssh_stream_poll(&stream, now, out, sizeof(out))) {
+	}
+	for (size_t from = 0; from < size; from += piece) {
+		const size_t len = size - from < piece ? size - from : piece;
+		const uint64_t unacked = stream.unacked;
+
+		now += 7;
+		if (bssh_stream_receive(&stream, bytes + from, len, now, on_output, NULL) == 0) {
+			assert(stream.unacked >= unacked && stream.unacked <= stream.sent_max);
+			assert(stream.ring_len <= sizeof(ring));
+		}
+		while (bssh_stream_poll(&stream, now, out, sizeof(out))) {
+		}
 	}
 
 	free(bytes);

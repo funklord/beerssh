@@ -77,6 +77,7 @@ SOURCES += \
     output_log_test.cpp \
     line_gaps_test.cpp \
     session_host_test.cpp \
+    stream_test.cpp \
     emulator_bench.cpp \
     live_ssh_test.cpp \
     handoff_test.cpp \
@@ -139,6 +140,7 @@ SOURCES += \
     ../src/session/output_log.c \
     ../src/session/line_gaps.c \
     ../src/session/session_client.c \
+    ../src/session/stream.c \
     ../src/session/session_host.c \
     ../src/session/screen_model.c \
     ../src/session/wire.c \
@@ -214,6 +216,7 @@ HEADERS += \
     output_log_test.h \
     line_gaps_test.h \
     session_host_test.h \
+    stream_test.h \
     emulator_bench.h \
     live_ssh_test.h \
     handoff_test.h \
@@ -275,6 +278,7 @@ HEADERS += \
     ../src/session/screen_model.h \
     ../src/session/line_gaps.h \
     ../src/session/session_client.h \
+    ../src/session/stream.h \
     ../src/session/session_host.h \
     ../src/session/wire.h \
     ../src/model/command_line.h \

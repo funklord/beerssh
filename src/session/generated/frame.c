@@ -422,3 +422,49 @@ situ_err_t situ_bssh_frame_repaint_validate(situ_view_t view)
 	return situ_bssh_frame_repaint_check(view, NULL);
 }
 
+situ_err_t situ_bssh_segment_check(situ_view_t view, uint32_t *which)
+{
+	/* One place rather than a guard at every refusal: a caller
+	 * that does not want the identity passes NULL, and the
+	 * refusals below stay one line each. */
+	uint32_t sink;
+
+	if (which == NULL) {
+		which = &sink;
+	}
+	*which = 0xFFFFFFFFu;
+
+	if (view.limit < SITU_BSSH_SEGMENT_SIZE_MIN) {
+		/* The whole struct is short, so no member is the one
+		 * that broke it -- the same case the depth checks
+		 * meet, and `check`'s contract is that every refusal
+		 * sets `*which` on the line above it. */
+		*which = 0xFFFFFFFFu;
+		return SITU_ERR_BOUNDS;
+	}
+	/* bssh_segment.offset: a varint whose bytes run out before it
+	 * ends is not one (26.778). */
+	if (situ_bssh_segment_offset_len(view) == 0u) {
+		*which = SITU_BSSH_SEGMENT_OFFSET_CHECK;
+		return SITU_ERR_BOUNDS;
+	}
+	/* bssh_segment.ack: a varint whose bytes run out before it
+	 * ends is not one (26.778). */
+	if (situ_bssh_segment_ack_len(view) == 0u) {
+		*which = SITU_BSSH_SEGMENT_ACK_CHECK;
+		return SITU_ERR_BOUNDS;
+	}
+	/* bssh_segment.window: a varint whose bytes run out before it
+	 * ends is not one (26.778). */
+	if (situ_bssh_segment_window_len(view) == 0u) {
+		*which = SITU_BSSH_SEGMENT_WINDOW_CHECK;
+		return SITU_ERR_BOUNDS;
+	}
+	return SITU_OK;
+}
+
+situ_err_t situ_bssh_segment_validate(situ_view_t view)
+{
+	return situ_bssh_segment_check(view, NULL);
+}
+

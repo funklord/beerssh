@@ -101,3 +101,16 @@ struct bssh_frame_repaint {
 	bssh_varint  lines;
 	u8           last [max = 1];
 }
+
+// Not a frame: a datagram of the reliable stream the frames above travel in
+// where the transport carries each datagram once and promises nothing more --
+// fuzznet's say and heard (sec 5.6), which leave resending to the caller.
+// `offset` is where the data that follows begins in its sender's stream;
+// `ack` says every byte of the other stream before it has arrived; `window`
+// is how far past `ack` the other side may send. The rest is data, perhaps
+// none, which is an acknowledgement alone.
+struct bssh_segment {
+	bssh_varint  offset;
+	bssh_varint  ack;
+	bssh_varint  window;
+}

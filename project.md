@@ -2046,6 +2046,28 @@ purpose. State sync in the mosh manner wants nothing more; a byte stream wants r
 **Which of those two BeerSSH wants is what decides whether fuzznet needs anything else**,
 and §5.6's frames are a byte stream. Nothing here has to change yet.
 
+**The stream itself, begun 2026-11-18: `src/session/stream.c`.** Sans-IO, so it
+runs the same in a test's simulated link as over fuzznet: the caller hands in a
+datagram and the time and takes out what to send. A datagram is `bssh_segment`
+in `frame.situ` -- where its data starts in the sender's stream, what of the
+other stream has arrived, and the window -- with the data after it. What is not
+acknowledged goes again after a timeout estimated from round trips (RFC 6298,
+1 s before any is measured, doubling to 60 s while nothing is heard, Karn's rule
+for which round trips count), or at once after three bare acknowledgements of
+the same place, which the receiver sends one per segment past a hole: the first
+test found a burst arriving at once answered once, and the hole then waited the
+whole second. A congestion window starts at four segments, grows while
+acknowledgements come and halves on a loss. The receiver keeps nothing past a
+hole and the sender goes back to it -- go-back-N, which costs resends on a
+reordering link and nothing on terminal traffic's sizes; keeping them is the
+upgrade if a measurement asks for it. No end of stream: the session's hangup
+and exited frames say it. `test/stream_test.cpp` runs two ends over a link that
+loses 20%, repeats 5% and reorders by up to 60 ms, twelve seeds, and every byte
+arrives once and in order; the fuzz harness feeds it the same bytes as
+datagrams. **Not yet:** anything carrying it -- vendoring fuzznet and opening a
+device session from the client and from beersshd's side are the next steps, and
+the client's choice between this and SSH.
+
 **Where fuzznet stands on this, from its session, 2026-11-06** (its sec 918, 923-925; a
 report, and the decisions in it are the holder's). A one-shot command needs nothing
 new: a `fzn_daemon_procedure_t` with rule `none`, opened by `remote/permit/shell`, with
@@ -2157,8 +2179,10 @@ with any SFTP client.
   the identity, trust or revocation, which fuzznet already does for the
   holder's other software; its session frame of 33 bytes (above, fuzznet
   `55fde9e`) answered the overhead that was the one argument against it.
-  What fuzznet still lacks is a stream with resends, and §5.6's frames are a
-  byte stream: that is asked of fuzznet, not built here.
+  fuzznet sends each word once and leaves resending to its caller, on
+  purpose (its sec 935, above), and §5.6's frames are a byte stream, so the
+  stream is BeerSSH's to build: `src/session/stream.c`, begun 2026-11-18. (This
+  entry first said it was asked of fuzznet, which contradicted that record.)
 - *Where this lives*, the holder's, and it may end up in fuzznet. A shell is
   generic: fuzznet's other consumers may want one, if only for an occasional
   command. Two layers separate here. A one-shot command needs a request, its

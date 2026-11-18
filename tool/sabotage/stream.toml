@@ -1,0 +1,54 @@
+# The reliable stream under a session over datagrams (project.md sec 5.6,
+# src/session/stream.c), each broken the way it plausibly breaks and caught
+# by test/stream_test.cpp's simulated link. Not here: a congestion window
+# that never shrinks, which delivers everything all the same -- what it
+# costs is a flooded link, and nothing here measures one.
+
+[[sabotage]]
+name = "a timeout sends nothing again"
+file = "src/session/stream.c"
+find = "\t\tstream->recover = stream->sent_max;\n\t\tstream->next = stream->unacked;\n\t\tstream->rto_ms ="
+replace = "\t\tstream->recover = stream->sent_max;\n\t\tstream->rto_ms ="
+expect = "a_bad_link_still_delivers_every_byte_once_in_order"
+
+[[sabotage]]
+name = "three duplicate acknowledgements are not taken as a loss"
+file = "src/session/stream.c"
+find = "\t\tif (++stream->duplicate_acks == 3 && !stream->recover) {\n"
+replace = "\t\tif (++stream->duplicate_acks == 300 && !stream->recover) {\n"
+expect = "one_lost_segment_is_sent_again_before_the_timeout"
+
+[[sabotage]]
+name = "a burst past a hole is answered once"
+file = "src/session/stream.c"
+find = "\t\t\tif (stream->duplicates_owed < 3) ++stream->duplicates_owed;\n"
+replace = "\t\t\tif (stream->duplicates_owed < 1) ++stream->duplicates_owed;\n"
+expect = "one_lost_segment_is_sent_again_before_the_timeout"
+
+[[sabotage]]
+name = "data past the next byte is delivered out of order"
+file = "src/session/stream.c"
+find = "\t\tif (offset <= stream->received && offset + data_len > stream->received) {\n"
+replace = "\t\tif (offset + data_len > stream->received) {\n"
+expect = "a_bad_link_still_delivers_every_byte_once_in_order"
+
+[[sabotage]]
+name = "the timeout does not back off"
+file = "src/session/stream.c"
+find = "\t\tstream->rto_ms = (uint32_t)at_most(2 * (uint64_t)stream->rto_ms, BSSH_STREAM_RTO_MAX_MS);\n"
+replace = "\t\tstream->rto_ms = (uint32_t)at_most((uint64_t)stream->rto_ms, BSSH_STREAM_RTO_MAX_MS);\n"
+expect = "a_dead_link_is_tried_less_and_less_often"
+
+[[sabotage]]
+name = "an acknowledgement of bytes never sent is believed"
+file = "src/session/stream.c"
+find = "\tif (ack > stream->sent_max) return -1;\n"
+replace = "\tif (0) return -1;\n"
+expect = "a_malformed_segment_is_refused_and_changes_nothing"
+
+[[sabotage]]
+name = "the round trip is measured three times too long"
+file = "src/session/stream.c"
+find = "\t\tmeasured(stream, now_ms - stream->timed_at);\n"
+replace = "\t\tmeasured(stream, 3 * (now_ms - stream->timed_at));\n"
+expect = "the_round_trip_is_measured"

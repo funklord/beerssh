@@ -880,7 +880,7 @@ session: $(SESSION_BIN)
 FUZZ_SECONDS ?= 60
 FUZZ_DIR = build-fuzz
 FUZZ_BIN = $(FUZZ_DIR)/session_fuzz
-FUZZ_SRCS = test/fuzz/session_fuzz.c src/session/session_client.c src/session/wire.c \
+FUZZ_SRCS = test/fuzz/session_fuzz.c src/session/session_client.c src/session/stream.c src/session/wire.c \
             src/session/generated/frame.c src/session/generated/situ.c
 .PHONY: fuzz-session
 $(FUZZ_BIN): $(FUZZ_SRCS) $(wildcard src/session/*.h src/session/generated/*.h)
