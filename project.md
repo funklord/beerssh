@@ -2064,9 +2064,38 @@ upgrade if a measurement asks for it. No end of stream: the session's hangup
 and exited frames say it. `test/stream_test.cpp` runs two ends over a link that
 loses 20%, repeats 5% and reorders by up to 60 ms, twelve seeds, and every byte
 arrives once and in order; the fuzz harness feeds it the same bytes as
-datagrams. **Not yet:** anything carrying it -- vendoring fuzznet and opening a
-device session from the client and from beersshd's side are the next steps, and
-the client's choice between this and SSH.
+datagrams. **Not yet:** anything carrying it -- opening a device session from the
+client and from beersshd's side are the next steps, and the client's choice
+between this and SSH.
+
+**fuzznet vendored, 2026-11-18, on the holder's word ("yes, wire fuzznet in as a
+submodule").** `fuzznet/` is a submodule, HTTPS and shallow -- its history is
+740 MB and its files 49 -- pinned like the others and fetched by the build when
+absent, with only the two of its own submodules the node compiles, flog and
+monocypher. The Makefile builds fuzznet's consumer archive, `libfuzznetd.a`
+(its sec 907), with fuzznet's own make into `build-fuzznet/`, and beersshd links
+it: **`beersshd --fuzznet ...` is a fuzznet host**, every option after the
+first fuzznetd's, so pairing, revoking and who may speak are fuzznet's own and
+work now. Its own process because fuzznet's node owns its process's loop and
+signals and does not return while it serves; main() hands over before Qt starts.
+The extension holds nothing yet -- what a session says is dropped until the
+stream reaches the session helper. The same archive carries `device/` and the
+UDP bearer the client will link, so the client needs no second build. Built
+without log packing (`FZN_LOG_PACK=0`), which is libzstd for a log beersshd has
+no use for yet. **Linux only**: fuzznet's Windows and macOS builds wait on fuzznet
+(its sec 967), so `FUZZNET=` there, and the Android build is a step of its own.
+**What it costs beersshd, measured:** 411 KB unstripped without it, 6.2 MB with
+(fuzznet compiles with `-g`), 1.5 MB stripped; and 475 MB of bss, fuzznet's
+tables sized for thousands of contacts (its sec 922), which serving SFTP never
+touches -- 16 MB resident, VmSize 600 MB. A phone wants fuzznet's
+`embedded-device` preset when the Android build takes this. `make test` runs
+`tool/check-fuzznet.sh` wherever beersshd links it: the whole pairing a client
+needs -- an estate root, a prekey, the card, its acceptance and a device image --
+through `beersshd --fuzznet` alone. It pairs as fuzznet's test service and
+product (1, 1): fuzznet assigns those numbers (its sec 813), BeerSSH has none yet,
+and asking for one is with fuzznet's session (its inbox, 2026-11-18). Found on the
+way and reported there too: a `--fuzznet-dir` that does not exist is announced
+as created and nothing is kept, so the check makes its directories first.
 
 **Where fuzznet stands on this, from its session, 2026-11-06** (its sec 918, 923-925; a
 report, and the decisions in it are the holder's). A one-shot command needs nothing
@@ -2076,8 +2105,8 @@ latency, which does not exist.** A session frame of 33 bytes would make a keystr
 on UDP instead of 173, at the cost of session state, a second frame shape and a
 fallback when one side has lost the session: recommended there, not built, and LoRa
 wants the same thing. The holder on where a shell service lives: "Probably yes, and
-maybe we should put it in beersshd if it links fuzznet." beersshd links nothing of
-fuzznet today; the split proposed in its sec 925 is that fuzznet carries and gates, and
+maybe we should put it in beersshd if it links fuzznet." beersshd linked nothing of
+fuzznet then (it does since 2026-11-18, above); the split proposed in its sec 925 is that fuzznet carries and gates, and
 beersshd starts the process. A service started as the right user is unbuilt.
 
 The holder's point, 2026-11-06: fuzznet already maintains host keys and

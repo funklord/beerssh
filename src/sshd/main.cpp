@@ -19,6 +19,7 @@
 #include <termios.h>
 #include <unistd.h>
 
+#include "sshd/fuzznet_node.h"
 #include "sshd/sshd.h"
 
 namespace {
@@ -62,6 +63,12 @@ const sshd_option_t SSHD_OPTIONS[] = {
 	{ "set-password", nullptr, "Read a password from standard input, without echoing "
 	                           "it at a terminal, and store its salted hash; an empty "
 	                           "line removes the password. Serves nothing." },
+#ifdef BSSH_FUZZNET
+	{ "fuzznet", "OPTIONS...", "Run as a fuzznet host instead, and nothing else: every "
+	                           "option after it is fuzznetd's, --fuzznet-dir=DIR, "
+	                           "--new-root, --pair=CARD and the rest, as fuzznetd "
+	                           "--help lists them. Only as the first option." },
+#endif
 	{ "version", nullptr, "Print the version and exit." },
 	{ "help", nullptr, "Print a summary of the options and exit." },
 	{ "man", nullptr, "Write this manual page to standard output and exit." },
@@ -147,6 +154,13 @@ void man_page(QTextStream &out) {
 } /* namespace */
 
 int main(int argc, char *argv[]) {
+#ifdef BSSH_FUZZNET
+	/* Before Qt: fuzznet's node owns the process, its loop and its signals. */
+	if (argc > 1 && qstrcmp(argv[1], "--fuzznet") == 0) {
+		argv[1] = argv[0];
+		return bssh_fuzznet_main(argc - 1, argv + 1);
+	}
+#endif
 	QCoreApplication app(argc, argv);
 	QCoreApplication::setApplicationName(QStringLiteral("beersshd"));
 

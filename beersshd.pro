@@ -128,6 +128,21 @@ android {
     include($$PWD/libssh.pri)
 }
 
+# beersshd as a fuzznet host (src/sshd/fuzznet_node.h): the vendored
+# fuzznet's libfuzznetd.a, built by the Makefile, which passes these in. Its
+# headers for the one C file that includes them alone -- fuzznet has a
+# session/ and a version/ of its own, which the C++ must not find.
+!isEmpty(BSSH_FUZZNET_LIB) {
+    DEFINES += BSSH_FUZZNET
+    SOURCES += src/sshd/fuzznet_node.c
+    HEADERS += src/sshd/fuzznet_node.h
+    QMAKE_CFLAGS += -I$$BSSH_FUZZNET_DIR -I$$BSSH_FUZZNET_DIR/node -I$$BSSH_FUZZNET_DIR/wire/generated
+    QMAKE_CFLAGS_RELEASE -= -O2
+    QMAKE_CFLAGS_RELEASE += -Os
+    LIBS += $$BSSH_FUZZNET_LIB
+    PRE_TARGETDEPS += $$BSSH_FUZZNET_LIB
+}
+
 # Header dependencies from the compiler: tool/qmake-deps.mk says why.
 QMAKE_CFLAGS   += -MMD -MP
 QMAKE_CXXFLAGS += -MMD -MP

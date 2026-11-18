@@ -834,13 +834,67 @@ media-check: $(SNURRA_DIR)/snurra.pri
 # default build so check-ci compiles it against the runner's older Qt and
 # libssh, which is where an API it leans on would first be missing.
 SSHD_BUILD_DIR = build-sshd
-SSHD_SOURCES   = $(wildcard src/sshd/*.cpp src/sshd/*.h)
+SSHD_SOURCES   = $(wildcard src/sshd/*.cpp src/sshd/*.c src/sshd/*.h)
 
-$(SSHD_BUILD_DIR)/Makefile: beersshd.pro \
+# fuzznet, vendored (project.md sec 5.6): beersshd links its node, the
+# libfuzznetd.a fuzznet's own Makefile builds for a consumer (its sec 907),
+# and `beersshd --fuzznet` runs it. Linux only until fuzznet's Windows and
+# macOS builds arrive (its sec 967); FUZZNET= builds beersshd without it.
+#
+# Fetched by the build when absent, with the two of fuzznet's own
+# submodules the node compiles -- flog and monocypher, not its GUI's
+# thorvg, quirc and qtty -- at the commits the gitlinks name, and refused
+# when they cannot be. Recursed every time, FORCE, since only fuzznet's
+# make knows whether its sources moved; the archive's date moves only on a
+# real rebuild, so beersshd relinks only then. Built without log packing
+# (FZN_LOG_PACK=0): that is libzstd, for closed log segments a server
+# keeping a few sessions does not need, and one library less to install.
+FUZZNET ?= $(if $(filter Linux,$(shell uname -s)),1,)
+FUZZNET_DIR       = fuzznet
+FUZZNET_BUILD_DIR = build-fuzznet
+FUZZNET_LIB       = $(FUZZNET_BUILD_DIR)/libfuzznetd.a
+
+$(FUZZNET_LIB): FORCE
+	@if [ ! -f $(FUZZNET_DIR)/node/daemon.h ] || [ ! -f $(FUZZNET_DIR)/flog/flog.c ] \
+	    || [ ! -f $(FUZZNET_DIR)/monocypher/src/monocypher.c ]; then \
+		if ! command -v git >/dev/null 2>&1; then \
+			echo "make: $(FUZZNET_DIR)/ is incomplete and git is not installed." >&2; exit 1; \
+		fi; \
+		echo "make: fetching the $(FUZZNET_DIR) submodule, with its flog and monocypher" >&2; \
+		git submodule update --init $(FUZZNET_DIR) >&2 \
+		&& git -C $(FUZZNET_DIR) submodule update --init flog monocypher >&2 \
+		|| { echo "make: the $(FUZZNET_DIR) submodule could not be fetched;" \
+		          "FUZZNET= builds beersshd without it" >&2; exit 1; }; \
+	fi
+	@mkdir -p $(FUZZNET_BUILD_DIR)
+	@$(MAKE) -s --no-print-directory -C $(FUZZNET_DIR) BUILD_DIR=$(abspath $(FUZZNET_BUILD_DIR)) \
+	         FZN_LOG_PACK=0 daemon-lib
+
+# The whole pairing a client needs, through `beersshd --fuzznet` alone, as
+# part of `make test` wherever beersshd links fuzznet.
+.PHONY: check-fuzznet
+check-fuzznet: $(SSHD_TARGET)
+	tool/check-fuzznet.sh ./$(SSHD_TARGET)
+
+ifeq ($(FUZZNET),1)
+TEST_FUZZNET = check-fuzznet
+SSHD_FUZZNET = $(FUZZNET_LIB)
+$(SSHD_BUILD_DIR)/Makefile: QMAKE_CONFIG += BSSH_FUZZNET_LIB=$(abspath $(FUZZNET_LIB)) \
+                                            BSSH_FUZZNET_DIR=$(abspath $(FUZZNET_DIR))
+endif
+
+# Which way the tree was configured, as media.source does for snurra: the
+# switch changes what qmake is told, and qmake runs again only when this moves.
+SSHD_FUZZNET_SOURCE = $(SSHD_BUILD_DIR)/fuzznet.source
+$(SSHD_FUZZNET_SOURCE): FORCE
+	@mkdir -p $(SSHD_BUILD_DIR); printf '%s\n' '$(FUZZNET)' > $@.new; \
+	if cmp -s $@.new $@; then rm -f $@.new; else mv $@.new $@; fi
+
+$(SSHD_BUILD_DIR)/Makefile: beersshd.pro $(SSHD_FUZZNET_SOURCE) \
                             $(if $(call bssh_qmake_orphaned,$(SSHD_BUILD_DIR)),FORCE)
 	$(call bssh_qmake,$(SSHD_BUILD_DIR),beersshd.pro)
 
-$(SSHD_TARGET): $(LIBSSH_LIB) $(SSHD_BUILD_DIR)/Makefile $(SSHD_SOURCES)
+$(SSHD_TARGET): $(LIBSSH_LIB) $(SSHD_FUZZNET) $(SSHD_BUILD_DIR)/Makefile $(SSHD_SOURCES)
 	$(MAKE) -C $(SSHD_BUILD_DIR) $(QMAKE_SUBMAKE)
 	cp $(SSHD_BUILD_DIR)/$(SSHD_TARGET) $(SSHD_TARGET)
 
@@ -987,7 +1041,7 @@ check-build-tree:
 # linked -static, which macOS cannot do. Elsewhere that one test skips.
 TEST_SESSION_BIN = $(if $(filter Linux,$(shell uname -s)),$(SESSION_BIN))
 
-test: check-build-tree $(TARGET) $(TEST_BIN) $(TEST_SESSION_BIN)
+test: check-build-tree $(TARGET) $(TEST_BIN) $(TEST_SESSION_BIN) $(TEST_FUZZNET)
 	@sandbox=$$(mktemp -d) && \
 	 HOME=$$sandbox XDG_CONFIG_HOME=$$sandbox/config XDG_DATA_HOME=$$sandbox/data \
 	 QT_QPA_PLATFORM=offscreen ./$(TARGET) --self-test; \
@@ -2039,7 +2093,7 @@ endef
 deb-clean:
 	rm -f $(ARTIFACTS)
 	$(call bssh_remove_tree,$(BUILD_DIR) $(TEST_BUILD_DIR) $(SSHD_BUILD_DIR) \
-	        $(VTERM_BUILD_DIR) $(LIBSSH_BUILD_DIR) $(SHOT_DIR))
+	        $(VTERM_BUILD_DIR) $(LIBSSH_BUILD_DIR) $(SHOT_DIR) $(FUZZNET_BUILD_DIR))
 	@if [ -d $(VTERM_DIR)/.git ] || [ -f $(VTERM_DIR)/.git ]; then \
 		git -C $(VTERM_DIR) checkout -- . && echo "vterm: patches reverted"; \
 	fi

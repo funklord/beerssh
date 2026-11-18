@@ -10,3 +10,7 @@
 [submodule "snurra"]
 	path = snurra
 	url = https://github.com/funklord/snurra
+[submodule "fuzznet"]
+	path = fuzznet
+	url = https://github.com/funklord/fuzznet
+	shallow = true
