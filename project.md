@@ -201,7 +201,7 @@ run.
 | Language | C++17 (Qt), plus the minimum Java/Kotlin Android's platform model forces | JNI bridge between them; see §5.2 for what "minimum" means. No JVM code at all in the desktop build. |
 | Build system | **[DECIDED]** **qmake** (`.pro`/`.pri`) for every target + Gradle for Android packaging only | One project file, scoped per platform; `androiddeployqt` drives the Android side. **Not CMake** — the sibling `fuzzypickles` GUI is qmake, and one build system across both trees is worth more than CMake being Qt 6's default. |
 | Desktop targets | **[DECIDED]** Linux (primary), macOS + Windows best-effort | Linux is the development platform; see §1. |
-| Min SDK | **[DECIDED]** API **26** (Android 8) | Below 26, foreground-service + Keystore APIs differ; 26 keeps code simple. Android-only concern. Set as `ANDROID_MIN_SDK_VERSION` in `beerssh.pro`, which is what settled it. |
+| Min SDK | **[DECIDED]** API **28** (Android 9) | Raised from 26 on the holder's word 2026-11-18, conditional on every phone used or seen running it: the two on record are a Galaxy Note 9 (SM-N960F, Android 10, API 29) and a Galaxy Z Fold 3 (SM-F926B, Android 13 and later), and the emulator images are 30 to 36. The reason is fuzznet: it draws randomness with `getrandom()`, which bionic has from 28, and BeerSSH's client links it for kept sessions over fuzznet (sec 5.6). Below 26, foreground-service + Keystore APIs differ. Set as `ANDROID_MIN_SDK_VERSION` in `beerssh.pro` and as `ANDROID_API` in the Makefile, which `android-check` holds at or below it. |
 | Target SDK | **[DECIDED]** API **36 (Android 16)** | Play has refused new apps and updates targeting below 36 since 2026-08-31 (developer.android.com/google/play/requirements/target-sdk, read 2026-10-22). Raised from 35 on the holder's instruction 2026-10-22, beersshd with it; `make android-aab` ends in `android-play-check`, which refuses a bundle below the floor; its first run on a Gradle bundle read targetSdk 36, versionCode 10000 and ten 64-bit libraries all 16 KB aligned, and refused it only as unsigned (it is: Gradle signs a keyless release bundle with nothing). At 36 Android enforces edge-to-edge with no opt-out, which costs nothing here (the window is `Qt::ExpandedClientAreaHint` and follows the safe area, sec 6). Android 16 also stops delivering Back to apps at 36 unless they opt out; the manifest's `enableOnBackInvokedCallback="false"` is that opt-out, and **it holds on 16** -- measured 2026-11-03 on an API 36 emulator image (`bssh_api36`, Google APIs x86_64): Add host opened, the first Back closed the keyboard, the second returned to the host list, and the app stayed the resumed activity throughout. |
 | ABIs | arm64-v8a (primary), armeabi-v7a, x86_64 (emulator) | Google Play requires 64-bit; ship arm64 + optionally armv7. Desktop: x86_64 + aarch64. |
 | Package format | **AAB** (Android App Bundle); desktop per §12.2 | AAB required by Play, and enables per-ABI + asset-pack splits (see §9.4). |
@@ -20009,7 +20009,7 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
 | Decision | Where |
 |---|---|
 | Crypto backend — OpenSSL | §4 |
-| Min SDK — API 26 | §2 |
+| Min SDK — API 28 | §2 |
 | Desktop secret-store backend and its no-keyring fallback — both built, chosen at runtime | §11 |
 | Desktop packaging — tarball, `make install` and a `.deb`; Flatpak deferred | §12.2 |
 | Multiple top-level windows on desktop — in, one process-wide registry | §8.4 |
@@ -20663,7 +20663,7 @@ package sources are `android-sshd/`; the C++ is the same server under
   qmake's generated Makefile is one: `TARGET=beersshd` replaced qmake's
   own `TARGET`, the library was linked as `beersshd`, and the install step
   failed looking for `libbeersshd_x86_64.so`. Found on the first build.
-- **minSdk 30**, not BeerSSH's 26: "All files access" is an Android 11
+- **minSdk 30**, not BeerSSH's 28: "All files access" is an Android 11
   permission, and below it shared storage is a different permission model.
 - **The root is `Environment.getExternalStorageDirectory()`** —
   `/storage/emulated/0` — and the host key and authorized keys live in the

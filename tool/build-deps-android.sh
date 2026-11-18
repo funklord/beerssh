@@ -46,10 +46,11 @@ if [ ! -f "$toolchain" ]; then
 	exit 1
 fi
 
-# API 26 matches project.md sec 2's suggested minSdk. Raising it here
-# without raising it there would produce a library the app cannot load on
-# the oldest device it claims to support.
-api=${BSSH_ANDROID_API:-26}
+# API 28 matches project.md sec 2's minSdk. Raising it here without
+# raising it there would produce a library the app cannot load on the
+# oldest device it claims to support; a library built at 26 before the
+# floor moved is the safe direction and need not be rebuilt.
+api=${BSSH_ANDROID_API:-28}
 
 prefix="$root/deps/android/$abi"
 work="$root/build-deps-android/$abi"

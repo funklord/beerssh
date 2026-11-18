@@ -563,6 +563,13 @@ ANDROID_AAB ?= $(ANDROID_BUILD_DIR)/$(ANDROID_PROGRAM)-$(VERSION).aab
 # made-up hosts and sessions, never the user's.
 STORE_VIEWS ?= hosts terminal split settings
 
+# BeerSSH's floor, Android 9 (beerssh.pro, project.md sec 2): fuzznet draws
+# its randomness with getrandom(), which bionic has from API 28, and the
+# client links fuzznet. Raised from 26 on 2026-11-18, every phone the
+# project had used or seen being at 29 or later. The fragment's preflight
+# refuses this above what the app declares, so the two move together.
+ANDROID_API = 28
+
 include tool/android.mk
 
 # The NDK triple for the ABI, chosen BELOW the include because that is
