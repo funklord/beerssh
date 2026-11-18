@@ -2140,14 +2140,18 @@ with any SFTP client.
 
 **Open, and whose.**
 
-- *How the helper reaches a server*: **settled by the holder 2026-11-18,
-  beersshd carries it.** A host running beersshd has the session helper, so
-  nothing is uploaded to anybody's host and no per-architecture build is
-  shipped to strangers. A plain `sshd` host gets plain SSH as today. This
+- *How the helper reaches a server*: **beersshd carries it, settled by the
+  holder 2026-11-18.** A host running beersshd has the session helper. This
   widens beersshd, whose `--help` still says it "runs no shell", and is the
   same direction as the holder's 2026-11-06 "maybe we should put it in
-  beersshd if it links fuzznet" above. Rejected with it: uploading the helper
-  on first use.
+  beersshd if it links fuzznet" above. **Uploading it on first use, to a
+  plain `sshd` host, stays open as a second route** (holder, 2026-11-18: not
+  to be dismissed; an earlier edit of this entry wrongly recorded it as
+  rejected). What it would cost: a helper build per server architecture
+  shipped inside the client, the user's consent before an executable is
+  placed on their host, a place for it that can execute (a `noexec` home
+  breaks it), and a version check so an old upload is replaced. Until one
+  of the two routes is there, a plain `sshd` host gets plain SSH as today.
 - *fuzznet or QUIC for UDP*: **settled by the holder 2026-11-18, fuzznet.**
   QUIC (the UDP transport under HTTP/3) would carry bytes but bring none of
   the identity, trust or revocation, which fuzznet already does for the
