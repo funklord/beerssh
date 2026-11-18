@@ -90,12 +90,22 @@ android {
 
     ANDROID_PACKAGE_SOURCE_DIR = $$PWD/android-sshd
 
-    # The session helper (src/sshd/sshd_platform_android.cpp), built by the
-    # Makefile for this ABI and passed in; shipped as a library so that it
-    # lands in the native library directory, where the app may run it.
-    !isEmpty(BSSH_SESSION_HELPER): ANDROID_EXTRA_LIBS += $$BSSH_SESSION_HELPER
-    # And the fuzznet host (src/sshd/fuzznet_main.c), the same way.
-    !isEmpty(BSSH_FUZZNET_NODE): ANDROID_EXTRA_LIBS += $$BSSH_FUZZNET_NODE
+    # The session helper (src/sshd/sshd_platform_android.cpp) and the
+    # fuzznet host (src/sshd/fuzznet_main.c), built by the Makefile for this
+    # ABI and passed in; named lib*.so so that they land in the native
+    # library directory, where the app may run them. Installed beside the
+    # app's own library rather than listed in ANDROID_EXTRA_LIBS: that list
+    # becomes libs.xml's bundled_libs, which Qt's loader dlopen()s at start,
+    # and these are static executables -- "unexpected e_type: 2", and the
+    # app exited before its window (API 36 emulator, 2026-11-18). Every
+    # route to a package -- apk, a signed apk, aab -- runs Qt's
+    # apk_install_target, which is this install into android-build, and
+    # androiddeployqt leaves android-build/libs alone.
+    !isEmpty(BSSH_SESSION_HELPER)|!isEmpty(BSSH_FUZZNET_NODE) {
+        native_programs.path = /libs/$$QT_ARCH
+        native_programs.files = $$BSSH_SESSION_HELPER $$BSSH_FUZZNET_NODE
+        INSTALLS += native_programs
+    }
 
     isEmpty(BSSH_VERSION_CODE): BSSH_VERSION_CODE = 1
     ANDROID_VERSION_CODE = $$BSSH_VERSION_CODE

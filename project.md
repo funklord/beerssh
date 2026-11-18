@@ -20503,10 +20503,18 @@ unless started with `--sessions`, the first bullet.
   `ssh_disconnect` frees every channel the session still has, so the
   channel list is emptied before it -- the first version freed them after
   and crashed on a channel opened and refused. **The Android app too, 2026-11-18:**
-  the helper is built by the NDK, static, as `libbeerssh_session.so` and
-  shipped with `ANDROID_EXTRA_LIBS`, because the native library directory
-  is the one place an app may execute a file (one copied to its own data
-  cannot run since targetSdk 29). Gradle leaves libraries inside the APK
+  the helper is built by the NDK, static, as `libbeerssh_session.so`, and
+  put in the native library directory, the one place an app may execute a
+  file (one copied to its own data cannot run since targetSdk 29). **Not
+  with `ANDROID_EXTRA_LIBS`**, which it first was: that list becomes
+  `libs.xml`'s `bundled_libs`, which Qt's loader `dlopen()`s at start, and
+  a static executable is refused ("unexpected e_type: 2") -- so every
+  beersshd APK with the helper exited before its window, which no desktop
+  test could see. beersshd.pro installs the helper and the fuzznet host
+  into `/libs/<abi>` with qmake's `INSTALLS` instead: every package route
+  (apk, signed apk, aab) runs Qt's `apk_install_target`, which is that
+  install into `android-build`, and androiddeployqt never cleans
+  `android-build/libs`. Gradle leaves libraries inside the APK
   unless asked for legacy packaging, which qmake cannot say, so the
   Makefile adds Qt's `android-legacy-packaging` key to the deployment
   settings qmake writes and fails the build if it did not take. A switch
@@ -20517,10 +20525,18 @@ unless started with `--sessions`, the first bullet.
   carries the helper compressed, so it is unpacked on install; the arm64
   helper builds; and the Android-built helper, run on this Linux kernel,
   passes `a_kept_session_comes_back_through_beersshd` -- bionic's forkpty
-  and the session host included. **Not seen:** the same on an emulator or
-  the Fold -- the exec from the library directory under SELinux, the
-  sandbox's shell, the JNI lookup. Both API 34 and 36 images refuse to
-  start with under 7.4 GB free, and `/` had 5.5 GB, `/home` 4.8 GB.
+  and the session host included. **Seen on the API 36 emulator, 2026-11-18
+  evening**, after the loader fix: both programs unpacked executable in the
+  library directory; `beerssh-session version` answered over a login, so
+  the exec from there passes SELinux; the fuzznet host started beside the
+  server; `beersshd --fuzznet-pair` over a login printed a `FZD1:` image
+  in 0.4 s and the host's pid changed across it (stopped and started
+  again); and an `scp` upload renamed by `sftp` left MediaStore holding
+  the new name only, announced from the server's process. The window's
+  own "Pair a BeerSSH device" button is not offered on Android, rightly:
+  the window drives the server through `bssh_sshd_remote`, two files and
+  no request channel, so a phone is paired from BeerSSH's side. **Not
+  seen:** a whole kept session through it on a device, and the Fold.
   Uploading the helper to plain `sshd` hosts stays open (sec 5.6).
 
 - **Keys, and a password once one is set — [password added 2026-10-09,
