@@ -25,12 +25,10 @@
 namespace {
 
 #ifdef BSSH_FUZZNET
-const QStringList PAIR = { QStringLiteral("--fuzznet-service=1"), QStringLiteral("--fuzznet-product=1") };
-
 /* One of beersshd's pairing steps: its last line of output, or empty. */
 QString step(const QString &program, const QStringList &arguments) {
 	QProcess process;
-	process.start(program, QStringList{ QStringLiteral("--fuzznet") } + arguments + PAIR);
+	process.start(program, QStringList{ QStringLiteral("--fuzznet") } + arguments);
 	if (!process.waitForFinished(20000) || process.exitCode() != 0) return QString();
 	const QStringList lines =
 	        QString::fromLatin1(process.readAllStandardOutput()).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
@@ -73,7 +71,7 @@ struct server_t {
 		process.start(bin, QStringList{ QStringLiteral("--fuzznet"), QStringLiteral("--fuzznet-dir=") + server,
 		                                QStringLiteral("--socket=") + socket,
 		                                QStringLiteral("--udp-port=%1").arg(port), QStringLiteral("--no-log-file"),
-		                                QStringLiteral("--sessions") } + PAIR);
+		                                QStringLiteral("--sessions") });
 		for (int i = 0; i < 50 && !QFile::exists(socket); ++i) QTest::qWait(200);
 		return QFile::exists(socket);
 	}

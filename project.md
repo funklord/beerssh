@@ -2142,9 +2142,8 @@ fuzznet's archive built by fuzznet's make with the NDK's clang in its
 Run on this machine's kernel, the x86_64 pair answered the desktop probe over
 fuzznet; the APK itself was not rebuilt or run (no emulator room, as before).
 **Not yet, and why:** the app starting the node and a pairing button in its
-window wait on fuzznet assigning beerssh a service and product number, since an
-app would ship whichever it used (asked in fuzznet's inbox, 2026-11-18; the
-desktop takes them on its command line meanwhile). BeerSSH's own Android build
+window waited on beerssh's product number, which fuzznet has now assigned
+(above), and are the next step. BeerSSH's own Android build
 linking the client waits on a choice: fuzznet's randomness is `getrandom()`,
 bionic's from API 28, and BeerSSH's floor is 26 -- raise the floor (the
 holder's) or a fallback in fuzznet (fuzznet's; reported there). Also not yet:
@@ -2175,11 +2174,15 @@ new stream to the same running server, as a client back after a drop, which the
 host failed without the epoch; then the same without
 `--sessions`, which must answer nothing. Sabotaged by hand: nothing said back is caught; the
 `--sessions` gate removed is not, and cannot be from outside, since without it no
-helper path is set and the helper never starts -- two locks, either holding. It pairs as fuzznet's test service and
-product (1, 1): fuzznet assigns those numbers (its sec 813), BeerSSH has none yet,
-and asking for one is with fuzznet's session (its inbox, 2026-11-18). Found on the
-way and reported there too: a `--fuzznet-dir` that does not exist is announced
-as created and nothing is kept, so the check makes its directories first.
+helper path is set and the helper never starts -- two locks, either holding.
+**beerssh's numbers are fuzznet's to assign, and it did, 2026-11-18** (fuzznet
+`59b67817`, its sec 1270, answering our inbox message): `FZN_SERVICE_NODE` 1 and
+`FZN_PRODUCT_BEERSSH` 4, beersshd and the client's device one product. beersshd
+gives them to fuzznet unless its command line names others, so every host and
+device it pairs agree, and nothing of ours carries fuzznet's test pair any more.
+The same commit fixed the fault reported with the request -- a `--fuzznet-dir`
+that did not exist was announced as created and nothing kept: fuzznetd makes it
+now, one level, 0700 -- so the check leaves the host's store for fuzznet to make.
 
 **Where fuzznet stands on this, from its session, 2026-11-06** (its sec 918, 923-925; a
 report, and the decisions in it are the holder's). A one-shot command needs nothing

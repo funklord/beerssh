@@ -7,8 +7,8 @@
 # answer coming back. Then the same without --sessions, which must answer
 # nothing: a paired host gets no helper unless beersshd was told to give one.
 #
-# Service 1, product 1 is fuzznet's test pair, as its own live checks use:
-# beerssh has no product number of its own yet (asked of fuzznet 2026-11-18).
+# Under beerssh's own numbers, service 1 and product 4 (fuzznet's
+# chain/service.h), which beersshd gives fuzznet unless told others.
 #
 # What stops it: every pairing step exits by itself under a 20 s ceiling, each
 # server is started under `timeout 60` and killed by the trap, and the probe
@@ -28,19 +28,16 @@ finish() {
 }
 trap finish EXIT
 trap 'exit 1' INT TERM
-pair="--fuzznet-service=1 --fuzznet-product=1"
 
-# Made first: fuzznet given a directory that is not there says it created an
-# identity in it and keeps none (reported to fuzznet 2026-11-18). beersshd
-# and the helper side by side, as --sessions finds it.
-mkdir "$dir/server" "$dir/bin" "$dir/s" || exit 1
+# beersshd and the helper side by side, as --sessions finds it. The host's
+# store is left for fuzznet to make, which it does since its 59b67817.
+mkdir "$dir/bin" "$dir/s" || exit 1
 cp "$bin" "$dir/bin/beersshd" && cp "$helper" "$dir/bin/beerssh-session" || exit 1
 bin=$dir/bin/beersshd
 
 # One step; its last line of output in $out, and the script ends on a failure.
 run() {
-	# shellcheck disable=SC2086
-	if ! timeout 20 "$bin" --fuzznet "$@" $pair >"$dir/out" 2>"$dir/err"; then
+	if ! timeout 20 "$bin" --fuzznet "$@" >"$dir/out" 2>"$dir/err"; then
 		echo "check-fuzznet: beersshd --fuzznet $* failed: $(head -c 400 "$dir/err")" >&2
 		exit 1
 	fi
@@ -52,13 +49,11 @@ run --fuzznet-dir="$dir/server" --new-root
 # The pairing in one step, as a person does it: a device made and paired
 # off to one side and its image printed (src/sshd/fuzznet_pair.h). And
 # refused for a directory holding no host, rather than making one there.
-# shellcheck disable=SC2086
-if timeout 60 "$bin" --fuzznet-pair --fuzznet-dir="$dir/nobody" $pair >/dev/null 2>&1; then
+if timeout 60 "$bin" --fuzznet-pair --fuzznet-dir="$dir/nobody" >/dev/null 2>&1; then
 	echo "check-fuzznet: FAILED -- --fuzznet-pair paired with no host to pair to" >&2
 	exit 1
 fi
-# shellcheck disable=SC2086
-if ! image=$(timeout 60 "$bin" --fuzznet-pair --fuzznet-dir="$dir/server" $pair 2>"$dir/err"); then
+if ! image=$(timeout 60 "$bin" --fuzznet-pair --fuzznet-dir="$dir/server" 2>"$dir/err"); then
 	echo "check-fuzznet: beersshd --fuzznet-pair failed: $(head -c 400 "$dir/err")" >&2
 	exit 1
 fi
@@ -72,9 +67,8 @@ port=$((28000 + $$ % 2000))
 # beersshd serving, with `$@` beside fuzznet's options, until it answers on
 # its socket or 10 s pass.
 serve() {
-	# shellcheck disable=SC2086
 	timeout 60 "$bin" --fuzznet --fuzznet-dir="$dir/server" --socket="$dir/s/sock" \
-		--udp-port="$port" --no-log-file "$@" $pair >"$dir/server.log" 2>&1 &
+		--udp-port="$port" --no-log-file "$@" >"$dir/server.log" 2>&1 &
 	server=$!
 	for _ in $(seq 1 50); do
 		[ -S "$dir/s/sock" ] && return 0

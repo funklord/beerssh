@@ -39,6 +39,7 @@
 
 #include "../posix_compat.h"
 #include "../session/stream.h"
+#include "chain/service.h"
 #include "node/daemon.h"
 
 /* Hosts speaking at once; a sixteenth more is not heard until one ends. */
@@ -365,9 +366,34 @@ static const fzn_daemon_ext_t extension = {
 	.said = said,
 };
 
+/* `prefix` as one of `argv`'s words opens, or not. */
+static int given(int argc, char **argv, const char *prefix) {
+	for (int i = 1; i < argc; ++i) {
+		if (!strncmp(argv[i], prefix, strlen(prefix))) return 1;
+	}
+	return 0;
+}
+
 int bssh_fuzznet_main(int argc, char **argv) {
 	/* First, before anything is opened: it may execute this program again. */
 	fzn_daemon_refuse_huge_pages(argv);
 	for (size_t i = 0; i < LINKS_MAX; ++i) node.links[i].io = -1;
-	return fzn_daemon_main(argc, argv, &extension);
+
+	/*
+	 * beerssh's numbers, fuzznet's to assign (its chain/service.h): every
+	 * host and device of one estate must agree on them, and a pairing
+	 * checks the capability they name, so they are given here unless the
+	 * command line names others -- fuzznet's own test pair, say.
+	 */
+	static char service[24];
+	static char product[24];
+	snprintf(service, sizeof(service), "--fuzznet-service=%u", (unsigned)FZN_SERVICE_NODE);
+	snprintf(product, sizeof(product), "--fuzznet-product=%u", (unsigned)FZN_PRODUCT_BEERSSH);
+	char *with[argc + 3];
+	int n = 0;
+	for (int i = 0; i < argc; ++i) with[n++] = argv[i];
+	if (!given(argc, argv, "--fuzznet-service=")) with[n++] = service;
+	if (!given(argc, argv, "--fuzznet-product=")) with[n++] = product;
+	with[n] = NULL;
+	return fzn_daemon_main(n, with, &extension);
 }
