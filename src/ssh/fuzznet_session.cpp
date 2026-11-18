@@ -70,9 +70,9 @@ void bssh_fuzznet_session::start_link() {
 	m_worker = std::thread(&bssh_fuzznet_session::run, this, m_image.toLatin1(), m_host.toUtf8(), m_port);
 }
 
-void bssh_fuzznet_session::run_on_the_side(const QString &command) {
+void bssh_fuzznet_session::run_on_the_side(const QString &command, int deadline_ms) {
 	if (command != QLatin1String("beerssh-session version") || m_stream_spent || state() != CONNECTED) {
-		bssh_ssh_session::run_on_the_side(command);
+		bssh_ssh_session::run_on_the_side(command, deadline_ms);
 		return;
 	}
 	m_probing = true;

@@ -120,7 +120,7 @@ public:
 	void supply_key_passphrase(const QString &passphrase) override { Q_UNUSED(passphrase); }
 
 	QString kind() const override;
-	void run_on_the_side(const QString &command) override;
+	void run_on_the_side(const QString &command, int deadline_ms = 5000) override;
 	void find_working_directory() override;
 	void upload(const QStringList &paths, const QString &directory) override;
 	void cancel_upload() override;

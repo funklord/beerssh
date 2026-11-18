@@ -13,9 +13,11 @@
 #include <QTcpSocket>
 #include <QTest>
 
+#include <atomic>
 #include <chrono>
 #include <cerrno>
 #include <ctime>
+#include <thread>
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -129,6 +131,7 @@ void sshd_test::init() {
 void sshd_test::cleanup() {
 	if (m_server) m_server->stop();
 	m_server.reset();
+	m_pair_device = nullptr;
 	m_dir.reset();
 }
 
@@ -193,6 +196,7 @@ bool sshd_test::start_server(long exchange_seconds, const QByteArray &session_he
 	config.port = 0;
 	config.exchange_seconds = exchange_seconds;
 	config.session_helper = session_helper;
+	config.pair_device = m_pair_device;
 
 	m_server = std::make_unique<bssh_sshd>();
 	QString error;
@@ -845,6 +849,47 @@ void sshd_test::with_sessions_on_it_runs_the_helper_and_nothing_else() {
  * on the next. The probe and the attach are two channels of one login,
  * which beersshd without sessions never allowed.
  */
+/*
+ * BeerSSH's Pair Over Fuzznet asked of a phone's beersshd (sec 5.6): the
+ * one command, answered by whoever keeps the host -- here a thread of the
+ * test's, as the keeper answers from its own -- with the image as the
+ * desktop's beersshd prints it, or why and a failing status.
+ */
+void sshd_test::a_login_pairs_a_device_where_the_host_can() {
+	if (QStandardPaths::findExecutable(QStringLiteral("ssh")).isEmpty()) QSKIP("no ssh client");
+	const QString helper = m_config + QStringLiteral("/beerssh-session");
+	QVERIFY(write_file(helper, "#!/bin/sh\nexit 99\n"));
+	QVERIFY(QFile::setPermissions(helper, QFileDevice::ReadOwner | QFileDevice::WriteOwner
+	                                      | QFileDevice::ExeOwner));
+	std::atomic<int> asked{ 0 };
+	m_pair_device = [&asked](bssh_sshd_config_t::pair_done_t done) {
+		const int which = ++asked;
+		std::thread([which, done] {
+			std::this_thread::sleep_for(std::chrono::milliseconds(300));
+			if (which == 1) done("FZD1:test-image", QString());
+			else done(QByteArray(), QStringLiteral("no fuzznet store here"));
+		}).detach();
+	};
+	if (!start_server(30, QFile::encodeName(helper))) QSKIP("the OpenSSH client is not installed");
+
+	QStringList args = client_options(m_config + QStringLiteral("/client"));
+	args << QStringLiteral("-p") << QString::number(m_server->port()) << QStringLiteral("127.0.0.1");
+	QByteArray output;
+	QCOMPARE(client(QStringLiteral("ssh"), QStringList(args) << QStringLiteral("beersshd --fuzznet-pair"),
+	                QByteArray(), &output), 0);
+	QCOMPARE(output, QByteArray("FZD1:test-image\n"));
+
+	QCOMPARE(client(QStringLiteral("ssh"), QStringList(args) << QStringLiteral("beersshd --fuzznet-pair"),
+	                QByteArray(), &output), 1);
+	QVERIFY2(output.contains("no fuzznet store here"), output.constData());
+
+	/* The command exactly, and nothing else of beersshd's. */
+	QVERIFY(client(QStringLiteral("ssh"), QStringList(args) << QStringLiteral("beersshd --fuzznet-pair --x"),
+	               QByteArray(), &output) != 0);
+	QVERIFY2(output.contains("request failed"), output.constData());
+	QCOMPARE(asked.load(), 2);
+}
+
 void sshd_test::a_kept_session_comes_back_through_beersshd() {
 	const QByteArray helper = qgetenv("BSSH_TEST_SESSION_BIN");
 	if (helper.isEmpty() || !QFileInfo(QFile::decodeName(helper)).isExecutable())

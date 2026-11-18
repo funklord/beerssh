@@ -53,7 +53,7 @@ public:
 	 * beersshd holds one per host. Anything else has no side to run on and
 	 * is answered with nothing, as the base does.
 	 */
-	void run_on_the_side(const QString &command) override;
+	void run_on_the_side(const QString &command, int deadline_ms = 5000) override;
 
 	/* What SSH has and fuzznet does not need: its pairing is the trust. */
 	void authenticate_password(const QString &password) override { Q_UNUSED(password); }

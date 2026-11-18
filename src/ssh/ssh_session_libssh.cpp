@@ -234,7 +234,7 @@ public slots:
 	void do_set_term(const QString &term);
 	void do_set_command(const QStringList &command);
 	void do_set_raw_channel(bool raw) { m_raw_channel = raw; }
-	void do_run_on_the_side(const QString &command);
+	void do_run_on_the_side(const QString &command, int deadline_ms);
 	void do_find_working_directory();
 	void do_upload(const QStringList &paths, const QString &directory);
 	void do_cancel_upload();
@@ -341,6 +341,7 @@ private:
 	int m_rows = 24;
 	QByteArray m_side_output;
 	QElapsedTimer m_side_started;
+	int m_side_deadline_ms = 5000;
 	void drain_side();
 	void finish_side();
 
@@ -1366,7 +1367,7 @@ void bssh_libssh_worker::do_restart_shell(const QStringList &command) {
 	do_open_shell(m_cols, m_rows);
 }
 
-void bssh_libssh_worker::do_run_on_the_side(const QString &command) {
+void bssh_libssh_worker::do_run_on_the_side(const QString &command, int deadline_ms) {
 	/* One at a time, and only on a connection that is up. */
 	if (!m_session || m_side_channel) {
 		emit side_output_ready(QByteArray());
@@ -1385,6 +1386,7 @@ void bssh_libssh_worker::do_run_on_the_side(const QString &command) {
 	}
 	m_side_output.clear();
 	m_side_started.start();
+	m_side_deadline_ms = deadline_ms;
 
 	/*
 	 * Asked before the shell opens, which is when a kept session's probe runs
@@ -2149,7 +2151,7 @@ void bssh_libssh_worker::drain_side() {
 		}
 	}
 	if (ssh_channel_is_eof(m_side_channel) || !ssh_channel_is_open(m_side_channel) ||
-	    m_side_started.elapsed() > 5000)
+	    m_side_started.elapsed() > m_side_deadline_ms)
 		finish_side();
 }
 
@@ -2888,9 +2890,9 @@ void bssh_ssh_session_libssh::cancel_download() {
 	QMetaObject::invokeMethod(m_worker, [this] { m_worker->do_cancel_download(); }, Qt::QueuedConnection);
 }
 
-void bssh_ssh_session_libssh::run_on_the_side(const QString &command) {
-	QMetaObject::invokeMethod(m_worker, [this, command] {
-		m_worker->do_run_on_the_side(command);
+void bssh_ssh_session_libssh::run_on_the_side(const QString &command, int deadline_ms) {
+	QMetaObject::invokeMethod(m_worker, [this, command, deadline_ms] {
+		m_worker->do_run_on_the_side(command, deadline_ms);
 	}, Qt::QueuedConnection);
 }
 

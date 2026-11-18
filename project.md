@@ -2183,7 +2183,17 @@ So the app's host is stopped for a pairing and started after it rather than
 restarted only after, and a desktop `beersshd --fuzznet-pair` beside a
 serving `beersshd --fuzznet` says to stop it, pair and start it. Pairing a
 running host without a restart would want an image device to join by invite,
-which fuzznet does not offer. Also not yet: a host key-style check that the
+which fuzznet does not offer. **And a phone's beersshd answers Pair Over
+Fuzznet (2026-11-18):** with sessions on, a login may run `beersshd
+--fuzznet-pair`, that exact command, and the keeper pairs as its window's
+button does -- stopping its host, pairing, starting it -- and the image comes
+back on stdout, or why on stderr and exit 1. The connection's thread does not
+wait in the callback: the keeper answers from its own thread and the
+connection's loop sends the answer when it is there, so Stop is never held by
+a pairing. So BeerSSH's Pair Over Fuzznet works against the phone's server as
+against a desktop, with nothing pasted; the side command waits a minute for
+it rather than a listing's five seconds. `a_login_pairs_a_device_where_the_host_can`
+holds the server's half; the keeper's is not run end to end. Also not yet: a host key-style check that the
 gateway named in the image is the host at that address -- fuzznet's session
 authenticates the gateway, so a wrong address fails rather than reaching another.
 

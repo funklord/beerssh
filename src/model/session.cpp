@@ -823,7 +823,9 @@ void bssh_session::pair_over_fuzznet() {
 		return;
 	}
 	m_fuzznet_pairing = true;
-	m_transport->run_on_the_side(QStringLiteral("beersshd --fuzznet-pair"));
+	/* A minute, not the listing's five seconds: a phone's beersshd stops its
+	 * host, runs fuzznet's four steps and starts it again. */
+	m_transport->run_on_the_side(QStringLiteral("beersshd --fuzznet-pair"), 60000);
 }
 
 void bssh_session::disconnect_from_host() {

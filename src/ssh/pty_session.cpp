@@ -771,7 +771,7 @@ void bssh_pty_session::change_remote(change_t change, const QString &path, const
 	}, Qt::QueuedConnection);
 }
 
-void bssh_pty_session::run_on_the_side(const QString &command) {
+void bssh_pty_session::run_on_the_side(const QString &command, int deadline_ms) {
 	/*
 	 * A process beside the shell, through /bin/sh as an SSH exec request
 	 * goes through the account's shell, so one command line serves both.
@@ -797,7 +797,7 @@ void bssh_pty_session::run_on_the_side(const QString &command) {
 		process->deleteLater();
 	});
 
-	deadline->start(5000);
+	deadline->start(deadline_ms);
 	process->start(QStringLiteral("/bin/sh"), { QStringLiteral("-c"), command });
 }
 

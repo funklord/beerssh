@@ -146,7 +146,10 @@ public:
 	void set_raw_channel(bool raw) override { m_raw_channel = raw; }
 
 	/* Recorded, and answered only when the test says what it printed. */
-	void run_on_the_side(const QString &command) override { m_side_commands.append(command); }
+	void run_on_the_side(const QString &command, int deadline_ms = 5000) override {
+		Q_UNUSED(deadline_ms);
+		m_side_commands.append(command);
+	}
 	QStringList side_commands() const { return m_side_commands; }
 	bool raw_channel() const { return m_raw_channel; }
 	int shells_opened() const { return m_shells_opened; }

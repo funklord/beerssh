@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QTemporaryDir>
 
+#include <functional>
 #include <memory>
 
 #include "sshd/sshd.h"
@@ -42,6 +43,7 @@ private slots:
 	void scp_finishes_with_a_clean_exit();
 	void a_listener_the_system_takes_away_comes_back_without_spinning();
 	void with_sessions_on_it_runs_the_helper_and_nothing_else();
+	void a_login_pairs_a_device_where_the_host_can();
 	void a_kept_session_comes_back_through_beersshd();
 
 private:
@@ -52,6 +54,8 @@ private:
 
 	std::unique_ptr<QTemporaryDir> m_dir;
 	std::unique_ptr<bssh_sshd> m_server;
+	/* config.pair_device for the next start_server(). */
+	std::function<void(bssh_sshd_config_t::pair_done_t)> m_pair_device;
 	QString m_root;
 	QString m_outside;
 	QString m_config;

@@ -94,8 +94,9 @@ void bssh_ssh_session::change_remote(change_t change, const QString &path, const
 	}, Qt::QueuedConnection);
 }
 
-void bssh_ssh_session::run_on_the_side(const QString &command) {
+void bssh_ssh_session::run_on_the_side(const QString &command, int deadline_ms) {
 	Q_UNUSED(command);
+	Q_UNUSED(deadline_ms);
 	QMetaObject::invokeMethod(this, [this] { emit side_output_ready(QByteArray()); },
 	                          Qt::QueuedConnection);
 }

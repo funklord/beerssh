@@ -169,6 +169,20 @@ void bssh_sshd_keeper::start() {
 		} else {
 			prepare_session_environment(data);
 			config.session_helper = QFile::encodeName(helper);
+			/*
+			 * And BeerSSH's Pair Over Fuzznet answered here, as by a
+			 * desktop's beersshd: the window's own pairing, on this
+			 * object's thread, which owns the host it stops and starts.
+			 */
+			if (can_pair()) {
+				config.pair_device = [this](bssh_sshd_config_t::pair_done_t done) {
+					QMetaObject::invokeMethod(this, [this, done] {
+						QString why;
+						const QString image = pair_device(&why);
+						done(image.toLatin1(), why);
+					}, Qt::QueuedConnection);
+				};
+			}
 		}
 	}
 

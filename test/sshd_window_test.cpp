@@ -9,8 +9,10 @@
 #include <QScrollArea>
 #include <QSettings>
 #include <QPlainTextEdit>
+#include <QProcess>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QStandardPaths>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTemporaryDir>
@@ -597,6 +599,49 @@ void sshd_window_test::with_sessions_the_fuzznet_host_runs_and_pairs_a_device() 
 	session.open_shell(80, 24);
 	QTRY_COMPARE_WITH_TIMEOUT(heard, QByteArray("beerssh-session 1\n"), 15000);
 	session.disconnect_from_host();
+
+	/*
+	 * And paired over a login, as BeerSSH's Pair Over Fuzznet asks: the
+	 * keeper answers `beersshd --fuzznet-pair` on its own thread, which
+	 * runs here only while the event loop does -- so ssh is waited for
+	 * with QTRY, not blocked on -- and the host started again knows the
+	 * new device.
+	 */
+	if (!QStandardPaths::findExecutable(QStringLiteral("ssh")).isEmpty()
+	    && !QStandardPaths::findExecutable(QStringLiteral("ssh-keygen")).isEmpty()) {
+		const QString key = dir.filePath(QStringLiteral("client"));
+		QCOMPARE(QProcess::execute(QStringLiteral("ssh-keygen"),
+		                           { QStringLiteral("-q"), QStringLiteral("-t"), QStringLiteral("ed25519"),
+		                             QStringLiteral("-N"), QString(), QStringLiteral("-f"), key }),
+		         0);
+		QFile::remove(window.authorized_keys_path());
+		QVERIFY(QFile::copy(key + QStringLiteral(".pub"), window.authorized_keys_path()));
+		QProcess ssh;
+		ssh.start(QStringLiteral("ssh"),
+		          { QStringLiteral("-i"), key, QStringLiteral("-o"), QStringLiteral("IdentitiesOnly=yes"),
+		            QStringLiteral("-o"), QStringLiteral("StrictHostKeyChecking=no"), QStringLiteral("-o"),
+		            QStringLiteral("UserKnownHostsFile=/dev/null"), QStringLiteral("-o"),
+		            QStringLiteral("BatchMode=yes"), QStringLiteral("-p"), QString::number(port),
+		            QStringLiteral("127.0.0.1"), QStringLiteral("beersshd --fuzznet-pair") });
+		ssh.closeWriteChannel();
+		QTRY_VERIFY_WITH_TIMEOUT(ssh.state() == QProcess::NotRunning, 60000);
+		const QByteArray answer = ssh.readAllStandardOutput().trimmed();
+		QVERIFY2(ssh.exitCode() == 0 && answer.startsWith("FZD1:"),
+		         ssh.readAllStandardError().constData());
+		QVERIFY2(QString::fromLatin1(answer) != image, "the same device twice");
+
+		bssh_fuzznet_session again(QString::fromLatin1(answer));
+		QByteArray heard_again;
+		connect(&again, &bssh_ssh_session::bytes_received, &again,
+		        [&heard_again](const QByteArray &bytes) { heard_again += bytes; });
+		again.connect_to_host(QStringLiteral("127.0.0.1"), quint16(port), QString());
+		QTRY_COMPARE_WITH_TIMEOUT(again.state(), bssh_ssh_session::CONNECTED, 15000);
+		again.set_raw_channel(true);
+		again.set_command({ QStringLiteral("beerssh-session"), QStringLiteral("version") });
+		again.open_shell(80, 24);
+		QTRY_COMPARE_WITH_TIMEOUT(heard_again, QByteArray("beerssh-session 1\n"), 15000);
+		again.disconnect_from_host();
+	}
 
 	/* Stopping the server stops the host: nothing of it outlives the switch. */
 	child<QPushButton>(window, "sshd-toggle")->click();

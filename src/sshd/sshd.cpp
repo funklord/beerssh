@@ -193,11 +193,21 @@ struct served_channel_t {
 	ssh_channel channel = nullptr;
 	struct ssh_channel_callbacks_struct callbacks;
 
-	enum kind_t { OPEN, SFTP, HELPER } kind = OPEN;
+	enum kind_t { OPEN, SFTP, HELPER, PAIRING } kind = OPEN;
 	bool finished = false;
 
 	sftp_session sftp = nullptr;
 	std::unique_ptr<bssh_sftp_handler> handler;
+
+	/* A pairing asked for (config's pair_device): answered by whichever
+	 * thread the host is kept on, read by this connection's loop. */
+	struct pairing_t {
+		std::mutex lock;
+		bool done = false;
+		QByteArray image;
+		QString why;
+	};
+	std::shared_ptr<pairing_t> pairing;
 
 	bssh_helper_process_t helper;
 	QList<QByteArray> arguments;
@@ -844,6 +854,38 @@ bool pump_helper(served_channel_t *served) {
 	return !served->to_helper.isEmpty() || !served->from_helper.isEmpty() || !served->errors_out.isEmpty();
 }
 
+/*
+ * A pairing's answer, once the keeper has it: the image on stdout and exit
+ * 0, as `beersshd --fuzznet-pair` prints it, or why on stderr and exit 1.
+ * True when it sent something.
+ */
+bool pump_pairing(served_channel_t *served) {
+	if (!ssh_channel_is_open(served->channel)) {
+		served->finished = true;
+		return false;
+	}
+	QByteArray image;
+	QString why;
+	{
+		std::lock_guard<std::mutex> held(served->pairing->lock);
+		if (!served->pairing->done) return false;
+		image = served->pairing->image;
+		why = served->pairing->why;
+	}
+	if (!image.isEmpty()) {
+		const QByteArray line = image + '\n';
+		ssh_channel_write(served->channel, line.constData(), uint32_t(line.size()));
+	} else {
+		const QByteArray line = (why.isEmpty() ? QStringLiteral("pairing failed") : why).toUtf8() + '\n';
+		ssh_channel_write_stderr(served->channel, line.constData(), uint32_t(line.size()));
+	}
+	ssh_channel_request_send_exit_status(served->channel, image.isEmpty() ? 1 : 0);
+	ssh_channel_send_eof(served->channel);
+	ssh_channel_close(served->channel);
+	served->finished = true;
+	return true;
+}
+
 /* What arrived for an SFTP channel, answered without waiting for more. */
 void pump_sftp(served_channel_t *served, ssh_session session, const bssh_root_path &root,
                const bssh_sftp_handler::changed_t &changed) {
@@ -907,6 +949,8 @@ void bssh_sshd::serve_channels(connection_t *connection) {
 				watch(served.get(), loop, served->finished);
 			} else if (served->kind == served_channel_t::SFTP) {
 				pump_sftp(served.get(), session, root, changed);
+			} else if (served->kind == served_channel_t::PAIRING) {
+				busy |= pump_pairing(served.get());
 			} else if (!ssh_channel_is_open(served->channel)) {
 				served->finished = true;   /* opened, asked for nothing, closed */
 			}
@@ -1067,6 +1111,30 @@ int on_served_exec(ssh_session, ssh_channel, const char *command, void *userdata
 	bssh_sshd::connection_t *connection = served->connection;
 	const QByteArray program = connection->owner->config().session_helper;
 	if (served->kind != served_channel_t::OPEN || program.isEmpty()) return SSH_ERROR;
+
+	/*
+	 * BeerSSH's Pair Over Fuzznet, asked of this host as of a desktop's
+	 * beersshd: one exact command, answered by the keeper rather than by
+	 * a program, since the host it pairs into is the keeper's. No more
+	 * than a login already reaches -- the helper's sessions -- and only
+	 * where the helper is served.
+	 */
+	const auto &pair_device = connection->owner->config().pair_device;
+	if (pair_device && QByteArray(command) == "beersshd --fuzznet-pair") {
+		auto pairing = std::make_shared<served_channel_t::pairing_t>();
+		served->pairing = pairing;
+		served->kind = served_channel_t::PAIRING;
+		connection->requested = true;
+		emit connection->owner->logged(QStringLiteral("%1: %2 asked to pair a device over fuzznet")
+		                               .arg(connection->peer, connection->user));
+		pair_device([pairing](const QByteArray &image, const QString &why) {
+			std::lock_guard<std::mutex> held(pairing->lock);
+			pairing->image = image;
+			pairing->why = why;
+			pairing->done = true;
+		});
+		return SSH_OK;
+	}
 
 	QList<QByteArray> arguments = bssh_helper_arguments(QByteArray(command));
 	if (arguments.isEmpty()) {

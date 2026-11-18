@@ -6,6 +6,7 @@
 #include <QString>
 
 #include <atomic>
+#include <functional>
 #include <list>
 #include <memory>
 #include <mutex>
@@ -49,6 +50,18 @@ struct bssh_sshd_config_t {
 	 * which is a shell as this user, outside the folder above.
 	 */
 	QByteArray session_helper;
+
+	/*
+	 * Where the helper is served and this host can pair a device for
+	 * fuzznet (sec 5.6): a login may also run "beersshd --fuzznet-pair",
+	 * BeerSSH's Pair Over Fuzznet, and is answered with the device image
+	 * as the desktop's beersshd prints it. Called on the connection's
+	 * thread, it must not block: it starts the pairing wherever the host
+	 * is kept and calls `done` once, from any thread, with the image or
+	 * with empty and why. It may be called after the client has gone.
+	 */
+	using pair_done_t = std::function<void(const QByteArray &image, const QString &why)>;
+	std::function<void(pair_done_t done)> pair_device;
 };
 
 /*

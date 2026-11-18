@@ -255,14 +255,15 @@ public:
 	/*
 	 * Runs a short command beside the shell, never in it, and answers with
 	 * side_output_ready(): what it printed on stdout, at most 64 KiB, after
-	 * it ends or after five seconds. Over SSH a second channel of the same
-	 * connection; locally a process. What lists tmux and screen sessions
-	 * on connect (model/multiplexer.h).
+	 * it ends or after `deadline_ms`, five seconds unless asked. Over SSH a
+	 * second channel of the same connection; locally a process. What lists
+	 * tmux and screen sessions on connect (model/multiplexer.h), and what
+	 * pairs a host over fuzznet, which a phone's host takes longer over.
 	 *
 	 * The default answers empty, a turn of the event loop later: a
 	 * transport that cannot run one says nothing ran, not something did.
 	 */
-	virtual void run_on_the_side(const QString &command);
+	virtual void run_on_the_side(const QString &command, int deadline_ms = 5000);
 
 	/*
 	 * Ends the shell and starts this command in its place, on the same
