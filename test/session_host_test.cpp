@@ -527,8 +527,12 @@ struct received_t {
 		events.history = [](void *self, bssh_wire_cells_t *cells, int continuation) {
 			QByteArray text = continuation ? "+" : "";
 			bssh_screen_cell_t cell;
-			while (bssh_wire_next_cell(cells, &cell) > 0)
-				text += QString(QChar::fromUcs4(cell.chars[0] ? cell.chars[0] : U' ')).toUtf8();
+			while (bssh_wire_next_cell(cells, &cell) > 0) {
+				/* fromUcs4 on a pointer, which Qt 6.4 has as well: QChar::fromUcs4's
+				 * result converts to a QString only from 6.5. */
+				const char32_t ch = cell.chars[0] ? cell.chars[0] : U' ';
+				text += QString::fromUcs4(&ch, 1).toUtf8();
+			}
 			received_t *me = static_cast<received_t *>(self);
 			if (me->text_when_history_began < 0) me->text_when_history_began = int(me->text.size());
 			me->history.append(text);
