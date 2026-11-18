@@ -220,9 +220,10 @@ expect = "another_processs_drag_is_previewed_here"
 name = "the menu button sits under the drum"
 file = "src/ui/pane_corner.cpp"
 find = """
-	if (!m_menu->isHidden()) {
-		const int high = qMax(m_menu->sizeHint().height(), m_menu->minimumHeight());
-		m_menu->setGeometry(PAD, y, inner, high);
+	for (QToolButton *button : { m_menu, m_maximise }) {
+		if (button->isHidden()) continue;
+		const int high = qMax(button->sizeHint().height(), button->minimumHeight());
+		button->setGeometry(PAD, y, inner, high);
 		y += high;
 	}
 	const int drum = m_selector->sizeHint().height();
@@ -231,6 +232,12 @@ find = """
 	/* Under the drum: the tmux picker, then the tab bar's stand-in. */
 	for (QToolButton *button : { m_multiplexer, m_tabs }) {"""
 replace = """
+	for (QToolButton *button : { m_maximise }) {
+		if (button->isHidden()) continue;
+		const int high = qMax(button->sizeHint().height(), button->minimumHeight());
+		button->setGeometry(PAD, y, inner, high);
+		y += high;
+	}
 	const int drum = m_selector->sizeHint().height();
 	m_selector->setGeometry(PAD, y, inner, drum);
 	y += drum;
