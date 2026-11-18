@@ -295,7 +295,9 @@ bool bssh_layout_manager::room_to_split(bssh_session *target, int edge,
 
 	/* The tree as shown, without the pane that moves, and with the
 	 * target's pane halved at that edge. */
-	bssh_pane_node tree = visible_tree();
+	const QList<bssh_session *> fitted = fitted_panes();
+	bssh_pane_node tree = m_tree;
+	prune(tree, [&fitted](bssh_session *session) { return fitted.contains(session); });
 	if (leaves) prune(tree, [moving](bssh_session *session) { return session != moving; });
 	bssh_pane_node *leaf = find_pane(tree, target);
 	if (!leaf || !leaf->is_leaf()) return true;
@@ -312,6 +314,7 @@ void bssh_layout_manager::set_arrangement(arrangement_t arrangement) {
 	if (arrangement == m_arrangement) return;
 
 	m_arrangement = arrangement;
+	m_maximised = nullptr;
 
 	/*
 	 * A changed arrangement is a changed layout even at a fixed width:
@@ -361,6 +364,8 @@ void bssh_layout_manager::set_intent(const QList<bssh_session *> &sessions) {
 
 	assign_leaves(m_tree, sessions);
 
+	/* A pane more or fewer is a shape changed, which puts them all back. */
+	if (sessions != m_intent) m_maximised = nullptr;
 	m_intent = sessions;
 	emit layout_changed();
 }
@@ -368,6 +373,9 @@ void bssh_layout_manager::set_intent(const QList<bssh_session *> &sessions) {
 bool bssh_layout_manager::place(bssh_session *session, bssh_session *target,
                                  drop_edge_t edge) {
 	if (!session || session == target || !m_intent.contains(target)) return false;
+
+	/* Whatever it does, the panes it does it among are all shown again. */
+	m_maximised = nullptr;
 
 	if (edge == EDGE_MIDDLE) {
 		bssh_pane_node *there = find_pane(m_tree, target);
@@ -456,6 +464,7 @@ bool bssh_layout_manager::place(bssh_session *session, bssh_session *target,
 }
 
 void bssh_layout_manager::set_tree(const bssh_pane_node &tree) {
+	m_maximised = nullptr;
 	m_tree = tree;
 	normalize(m_tree);
 
@@ -607,6 +616,12 @@ bssh_pane_node bssh_layout_manager::visible_tree() const {
 }
 
 QList<bssh_session *> bssh_layout_manager::visible_panes() const {
+	bssh_session *alone = maximised();
+	if (alone) return { alone };
+	return fitted_panes();
+}
+
+QList<bssh_session *> bssh_layout_manager::fitted_panes() const {
 	const int allowed = max_panes();
 
 	QList<bssh_session *> visible = m_intent;
@@ -632,6 +647,31 @@ QList<bssh_session *> bssh_layout_manager::visible_panes() const {
 	return visible;
 }
 
+void bssh_layout_manager::set_maximised(bssh_session *member) {
+	bssh_session *const before = maximised();
+	m_maximised = member && find_pane(m_tree, member) ? member : nullptr;
+	if (maximised() != before) emit layout_changed();
+}
+
+bssh_session *bssh_layout_manager::maximised() const {
+	if (!m_maximised || m_arrangement != TILED) return nullptr;
+	bssh_session *front = front_of(m_maximised);
+	const QList<bssh_session *> fitted = fitted_panes();
+	if (!front || fitted.size() < 2 || !fitted.contains(front)) return nullptr;
+	return front;
+}
+
+void bssh_layout_manager::release_maximised(bssh_session *leaving) {
+	if (leaving != m_maximised) return;
+	m_maximised = nullptr;
+	for (bssh_session *tab : tabs(leaving)) {
+		if (tab != leaving) {
+			m_maximised = tab;
+			break;
+		}
+	}
+}
+
 bool bssh_layout_manager::is_collapsed() const {
 	return m_intent.size() > visible_panes().size();
 }
@@ -639,6 +679,7 @@ bool bssh_layout_manager::is_collapsed() const {
 void bssh_layout_manager::forget(bssh_session *session) {
 	if (!find_pane(m_tree, session)) return;
 
+	release_maximised(session);
 	take_out(m_tree, session);
 	normalize(m_tree);
 	m_intent.clear();
@@ -685,6 +726,7 @@ bool bssh_layout_manager::add_tab(bssh_session *session, bssh_session *member, i
 		if (slot > from) --slot;
 	} else {
 		/* From another pane, which closes if this was its last tab. */
+		release_maximised(session);
 		take_out(m_tree, session);
 		pane = find_pane(m_tree, member);
 		list = pane->pane_tabs();
@@ -704,6 +746,9 @@ bool bssh_layout_manager::add_tab(bssh_session *session, bssh_session *member, i
 bool bssh_layout_manager::bring_to_front(bssh_session *session) {
 	bssh_pane_node *pane = find_pane(m_tree, session);
 	if (!pane) return false;
+
+	/* Another pane's tab: that pane, where it is, with the rest. */
+	if (m_maximised && find_pane(m_tree, m_maximised) != pane) m_maximised = nullptr;
 
 	pane->session = session;
 	m_intent.clear();

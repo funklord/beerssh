@@ -8875,6 +8875,42 @@ rather than swallowed — a title that silently loses characters cannot be debug
 from outside the program — and an empty format means the default, because a
 window with no name is a blank row in the task switcher.
 
+**Maximise: one tiled pane over the others for a while — [BUILT 2026-11-18].**
+The holder: "a temporary fullscreen button for tiled terminals, that terminal
+covering all other terminals in the window temporarily, then switch back". It is
+Terminator's *maximise terminal* and tmux's zoom, and it is called maximise here
+because zoom already means text size (§9.5) and one word means one thing.
+
+- **The layout holds it** (`bssh_layout_manager::set_maximised`), since the
+  layout is the only thing that decides what is shown (§8.4): `visible_panes()`
+  is the one pane while it applies, and `fitted_panes()` what would show
+  otherwise. The tree is untouched — nothing is closed, folded or moved — so
+  putting it back is showing the tree again, and every divider returns exactly
+  where it was: a lone pane has no splitters to remember, so what the container
+  remembered before it is what the panes come back to.
+- **The others stay reachable** from the maximised pane's bar, which lists their
+  tabs as a narrow window's last pane does (§8.2). Picking one puts every pane
+  back and fronts that one where it is; showing it in the maximised pane's place
+  would have moved it, which is a different verb.
+- **It ends with the shape:** a split, a drop, a pane opened or closed, a restored
+  shape or the arrangement changing. Its session closing passes it to another tab
+  of the same pane. Not saved: it is temporary by the holder's word, so a
+  restart comes back with the panes the user built.
+- **Only tiled, and only among others.** A column already shows one or two
+  terminals to a screen and scrolls to the rest; a pane alone has nothing to
+  cover, so no button is offered.
+- **Where it is:** a button in the focused pane's corner (§8.7a, which keeps what
+  covers a pane's text in one place) — a square, and the square halved as the
+  way back — plus View → Maximise Pane, the terminal menu's Pane group, and
+  Ctrl+Shift+X, Terminator's chord for it (tilix kept it too). Plain Ctrl+X,
+  emacs's prefix, is untouched.
+
+Three tests in `layout_test` (the layout's rules, every divider back exactly, the
+corner's button and the menu both ways), and `tool/sabotage/maximise.toml`, eight
+edits, all caught. Its first run missed two: maximising inside a column was never
+asked for by the test, only leaving one, and is now; and a guard keeping the
+covered shape's divisions changed nothing measurable, so it went.
+
 ### 8.4 Implementation notes
 - A **`bssh_layout_manager`** owns the tab-group → pane-tree mapping and is the
   single place that decides tabs-vs-splits from the current window size class. UI

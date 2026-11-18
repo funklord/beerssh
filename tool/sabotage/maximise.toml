@@ -1,0 +1,65 @@
+# One tiled pane over the others for a while (project.md sec 8.3,
+# bssh_layout_manager::set_maximised), each broken the way it plausibly
+# breaks and caught by test/layout_test.cpp.
+#
+# Not here: keeping the covered shape's divisions through a maximise, which a
+# first version did and this spec found made no difference -- the rebuild of
+# a lone pane has no splitters to remember, so the sizes from before it are
+# what the panes come back to either way, and the test that every divider
+# returns exactly passes without it.
+
+[[sabotage]]
+name = "a maximised pane does not narrow what is shown"
+file = "src/ui/layout_manager.cpp"
+find = "\tif (alone) return { alone };\n"
+replace = "\tif (alone && false) return { alone };\n"
+expect = "a_maximised_pane_covers_the_others_until_put_back"
+
+[[sabotage]]
+name = "another pane's tab picked moves it into the maximised place"
+file = "src/ui/layout_manager.cpp"
+find = "\tif (m_maximised && find_pane(m_tree, m_maximised) != pane) m_maximised = nullptr;\n"
+replace = ""
+expect = "a_maximised_pane_covers_the_others_until_put_back"
+
+[[sabotage]]
+name = "a closed session ends the maximise of a pane still holding tabs"
+file = "src/ui/layout_manager.cpp"
+find = "\tfor (bssh_session *tab : tabs(leaving)) {\n\t\tif (tab != leaving) {"
+replace = "\tfor (bssh_session *tab : tabs(leaving)) {\n\t\tif (false) {"
+expect = "a_maximised_pane_covers_the_others_until_put_back"
+
+[[sabotage]]
+name = "a new pane leaves the window maximised"
+file = "src/ui/layout_manager.cpp"
+find = "\tif (sessions != m_intent) m_maximised = nullptr;\n"
+replace = ""
+expect = "a_maximised_pane_covers_the_others_until_put_back"
+
+[[sabotage]]
+name = "a column can be maximised"
+file = "src/ui/layout_manager.cpp"
+find = "\tif (!m_maximised || m_arrangement != TILED) return nullptr;\n"
+replace = "\tif (!m_maximised) return nullptr;\n"
+expect = "a_maximised_pane_covers_the_others_until_put_back"
+
+[[sabotage]]
+name = "the corner never offers the button"
+file = "src/ui/main_window.cpp"
+find = "\treturn m_layout->fitted_panes().size() > 1 ? bssh_pane_corner::MAXIMISE_OFFERED\n"
+replace = "\treturn m_layout->fitted_panes().size() > 100 ? bssh_pane_corner::MAXIMISE_OFFERED\n"
+expect = "the_corner_maximises_its_pane_and_puts_them_back"
+
+[[sabotage]]
+name = "the corner's button reaches nothing"
+file = "src/ui/terminal_view.cpp"
+find = "\t\tconnect(m_corner, &bssh_pane_corner::maximise_clicked,\n\t\t         this, &bssh_terminal_view::corner_maximise_requested);\n"
+replace = ""
+expect = "the_corner_maximises_its_pane_and_puts_them_back"
+
+[[sabotage]]
+name = "the maximised pane offers no way back"
+file = "src/ui/main_window.cpp"
+find = "\t\treturn m_layout->front_of(front) == alone ? bssh_pane_corner::MAXIMISE_ON\n"
+replace = "\t\treturn m_layout->front_of(front) != alone ? bssh_pane_corner::MAXIMISE_ON\n"
+expect = "the_corner_maximises_its_pane_and_puts_them_back"

@@ -294,7 +294,17 @@ public:
 		 */
 		SHORTCUT_ZOOM_IN,
 		SHORTCUT_ZOOM_OUT,
-		SHORTCUT_ZOOM_RESET
+		SHORTCUT_ZOOM_RESET,
+
+		/*
+		 * One pane over the others and back (sec 8.3). Ctrl+Shift+X,
+		 * Terminator's chord for the same thing ("maximise terminal"),
+		 * which tilix took too. What the remote loses is what any
+		 * Ctrl+Shift letter costs: the shell is sent Ctrl+X for it
+		 * otherwise, or a CSI-u report where it asked for one, and plain
+		 * Ctrl+X -- emacs's prefix -- is untouched.
+		 */
+		SHORTCUT_MAXIMISE_PANE
 	};
 
 	/*

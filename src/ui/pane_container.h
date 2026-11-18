@@ -264,6 +264,9 @@ signals:
 	void corner_tabs_requested(bssh_session *front, const QPoint &global);
 	void corner_menu_requested(const QPoint &global);
 
+	/* The corner's maximise button on the pane showing `front` (sec 8.3). */
+	void maximise_requested(bssh_session *front);
+
 	/*
 	 * A pane or tab was dropped on the pane showing `target`, at `edge`
 	 * (a bssh_layout_manager::drop_edge_t). Direct, not queued: the drop's

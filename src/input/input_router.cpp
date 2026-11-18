@@ -292,6 +292,9 @@ const QList<bssh_input_router::chord_t> &bssh_input_router::default_chords() {
 		{ SHORTCUT_ZOOM_RESET, Qt::ControlModifier, Qt::Key_0,
 			chord_label(Qt::ControlModifier, Qt::Key_0),
 			"zoom-reset", "Back to the size this host resolves to" },
+		{ SHORTCUT_MAXIMISE_PANE, Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_X,
+			chord_label(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_X),
+			"maximise-pane", "One pane over the others, and back" },
 	};
 	return chords;
 }

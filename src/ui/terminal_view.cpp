@@ -1801,6 +1801,8 @@ void bssh_terminal_view::set_pane_handle(bool handle) {
 		         this, &bssh_terminal_view::corner_tabs_requested);
 		connect(m_corner, &bssh_pane_corner::menu_clicked,
 		         this, &bssh_terminal_view::corner_menu_requested);
+		connect(m_corner, &bssh_pane_corner::maximise_clicked,
+		         this, &bssh_terminal_view::corner_maximise_requested);
 	} else if (!handle && m_corner) {
 		m_corner->deleteLater();
 		m_corner = nullptr;
@@ -1886,6 +1888,12 @@ void bssh_terminal_view::set_corner_menu(bool shown) {
 	sync_corner();
 }
 
+void bssh_terminal_view::set_corner_maximise(int state) {
+	if (state == m_corner_maximise) return;
+	m_corner_maximise = state;
+	sync_corner();
+}
+
 void bssh_terminal_view::set_corner_active(bool active) {
 	if (active == m_corner_active) return;
 	m_corner_active = active;
@@ -1914,6 +1922,7 @@ void bssh_terminal_view::sync_corner() {
 	m_corner->multiplexer_button()->setToolTip(m_mux_drawer ? m_mux_drawer->handle_text() : QString());
 	m_corner->set_tabs_text(m_corner_tabs);
 	m_corner->set_menu_shown(m_corner_menu);
+	m_corner->set_maximise(bssh_pane_corner::maximise_t(m_corner_maximise));
 	m_corner->selector()->set_program_listening(m_emulator && m_emulator->mouse_reporting());
 
 	/*

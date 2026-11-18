@@ -536,6 +536,12 @@ private:
 	void zoom_current(int steps);
 	void reset_zoom_current();
 
+	/*
+	 * The pane showing `front` over the others in this window, or every
+	 * pane back if it already is (sec 8.3). The layout holds the state.
+	 */
+	void toggle_maximised(bssh_session *front);
+
 	/* Drop the focused session's history (sec 6.4). */
 	void clear_scrollback();
 
@@ -1119,6 +1125,7 @@ private:
 	QAction *m_paste_action;
 	QAction *m_split_action;
 	QAction *m_detach_action;
+	QAction *m_maximise_action = nullptr;
 	QWidget *m_terminal_page;
 	bssh_profile_store *m_profile_store;
 
@@ -1180,6 +1187,8 @@ private:
 	void flash_session_notice(bssh_session *session, const QString &text);
 	void apply_menu_bar();
 	void sync_corner_buttons();
+	/* The corner's maximise for the pane showing `front`, a bssh_pane_corner::maximise_t. */
+	int maximise_state(bssh_session *front) const;
 	void show_corner_tabs(bssh_session *front, const QPoint &global);
 	void show_corner_menu(const QPoint &global);
 	QAction *m_menu_bar_action = nullptr;

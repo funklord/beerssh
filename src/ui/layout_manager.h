@@ -233,6 +233,34 @@ public:
 	/* True when the intent does not fit and the rest became tabs. */
 	bool is_collapsed() const;
 
+	/*
+	 * What would be shown were no pane maximised: visible_panes() before
+	 * maximised() narrows it to one. What a saved layout counts, and what
+	 * room for another pane is measured against.
+	 */
+	QList<bssh_session *> fitted_panes() const;
+
+	/*
+	 * One tiled pane over the rest, for a while (sec 8.3): the holder's
+	 * "temporary fullscreen" for a terminal among others, Terminator's
+	 * maximise and tmux's zoom. The pane holding `member` becomes the only
+	 * one shown; the others are not closed, folded or moved -- the tree
+	 * is as it was, and its bar lists their tabs, as a narrow window's
+	 * last pane does (sec 8.2). Null puts every pane back, at the sizes
+	 * they had.
+	 *
+	 * It lasts until it is put back or the shape changes: a split, a
+	 * drop, a session opened or closed as a pane, or a tab of another
+	 * pane picked -- which shows that pane where it was, since showing
+	 * it in the maximised pane's place would move it. Only tiled: a
+	 * column shows every session already, one or two to a screen.
+	 *
+	 * maximised() is the front of that pane while it applies, else null:
+	 * not tiled, the pane gone, or alone with nothing to cover.
+	 */
+	void set_maximised(bssh_session *member);
+	bssh_session *maximised() const;
+
 	/* Out of the tree, wherever it is: a pane left empty closes. */
 	void forget(bssh_session *session);
 
@@ -352,6 +380,8 @@ private:
 	/* Room is known and applies: a desktop's wide, tiled window. */
 	bool fit_applies() const;
 	bool fits(const bssh_pane_node &tree) const;
+	/* The pane maximised goes; one it held carries on to another tab of it. */
+	void release_maximised(bssh_session *leaving);
 
 	int m_width_dp;
 	QSize m_room_area;
@@ -360,6 +390,8 @@ private:
 	arrangement_t m_arrangement;
 	QList<bssh_session *> m_intent;
 	bssh_pane_node m_tree;
+	/* Any tab of the maximised pane; see set_maximised. */
+	bssh_session *m_maximised = nullptr;
 };
 
 #endif /* BSSH_LAYOUT_MANAGER_H */

@@ -497,6 +497,9 @@ private slots:
 	void a_tree_is_rebuilt_from_where_its_panes_are();
 	void a_row_divider_moved_alone_breaks_at_its_column();
 	void a_grid_keeps_its_dividers_through_a_rebuild();
+	void a_maximised_pane_covers_the_others_until_put_back();
+	void a_maximised_pane_gives_every_divider_back();
+	void the_corner_maximises_its_pane_and_puts_them_back();
 	void a_hemmed_in_row_holds_the_grid_in_line();
 	void a_divider_is_thumb_sized_only_where_a_thumb_uses_it();
 	void a_visible_pane_is_on_screen_focused_or_not();

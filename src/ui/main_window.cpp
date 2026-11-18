@@ -82,6 +82,7 @@ static qint64 other_beerssh_pid_under_pointer(const QWidget *ours);
 #include "ui/find_bar.h"
 #include "ui/pane_bar.h"
 #include "ui/pane_container.h"
+#include "ui/pane_corner.h"
 #include "input/input_router.h"
 #include "term/emulator.h"
 #include <QCheckBox>
@@ -623,6 +624,12 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	         this, &bssh_main_window::show_corner_tabs);
 	connect(m_panes, &bssh_pane_container::corner_menu_requested,
 	         this, &bssh_main_window::show_corner_menu);
+	/* Queued: it rebuilds the panes, the button's own among them. */
+	connect(m_panes, &bssh_pane_container::maximise_requested, this, [this](bssh_session *front) {
+		QPointer<bssh_session> held = front;
+		QMetaObject::invokeMethod(this, [this, held] { if (held) toggle_maximised(held); },
+		                          Qt::QueuedConnection);
+	});
 
 	/*
 	 * The find bar (sec 6.4) lives at the bottom too, below the selector,
@@ -2747,6 +2754,15 @@ void bssh_main_window::handle_shortcut(bssh_input_router::shortcut_t shortcut) {
 	if (shortcut == bssh_input_router::SHORTCUT_ZOOM_IN) zoom_current(1);
 	if (shortcut == bssh_input_router::SHORTCUT_ZOOM_OUT) zoom_current(-1);
 	if (shortcut == bssh_input_router::SHORTCUT_ZOOM_RESET) reset_zoom_current();
+
+	if (shortcut == bssh_input_router::SHORTCUT_MAXIMISE_PANE) toggle_maximised(m_current);
+}
+
+void bssh_main_window::toggle_maximised(bssh_session *front) {
+	if (!m_layout || !front) return;
+	const bool on = m_layout->maximised() && m_layout->front_of(front) == m_layout->maximised();
+	m_layout->set_maximised(on ? nullptr : front);
+	if (m_panes) m_panes->focus_session(m_layout->front_of(front));
 }
 
 void bssh_main_window::zoom_current(int steps) {
@@ -5002,7 +5018,26 @@ void bssh_main_window::sync_corner_buttons() {
 		view->set_corner_tabs(m_tabs_hidden && tabs > 1 ? QStringLiteral("tabs %1").arg(tabs)
 		                                                 : QString());
 		view->set_corner_menu(menus);
+		view->set_corner_maximise(maximise_state(front));
 	}
+	if (m_maximise_action) {
+		m_maximise_action->setEnabled(maximise_state(m_current) != bssh_pane_corner::MAXIMISE_NONE);
+		m_maximise_action->setChecked(m_layout->maximised() != nullptr);
+	}
+}
+
+/*
+ * Offered on a tiled window's panes while there are others to cover, and
+ * the way back on the one covering them; never in a column (sec 8.3).
+ */
+int bssh_main_window::maximise_state(bssh_session *front) const {
+	if (!m_layout || !front || m_layout->arrangement() != bssh_layout_manager::TILED)
+		return bssh_pane_corner::MAXIMISE_NONE;
+	if (bssh_session *alone = m_layout->maximised())
+		return m_layout->front_of(front) == alone ? bssh_pane_corner::MAXIMISE_ON
+		                                          : bssh_pane_corner::MAXIMISE_NONE;
+	return m_layout->fitted_panes().size() > 1 ? bssh_pane_corner::MAXIMISE_OFFERED
+	                                           : bssh_pane_corner::MAXIMISE_NONE;
 }
 
 /*
@@ -5365,7 +5400,8 @@ void bssh_main_window::save_layout() {
 		layout.kept_names.append(QString::fromLatin1(kept.second));
 	}
 
-	layout.pane_count = qMax(1, m_layout ? m_layout->visible_panes().size() : 1);
+	/* As built, not as a maximise shows it for the moment (sec 8.3). */
+	layout.pane_count = qMax(1, m_layout ? m_layout->fitted_panes().size() : 1);
 
 	/*
 	 * And how they were arranged -- the whole shape, not only what fits
@@ -5899,6 +5935,13 @@ void bssh_main_window::build_menu_bar() {
 		if (m_current) tear_out(m_current);
 	});
 
+	/* The corner's maximise (sec 8.3), with the chord beside it. */
+	m_maximise_action = view->addAction(QStringLiteral("&Maximise Pane"));
+	m_maximise_action->setObjectName(QStringLiteral("menu_maximise_pane"));
+	m_maximise_action->setCheckable(true);
+	m_maximise_action->setShortcut(chord("maximise-pane"));
+	connect(m_maximise_action, &QAction::triggered, this, [this] { toggle_maximised(m_current); });
+
 	/*
 	 * Zoom, which had a chord and a touch menu and nothing a desktop
 	 * user could find. The argument is the one Find already carries on
@@ -6423,6 +6466,15 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 	move_right->setObjectName(QStringLiteral("terminal_move_pane_right"));
 	move_right->setEnabled(here >= 0 && here < arrangement.size() - 1);
 
+	/* And over the others for a while, the corner's button (sec 8.3). */
+	QAction *maximise = pane_menu->addAction(QStringLiteral("&Maximise Pane"));
+	maximise->setObjectName(QStringLiteral("terminal_maximise_pane"));
+	maximise->setCheckable(true);
+	maximise->setChecked(maximise_state(m_current) == bssh_pane_corner::MAXIMISE_ON);
+	maximise->setEnabled(maximise_state(m_current) != bssh_pane_corner::MAXIMISE_NONE);
+	maximise->setShortcut(
+	        QKeySequence(bssh_input_router::binding_for(QStringLiteral("maximise-pane"))));
+
 	/*
 	 * The session verbs, and two of them were unreachable on touch until
 	 * now. Close and Duplicate lived on the TAB bar and its menu --
@@ -6864,6 +6916,13 @@ void bssh_main_window::act_on_terminal_menu(QMenu *menu, const QAction *chosen,
 	const QAction *detach = menu->findChild<QAction *>(QStringLiteral("terminal_detach"));
 	if (chosen == detach) {
 		if (m_current) tear_out(m_current);
+		return;
+	}
+
+	const QAction *maximise =
+	        menu->findChild<QAction *>(QStringLiteral("terminal_maximise_pane"));
+	if (chosen == maximise) {
+		toggle_maximised(m_current);
 		return;
 	}
 

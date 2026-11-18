@@ -94,6 +94,7 @@ bssh_pane_corner::bssh_pane_corner(QWidget *parent)
       m_multiplexer(new QToolButton(this)),
       m_tabs(new QToolButton(this)),
       m_menu(new QToolButton(this)),
+      m_maximise(new QToolButton(this)),
       m_opacity(new QGraphicsOpacityEffect(this)) {
 	setObjectName(QStringLiteral("pane_corner"));
 	m_opacity->setOpacity(1.0);
@@ -118,7 +119,8 @@ bssh_pane_corner::bssh_pane_corner(QWidget *parent)
 	m_menu->setText(QString::fromUtf8("\u22ee"));
 	m_menu->setToolTip(QStringLiteral("Menus"));
 	m_menu->setAccessibleName(QStringLiteral("Menus"));
-	for (QToolButton *button : { m_tabs, m_menu }) {
+	m_maximise->setObjectName(QStringLiteral("corner_maximise"));
+	for (QToolButton *button : { m_tabs, m_menu, m_maximise }) {
 		button->setAutoRaise(true);
 		button->setFocusPolicy(Qt::NoFocus);
 		button->hide();
@@ -132,7 +134,7 @@ bssh_pane_corner::bssh_pane_corner(QWidget *parent)
 	 */
 	const bssh_platform *platform = bssh_platform::instance();
 	if (platform && platform->is_touch_primary()) {
-		for (QToolButton *button : { m_multiplexer, m_tabs, m_menu })
+		for (QToolButton *button : { m_multiplexer, m_tabs, m_menu, m_maximise })
 			button->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
 	}
 	connect(m_tabs, &QToolButton::clicked, this, [this] {
@@ -141,6 +143,7 @@ bssh_pane_corner::bssh_pane_corner(QWidget *parent)
 	connect(m_menu, &QToolButton::clicked, this, [this] {
 		emit menu_clicked(m_menu->mapToGlobal(QPoint(0, m_menu->height())));
 	});
+	connect(m_maximise, &QToolButton::clicked, this, &bssh_pane_corner::maximise_clicked);
 
 	m_grip->hide();
 	relayout();
@@ -155,6 +158,23 @@ void bssh_pane_corner::set_tabs_text(const QString &text) {
 void bssh_pane_corner::set_menu_shown(bool shown) {
 	if (shown == !m_menu->isHidden()) return;
 	m_menu->setVisible(shown);
+	relayout();
+}
+
+/*
+ * A square for one pane filling the window, and the square halved for
+ * the panes coming back: drawn as text like the menu's ellipsis, from
+ * Geometric Shapes, which every platform's fallback fonts carry.
+ */
+void bssh_pane_corner::set_maximise(maximise_t state) {
+	if (state == m_maximise_state) return;
+	m_maximise_state = state;
+	const bool on = state == MAXIMISE_ON;
+	const QString name = on ? QStringLiteral("Show every pane") : QStringLiteral("Maximise this pane");
+	m_maximise->setText(on ? QString::fromUtf8("\u25eb") : QString::fromUtf8("\u25a1"));
+	m_maximise->setToolTip(name);
+	m_maximise->setAccessibleName(name);
+	m_maximise->setVisible(state != MAXIMISE_NONE);
 	relayout();
 }
 
@@ -258,7 +278,7 @@ QSize bssh_pane_corner::sizeHint() const {
 		wide = qMax(wide, m_grip_side);
 		high += m_grip_side;
 	}
-	for (const QToolButton *button : { m_multiplexer, m_tabs, m_menu }) {
+	for (const QToolButton *button : { m_multiplexer, m_tabs, m_menu, m_maximise }) {
 		if (button->isHidden()) continue;
 		wide = qMax(wide, button->sizeHint().width());
 		high += qMax(button->sizeHint().height(), button->minimumHeight());
@@ -276,9 +296,12 @@ void bssh_pane_corner::relayout() {
 	}
 	/* The menus first, under the grip: the top of the corner is where
 	 * the menu bar they stand in for would be (the holder's placement). */
-	if (!m_menu->isHidden()) {
-		const int high = qMax(m_menu->sizeHint().height(), m_menu->minimumHeight());
-		m_menu->setGeometry(PAD, y, inner, high);
+	/* Then the maximise, which like the menus is about the pane rather
+	 * than about what is typed into it. */
+	for (QToolButton *button : { m_menu, m_maximise }) {
+		if (button->isHidden()) continue;
+		const int high = qMax(button->sizeHint().height(), button->minimumHeight());
+		button->setGeometry(PAD, y, inner, high);
 		y += high;
 	}
 	const int drum = m_selector->sizeHint().height();

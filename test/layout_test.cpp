@@ -11532,6 +11532,188 @@ void layout_test::a_grid_keeps_its_dividers_through_a_rebuild() {
 	}
 }
 
+void layout_test::a_maximised_pane_covers_the_others_until_put_back() {
+	/*
+	 * The holder's "temporary fullscreen" for a tiled terminal (sec 8.3):
+	 * one pane shown, the rest not closed, folded or moved -- the tree as
+	 * it was -- and reachable from its bar, then all of them back.
+	 */
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+	bssh_session *b = registry.create(named(QStringLiteral("b")));
+	bssh_session *c = registry.create(named(QStringLiteral("c")));
+	bssh_session *t = registry.create(named(QStringLiteral("t")));
+	layout.set_intent({ a, b, c });
+	QVERIFY(layout.add_tab(t, b, 1));
+	QCOMPARE(layout.front_of(b), t);
+	const QString shape = bssh_layout_manager::shape_text(layout.tree(),
+	        [](bssh_session *each) { return each->title(); });
+
+	QSignalSpy changed(&layout, &bssh_layout_manager::layout_changed);
+	layout.set_maximised(b);
+	QCOMPARE(changed.size(), 1);
+	QCOMPARE(layout.maximised(), t);
+	QCOMPARE(layout.visible_panes(), QList<bssh_session *>{ t });
+	QCOMPARE(layout.fitted_panes(), (QList<bssh_session *>{ a, t, c }));
+	QVERIFY(layout.visible_tree().is_leaf());
+	QCOMPARE(bssh_layout_manager::shape_text(layout.tree(),
+	                 [](bssh_session *each) { return each->title(); }), shape);
+	const QList<bssh_session *> bar = layout.bar_tabs(t);
+	for (bssh_session *each : { a, b, c, t }) QVERIFY2(bar.contains(each), qPrintable(each->title()));
+	/* Room for another pane is the room of the panes as built. */
+	QCOMPARE(layout.room_to_split(t, bssh_layout_manager::EDGE_RIGHT), true);
+
+	/* A tab of its own pane picked: still maximised, now showing that. */
+	QVERIFY(layout.bring_to_front(b));
+	QCOMPARE(layout.maximised(), b);
+	QCOMPARE(layout.visible_panes(), QList<bssh_session *>{ b });
+
+	/* Put back: all three, as they were. */
+	layout.set_maximised(nullptr);
+	QCOMPARE(layout.maximised(), nullptr);
+	QCOMPARE(layout.visible_panes(), (QList<bssh_session *>{ a, b, c }));
+
+	/* Another pane's session picked: that pane where it is, with the rest
+	 * -- not moved into the maximised one's place. */
+	layout.set_maximised(a);
+	QVERIFY(layout.bring_to_front(c));
+	QCOMPARE(layout.maximised(), nullptr);
+	QCOMPARE(layout.visible_panes(), (QList<bssh_session *>{ a, b, c }));
+
+	/* Its session closed: the pane's other tab carries on maximised. */
+	layout.set_maximised(t);
+	layout.forget(t);
+	QCOMPARE(layout.maximised(), b);
+	layout.forget(b);
+	QCOMPARE(layout.maximised(), nullptr);
+	QCOMPARE(layout.visible_panes(), (QList<bssh_session *>{ a, c }));
+
+	/* A pane more is a shape changed; so is a column, which needs none. */
+	layout.set_maximised(a);
+	layout.set_intent({ a, c, b });
+	QCOMPARE(layout.maximised(), nullptr);
+	layout.set_maximised(a);
+	layout.set_arrangement(bssh_layout_manager::COLUMN);
+	QCOMPARE(layout.maximised(), nullptr);
+	/* And asked for in a column, it is not had there either. */
+	layout.set_maximised(a);
+	QCOMPARE(layout.maximised(), nullptr);
+	QCOMPARE(layout.visible_panes().size(), 3);
+	layout.set_arrangement(bssh_layout_manager::TILED);
+	QCOMPARE(layout.maximised(), nullptr);
+
+	/* Alone, there is nothing to cover. */
+	layout.set_intent({ a });
+	layout.set_maximised(a);
+	QCOMPARE(layout.maximised(), nullptr);
+	QCOMPARE(layout.visible_panes(), QList<bssh_session *>{ a });
+}
+
+void layout_test::a_maximised_pane_gives_every_divider_back() {
+	/*
+	 * Put back, every divider where it was put rather than in proportion
+	 * (sec 8.3's "a divider stays where it was put"): the shape under a
+	 * maximised pane is the one the panes come back to.
+	 */
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(1200, 900);
+	layout.set_room(QSize(1200, 900), QSize(120, 80), 8);
+	layout.set_tree(grid_tree(registry, { 3, 2 }));
+	QCoreApplication::processEvents();
+	QList<QSplitter *> rows = row_splitters(container);
+	QCOMPARE(rows.size(), 2);
+	drag_handle(rows.at(0)->handle(1), 150, Qt::AltModifier);
+	drag_handle(rows.at(1)->handle(1), -100, Qt::AltModifier);
+	QCoreApplication::processEvents();
+	const QList<int> top = row_splitters(container).at(0)->sizes();
+	const QList<int> bottom = row_splitters(container).at(1)->sizes();
+	QVERIFY2(qAbs(top.at(0) - top.at(1)) > 60, "the drag moved nothing, so this tests nothing");
+
+	QCOMPARE(layout.visible_panes().size(), 5);
+	bssh_session *picked = layout.visible_panes().at(4);
+	layout.set_maximised(picked);
+	QCoreApplication::processEvents();
+	QCOMPARE(container.pane_count(), 1);
+	QVERIFY(row_splitters(container).isEmpty());
+	QVERIFY2(container.view_at(0)->width() > 1000, "the maximised pane does not fill the window");
+
+	layout.set_maximised(nullptr);
+	QCoreApplication::processEvents();
+	QCOMPARE(container.pane_count(), 5);
+	rows = row_splitters(container);
+	QCOMPARE(rows.size(), 2);
+	QCOMPARE(rows.at(0)->sizes(), top);
+	QCOMPARE(rows.at(1)->sizes(), bottom);
+}
+
+void layout_test::the_corner_maximises_its_pane_and_puts_them_back() {
+	/*
+	 * The button is the corner's (sec 8.7a keeps everything over a
+	 * pane's text there), offered on a tiled window of more than one
+	 * pane; the same verb is on View and the terminal's Pane menu.
+	 */
+	const forced_touch_t desktop(0);
+	bssh_main_window window;
+	window.resize(1400, 700);
+	window.show();
+	window.activateWindow();
+	QVERIFY(QTest::qWaitForWindowActive(&window));
+	const registry_left_as_found_t tidy(window.registry());
+	bssh_session *first = window.registry()->create(named(QStringLiteral("first")));
+	window.adopt_session(first);
+
+	bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
+	QVERIFY(panes);
+	QTRY_VERIFY(panes->focused_view() && panes->focused_view()->corner()
+	            && panes->focused_view()->corner()->isVisible());
+	QVERIFY2(!panes->focused_view()->corner()->maximise_button()->isVisible(),
+	         "a pane alone is offered a maximise with nothing to cover");
+
+	bssh_session *second = window.registry()->create(named(QStringLiteral("second")));
+	window.adopt_session(second);
+	window.split_beside_current();
+	bssh_layout_manager *layout = window.findChild<bssh_layout_manager *>();
+	QVERIFY(layout);
+	QTRY_COMPARE(panes->pane_count(), 2);
+	bssh_session *focused = panes->focused_session();
+	QVERIFY(focused);
+
+	QTRY_VERIFY(panes->focused_view()->corner()->isVisible());
+	QToolButton *button = panes->focused_view()->corner()->maximise_button();
+	QVERIFY2(button->isVisible(), "no maximise on a pane among others");
+	button->click();
+	QTRY_COMPARE(panes->pane_count(), 1);
+	QCOMPARE(layout->maximised(), focused);
+	QCOMPARE(panes->focused_session(), focused);
+
+	QAction *menu = window.findChild<QAction *>(QStringLiteral("menu_maximise_pane"));
+	QVERIFY(menu);
+	QTRY_VERIFY(menu->isChecked());
+
+	/* The way back is the same button, on the pane that covers. */
+	window.activateWindow();
+	QVERIFY(QTest::qWaitForWindowActive(&window));
+	QTRY_VERIFY(panes->focused_view()->corner()->isVisible());
+	button = panes->focused_view()->corner()->maximise_button();
+	QVERIFY2(button->isVisible(), "no way back on the maximised pane");
+	button->click();
+	QTRY_COMPARE(panes->pane_count(), 2);
+	QCOMPARE(layout->maximised(), nullptr);
+	QTRY_VERIFY(!menu->isChecked());
+
+	/* And the menu entry does the same both ways. */
+	menu->trigger();
+	QTRY_COMPARE(panes->pane_count(), 1);
+	menu->trigger();
+	QTRY_COMPARE(panes->pane_count(), 2);
+}
+
 void layout_test::a_hemmed_in_row_holds_the_grid_in_line() {
 	/*
 	 * One row's middle pane cannot shrink as far as the others' -- as on

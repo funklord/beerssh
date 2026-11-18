@@ -531,6 +531,10 @@ public:
 	void set_corner_tabs(const QString &text);
 	void set_corner_menu(bool shown);
 
+	/* The corner's maximise button, a bssh_pane_corner::maximise_t: the
+	 * window's to say, as the layout's maximised pane is (sec 8.3). */
+	void set_corner_maximise(int state);
+
 	/*
 	 * The session's trouble, written over the middle of the terminal: the
 	 * holder, 2026-10-30, "maybe we should only indicate on the main
@@ -777,6 +781,7 @@ signals:
 	/* The corner's tabs or menu button: pop the list or the menus here. */
 	void corner_tabs_requested(const QPoint &global);
 	void corner_menu_requested(const QPoint &global);
+	void corner_maximise_requested();
 
 	/*
 	 * A body drag in Move mode (sec 8.7): reorder this pane within the
@@ -1382,6 +1387,7 @@ private:
 	bool m_corner_active = false;
 	QString m_corner_tabs;
 	bool m_corner_menu = false;
+	int m_corner_maximise = 0;
 
 	QString m_status_note;
 	QString m_notice;

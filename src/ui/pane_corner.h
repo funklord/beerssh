@@ -53,6 +53,15 @@ public:
 	QToolButton *menu_button() const { return m_menu; }
 
 	/*
+	 * The maximise button (sec 8.3): this pane over the others in its
+	 * window, and back. Offered where there are others to cover, and
+	 * while it covers them as the way back.
+	 */
+	enum maximise_t { MAXIMISE_NONE, MAXIMISE_OFFERED, MAXIMISE_ON };
+	void set_maximise(maximise_t state);
+	QToolButton *maximise_button() const { return m_maximise; }
+
+	/*
 	 * Faint until the pointer is over it -- the desktop's, where the
 	 * holder asked for it "transparent until the mouse is over it". Touch
 	 * has nothing that hovers, so there it is always solid.
@@ -71,6 +80,7 @@ signals:
 	/* Where to put the popup: under the button, in global coordinates. */
 	void tabs_clicked(const QPoint &global);
 	void menu_clicked(const QPoint &global);
+	void maximise_clicked();
 
 protected:
 	void paintEvent(QPaintEvent *event) override;
@@ -89,6 +99,8 @@ private:
 	QToolButton *m_multiplexer;
 	QToolButton *m_tabs;
 	QToolButton *m_menu;
+	QToolButton *m_maximise;
+	maximise_t m_maximise_state = MAXIMISE_NONE;
 	int m_grip_side = 18;
 	bool m_faint_when_idle = false;
 	bool m_hovered = false;
