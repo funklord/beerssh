@@ -121,6 +121,23 @@ bssh_sshd_window::bssh_sshd_window(bssh_sshd_platform *platform, bssh_sshd_contr
 	}
 
 	/*
+	 * BeerSSH's kept sessions (sec 5.6): offered only where this build
+	 * carries the helper, and off until turned on, because what it gives a
+	 * login is a shell -- as this app, and so to everything it may reach.
+	 */
+	if (!m_platform->session_helper().isEmpty()) {
+		auto *sessions = new QCheckBox(tr("Keep BeerSSH sessions through a dropped connection"));
+		sessions->setObjectName(QStringLiteral("sshd-sessions"));
+		sessions->setChecked(QSettings().value(QStringLiteral("sessions"), false).toBool());
+		connect(sessions, &QCheckBox::toggled, this,
+		        [](bool on) { QSettings().setValue(QStringLiteral("sessions"), on); });
+		layout->addWidget(sessions);
+		layout->addWidget(wrapped_label(tr("This lets a login run a shell as beersshd, with the "
+		                                   "access to your files it has. Takes effect the next "
+		                                   "time serving starts.")));
+	}
+
+	/*
 	 * Shown until access is granted, and the reason given in the app's own
 	 * words before the system's switch: Settings says only "Allow access to
 	 * manage all files", which reads alarming without the why.

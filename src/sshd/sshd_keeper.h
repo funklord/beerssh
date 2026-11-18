@@ -55,6 +55,9 @@ public:
 	/* Serves now if it is switched on; for the owner to call once its signals are wired. */
 	void start_if_switched_on();
 
+	/* SHELL, HOME and XDG_RUNTIME_DIR for the session helper, each only where unset. */
+	static void prepare_session_environment(const QString &data);
+
 	static QString authorized_keys_path(const bssh_sshd_platform *platform);
 	static QString password_path(const bssh_sshd_platform *platform);
 

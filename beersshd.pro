@@ -89,6 +89,11 @@ android {
 
     ANDROID_PACKAGE_SOURCE_DIR = $$PWD/android-sshd
 
+    # The session helper (src/sshd/sshd_platform_android.cpp), built by the
+    # Makefile for this ABI and passed in; shipped as a library so that it
+    # lands in the native library directory, where the app may run it.
+    !isEmpty(BSSH_SESSION_HELPER): ANDROID_EXTRA_LIBS += $$BSSH_SESSION_HELPER
+
     isEmpty(BSSH_VERSION_CODE): BSSH_VERSION_CODE = 1
     ANDROID_VERSION_CODE = $$BSSH_VERSION_CODE
     ANDROID_VERSION_NAME = $$BSSH_VERSION

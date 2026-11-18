@@ -20246,10 +20246,26 @@ unless started with `--sessions`, the first bullet.
   version, so `--sessions` finds it. **Measured while building it:**
   `ssh_disconnect` frees every channel the session still has, so the
   channel list is emptied before it -- the first version freed them after
-  and crashed on a channel opened and refused. **Not yet:** the Android
-  app (the helper as a `lib*.so` in the native library directory, the
-  sandbox's `/system/bin/sh` and a runtime directory), and uploading the
-  helper to plain `sshd` hosts, which stays open (sec 5.6).
+  and crashed on a channel opened and refused. **The Android app too, 2026-11-18:**
+  the helper is built by the NDK, static, as `libbeerssh_session.so` and
+  shipped with `ANDROID_EXTRA_LIBS`, because the native library directory
+  is the one place an app may execute a file (one copied to its own data
+  cannot run since targetSdk 29). Gradle leaves libraries inside the APK
+  unless asked for legacy packaging, which qmake cannot say, so the
+  Makefile adds Qt's `android-legacy-packaging` key to the deployment
+  settings qmake writes and fails the build if it did not take. A switch
+  in the window, "Keep BeerSSH sessions", shown only where the helper is
+  there and off until turned on, applies at the next start; the keeper
+  then sets `SHELL` (`/system/bin/sh`), `HOME` and `XDG_RUNTIME_DIR` under
+  the app's data where the process has none. **Seen:** the x86_64 APK
+  carries the helper compressed, so it is unpacked on install; the arm64
+  helper builds; and the Android-built helper, run on this Linux kernel,
+  passes `a_kept_session_comes_back_through_beersshd` -- bionic's forkpty
+  and the session host included. **Not seen:** the same on an emulator or
+  the Fold -- the exec from the library directory under SELinux, the
+  sandbox's shell, the JNI lookup. Both API 34 and 36 images refuse to
+  start with under 7.4 GB free, and `/` had 5.5 GB, `/home` 4.8 GB.
+  Uploading the helper to plain `sshd` hosts stays open (sec 5.6).
 
 - **Keys, and a password once one is set — [password added 2026-10-09,
   the holder: "I need the key or a password prompt, we should also have a

@@ -1,5 +1,6 @@
 #include "sshd_window_test.h"
 
+#include <QCheckBox>
 #include <QDir>
 #include <QFileInfo>
 #include <QFile>
@@ -47,6 +48,8 @@ public:
 	bool battery_restricted() const override { return restricted; }
 	void request_battery_exemption() override { ++battery_requests; }
 
+	QString session_helper() const override { return helper; }
+
 	void start_server_process() override { ++process_starts; }
 	void stop_server_process() override { ++process_stops; }
 
@@ -73,6 +76,7 @@ public:
 	int process_starts = 0;
 	int process_stops = 0;
 	QString last_status;
+	QString helper;
 
 private:
 	QString m_root;
@@ -469,4 +473,53 @@ void sshd_window_test::the_store_demo_shows_only_made_up_content() {
 	QCOMPARE(child<QLabel>(window, "sshd-key-count")->text(), QStringLiteral("2 usable key(s)."));
 	QVERIFY(child<QPlainTextEdit>(window, "sshd-log")->toPlainText().contains(QStringLiteral("started SFTP")));
 	QVERIFY(window.authorized_keys_path().startsWith(platform.data_directory()));
+}
+
+/*
+ * Kept sessions on the phone (sec 5.6, sec 19.1): the switch is offered only
+ * where the build carries the helper, it is off until turned on, and turned
+ * on it gives the server the helper with an environment a shell can use --
+ * the runtime directory especially, whose /tmp fallback Android lacks.
+ */
+void sshd_window_test::sessions_are_offered_only_with_a_helper_and_off_until_asked() {
+	QTemporaryDir dir;
+	QSettings().remove(QStringLiteral("sessions"));
+	struct restore_t {
+		QByteArray runtime = qgetenv("XDG_RUNTIME_DIR");
+		~restore_t() {
+			qputenv("XDG_RUNTIME_DIR", runtime);
+			QSettings().remove(QStringLiteral("sessions"));
+		}
+	} restore;
+	qunsetenv("XDG_RUNTIME_DIR");
+
+	{
+		fake_platform without(dir.path());
+		bssh_sshd_window window(&without);
+		QVERIFY(!child<QCheckBox>(window, "sshd-sessions"));
+	}
+
+	fake_platform platform(dir.path());
+	platform.helper = dir.filePath(QStringLiteral("libbeerssh_session.so"));
+	bssh_sshd_window window(&platform);
+	QCheckBox *sessions = child<QCheckBox>(window, "sshd-sessions");
+	QVERIFY(sessions);
+	QVERIFY(!sessions->isChecked());
+
+	child<QSpinBox>(window, "sshd-port")->setValue(free_port());
+	child<QPushButton>(window, "sshd-toggle")->click();
+	QVERIFY(window.serving());
+	QVERIFY(window.server().config().session_helper.isEmpty());
+	child<QPushButton>(window, "sshd-toggle")->click();
+	QVERIFY(!window.serving());
+
+	sessions->setChecked(true);
+	child<QPushButton>(window, "sshd-toggle")->click();
+	QVERIFY(window.serving());
+	QCOMPARE(window.server().config().session_helper, QFile::encodeName(platform.helper));
+
+	const QString runtime = qEnvironmentVariable("XDG_RUNTIME_DIR");
+	QVERIFY(runtime.startsWith(platform.data_directory()));
+	QCOMPARE(QFileInfo(runtime).permissions() & (QFileDevice::ReadGroup | QFileDevice::ReadOther),
+	         QFileDevice::Permissions());
 }

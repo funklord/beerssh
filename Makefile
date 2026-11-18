@@ -1434,12 +1434,44 @@ ANDROID_MEDIA_DEPS  = $(SNURRA_DIR)/snurra.pri $(ANDROID_FFMPEG_INCLUDE)/.copied
 ANDROID_MEDIA_QMAKE = BSSH_MEDIA=1 SNURRA_FFMPEG_INCLUDE=$(abspath $(ANDROID_FFMPEG_INCLUDE))
 endif
 
+# The session helper inside beersshd's APK (project.md sec 19.1), for the
+# app's --sessions switch: the same sources as $(SESSION_BIN), static for
+# the same reason, and named lib*.so because a file in the app's native
+# library directory is the one kind an Android app may execute. Built only
+# when ANDROID_SESSION_HELPER is set, which SSHD_ANDROID does.
+ANDROID_SESSION_DIR = build-session-android/$(ANDROID_ABI)
+ANDROID_SESSION_BIN = $(ANDROID_SESSION_DIR)/libbeerssh_session.so
+$(ANDROID_SESSION_BIN): $(SESSION_SRCS) $(VTERM_ANDROID_LIB) $(wildcard src/session/*.h src/session/generated/*.h)
+	@mkdir -p $(ANDROID_SESSION_DIR)
+	@test -n "$(ANDROID_TRIPLE)" || { echo "android: no NDK triple for '$(ANDROID_ABI)'" >&2; exit 1; }
+	$(NDK_BIN)/clang --target=$(ANDROID_TRIPLE)$(ANDROID_API) -std=gnu11 -Os -ffunction-sections \
+	        -fdata-sections -Wl,--gc-sections -Wl,-z,max-page-size=16384 -static -Isrc \
+	        -I$(VTERM_DIR)/include -o $@ $(filter %.c,$^) $(VTERM_ANDROID_LIB)
+
+ANDROID_SESSION_DEPS = $(if $(ANDROID_SESSION_HELPER),$(ANDROID_SESSION_BIN))
+
 # ANDROID_KIT_SOURCE, the record of which Qt kit this build directory
 # was built with, comes from tool/android.mk.
-$(ANDROID_BUILD_DIR)/Makefile: android-check $(ANDROID_KIT_SOURCE) $(VTERM_ANDROID_LIB) $(ANDROID_PRO) $(ANDROID_MEDIA_DEPS)
+#
+# With the helper, Qt's android-legacy-packaging goes into the deployment
+# settings qmake has just written: without it Gradle leaves native
+# libraries inside the APK, mapped from there, and the helper is then no
+# file anybody can execute. qmake has no variable for it (CMake has
+# QT_ANDROID_LEGACY_PACKAGING); androiddeployqt reads the key from this file
+# and nowhere else, and qmake rewrites the file only when this rule runs.
+$(ANDROID_BUILD_DIR)/Makefile: android-check $(ANDROID_KIT_SOURCE) $(VTERM_ANDROID_LIB) $(ANDROID_PRO) $(ANDROID_MEDIA_DEPS) $(ANDROID_SESSION_DEPS)
 	mkdir -p $(ANDROID_BUILD_DIR)
 	cd $(ANDROID_BUILD_DIR) && $(QT_ANDROID_ROOT)/bin/qmake ../$(ANDROID_PRO) $(QMAKE_CONFIG) \
-	        BSSH_VERSION=$(VERSION) BSSH_VERSION_CODE=$(ANDROID_VERSION_CODE) $(ANDROID_MEDIA_QMAKE)
+	        BSSH_VERSION=$(VERSION) BSSH_VERSION_CODE=$(ANDROID_VERSION_CODE) $(ANDROID_MEDIA_QMAKE) \
+	        $(if $(ANDROID_SESSION_HELPER),BSSH_SESSION_HELPER=$(abspath $(ANDROID_SESSION_BIN)))
+	@# A shell test rather than $(if): the JSON's comma would end make's argument.
+	@[ -z "$(ANDROID_SESSION_HELPER)" ] || { \
+		settings=$$(ls $(ANDROID_BUILD_DIR)/android-*-deployment-settings.json) || exit 1; \
+		grep -q '"android-legacy-packaging"' $$settings \
+		|| sed -i '0,/^{/s//{\n   "android-legacy-packaging": true,/' $$settings; \
+		grep -q '"android-legacy-packaging": true' $$settings \
+		|| { echo "android: could not ask for legacy packaging in $$settings" >&2; exit 1; }; \
+	}
 
 # The base font set that ships inside the APK (project.md sec 9.4).
 #
@@ -1710,7 +1742,7 @@ endif
 SSHD_APP_ID = se.vibes.beersshd
 SSHD_ANDROID = ANDROID_PROGRAM=$(SSHD_TARGET) APP_ID=$(SSHD_APP_ID) ANDROID_PRO=beersshd.pro \
                ANDROID_BUILD_DIR=build-sshd-android-$(ANDROID_ABI) ANDROID_ASSETS= ANDROID_MEDIA= \
-               STORE_VIEWS='server setup'
+               STORE_VIEWS='server setup' ANDROID_SESSION_HELPER=1
 
 # android-sshd-aab is beersshd's Play bundle (sec 13): the same rule as
 # BeerSSH's, so the same naming, versionCode and refusal to leave an
@@ -2027,7 +2059,7 @@ deb-clean:
 # this build's own. Each expansion still goes through the checks above.
 veryclean: clean deb-clean
 	$(call bssh_remove_tree,$(ANDROID_BUILD_DIR) build-android-* build-sshd-android-* \
-	        $(VTERM_ANDROID_BASE))
+	        $(VTERM_ANDROID_BASE) build-session-android)
 
 # `distclean` removes what the build generated and `veryclean` does not.
 # `.qmake.stash` is qmake's, is named, and is disposable by construction.

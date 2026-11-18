@@ -153,6 +153,20 @@ void bssh_sshd_keeper::start() {
 	config.bind_address = address.toString().toLatin1();
 	config.port = QSettings().value(QStringLiteral("port"), DEFAULT_PORT).toInt();
 
+	/*
+	 * BeerSSH's kept sessions (sec 5.6, sec 19.1), where they are switched
+	 * on and this build carries the helper: a shell as this app.
+	 */
+	if (QSettings().value(QStringLiteral("sessions"), false).toBool()) {
+		const QString helper = m_platform->session_helper();
+		if (helper.isEmpty()) {
+			log(tr("Sessions are on, but this build has no session helper"));
+		} else {
+			prepare_session_environment(data);
+			config.session_helper = QFile::encodeName(helper);
+		}
+	}
+
 	QString error;
 	if (!m_server.start(config, &error)) {
 		log(error);
@@ -164,6 +178,29 @@ void bssh_sshd_keeper::start() {
 	m_platform->request_notifications();
 	log(tr("Listening on %1:%2").arg(address.toString()).arg(m_server.port()));
 	report();
+}
+
+/*
+ * What the helper and the shell it starts read from the environment, and
+ * an app process lacks: no SHELL, no HOME a shell can use, and no runtime
+ * directory, whose /tmp fallback does not exist on Android. Only what is
+ * unset is set, so a desktop's own values stand.
+ */
+void bssh_sshd_keeper::prepare_session_environment(const QString &data) {
+	if (qEnvironmentVariableIsEmpty("SHELL")) {
+		qputenv("SHELL", QFile::exists(QStringLiteral("/system/bin/sh")) ? "/system/bin/sh" : "/bin/sh");
+	}
+	if (qEnvironmentVariableIsEmpty("HOME")) {
+		const QString home = data + QStringLiteral("/home");
+		QDir().mkpath(home);
+		qputenv("HOME", QFile::encodeName(home));
+	}
+	if (qEnvironmentVariableIsEmpty("XDG_RUNTIME_DIR")) {
+		const QString runtime = data + QStringLiteral("/run");
+		QDir().mkpath(runtime);
+		QFile::setPermissions(runtime, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+		qputenv("XDG_RUNTIME_DIR", QFile::encodeName(runtime));
+	}
 }
 
 void bssh_sshd_keeper::stop() {

@@ -24,6 +24,7 @@ private slots:
 	void the_store_demo_shows_only_made_up_content();
 	void saved_keys_are_counted_by_the_login_parse();
 	void the_keys_box_follows_the_file_but_not_over_edits();
+	void sessions_are_offered_only_with_a_helper_and_off_until_asked();
 };
 
 #endif /* BSSH_SSHD_WINDOW_TEST_H */

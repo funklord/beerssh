@@ -230,3 +230,27 @@ file = "src/sshd/sshd.cpp"
 find = "\t\tif (connection->channels.size() >= MAX_CHANNELS) return nullptr;\n"
 replace = "\t\tif (connection->channels.size() >= 1) return nullptr;\n"
 expect = "with_sessions_on_it_runs_the_helper_and_nothing_else"
+
+# The phone's switch (sec 19.1): offered only with a helper, and the server
+# given the helper only once it is on
+# (sessions_are_offered_only_with_a_helper_and_off_until_asked).
+[[sabotage]]
+name = "the sessions switch is offered without a helper"
+file = "src/sshd/sshd_window.cpp"
+find = "\tif (!m_platform->session_helper().isEmpty()) {\n"
+replace = "\tif (true) {\n"
+expect = "sessions_are_offered_only_with_a_helper_and_off_until_asked"
+
+[[sabotage]]
+name = "the helper is served whether or not sessions are switched on"
+file = "src/sshd/sshd_keeper.cpp"
+find = "\tif (QSettings().value(QStringLiteral(\"sessions\"), false).toBool()) {\n"
+replace = "\tif (true) {\n"
+expect = "sessions_are_offered_only_with_a_helper_and_off_until_asked"
+
+[[sabotage]]
+name = "an app process is left without a runtime directory"
+file = "src/sshd/sshd_keeper.cpp"
+find = "\tif (qEnvironmentVariableIsEmpty(\"XDG_RUNTIME_DIR\")) {\n"
+replace = "\tif (false) {\n"
+expect = "sessions_are_offered_only_with_a_helper_and_off_until_asked"

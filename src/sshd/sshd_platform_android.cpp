@@ -2,6 +2,7 @@
 
 #include <QCoreApplication>
 #include <QJniEnvironment>
+#include <QFileInfo>
 #include <QJniObject>
 #include <QNetworkInterface>
 
@@ -162,6 +163,24 @@ public:
 		QJniObject::callStaticMethod<void>(STORAGE_CLASS, "requestBatteryExemption",
 		                                   "(Landroid/content/Context;)V", context.object());
 		QJniEnvironment().checkAndClearExceptions();
+	}
+
+	/*
+	 * Packaged as libbeerssh_session.so and unpacked on install (the
+	 * android-legacy-packaging the Makefile sets for this app): an app may
+	 * execute a file in its native library directory and nowhere it can
+	 * write, so it cannot be copied out and run instead.
+	 */
+	QString session_helper() const override {
+		const QJniObject context = android_context();
+		if (!context.isValid()) return QString();
+		const QJniObject info = context.callObjectMethod("getApplicationInfo",
+		                                                 "()Landroid/content/pm/ApplicationInfo;");
+		QJniEnvironment().checkAndClearExceptions();
+		if (!info.isValid()) return QString();
+		const QString directory = info.getObjectField<jstring>("nativeLibraryDir").toString();
+		const QString helper = directory + QStringLiteral("/libbeerssh_session.so");
+		return QFileInfo(helper).isExecutable() ? helper : QString();
 	}
 
 	bool can_start_at_boot() const override { return true; }
