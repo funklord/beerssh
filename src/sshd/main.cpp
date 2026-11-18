@@ -20,6 +20,7 @@
 #include <unistd.h>
 
 #include "sshd/fuzznet_node.h"
+#include "sshd/fuzznet_pair.h"
 #include "sshd/sshd.h"
 
 namespace {
@@ -70,6 +71,13 @@ const sshd_option_t SSHD_OPTIONS[] = {
 	                           "--help lists them -- and --sessions, which carries "
 	                           "BeerSSH's sessions to paired hosts as --sessions does "
 	                           "over SSH. Only as the first option." },
+#endif
+#ifdef BSSH_FUZZNET
+	{ "fuzznet-pair", "OPTIONS...", "Pair a device for BeerSSH to the fuzznet host whose "
+	                                "store --fuzznet-dir=DIR names, and print its device "
+	                                "image, for the host editor's Device field; OPTIONS as "
+	                                "for --fuzznet. It is the device's keys: hand it over as "
+	                                "you would a private key. Only as the first option." },
 #endif
 	{ "version", nullptr, "Print the version and exit." },
 	{ "help", nullptr, "Print a summary of the options and exit." },
@@ -168,6 +176,21 @@ int main(int argc, char *argv[]) {
 
 	QTextStream out(stdout);
 	QTextStream err(stderr);
+
+#ifdef BSSH_FUZZNET
+	/* A device for BeerSSH, paired in one step: the image is all that is printed. */
+	if (argc > 1 && qstrcmp(argv[1], "--fuzznet-pair") == 0) {
+		QString why;
+		const QString image = bssh_fuzznet_pair(QCoreApplication::applicationFilePath(),
+		                                        app.arguments().mid(2), &why);
+		if (image.isEmpty()) {
+			err << "beersshd: " << why << "\n";
+			return 1;
+		}
+		out << image << "\n";
+		return 0;
+	}
+#endif
 
 	const QString config_dir =
 	        QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)

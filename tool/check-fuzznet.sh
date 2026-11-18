@@ -1,7 +1,7 @@
 #!/bin/sh
 # beersshd as a fuzznet host, end to end (project.md sec 5.6). Through
-# `beersshd --fuzznet` alone: the pairing a client needs -- an estate root, a
-# device's prekey, the card, its acceptance and the device image -- and then
+# beersshd alone: an estate root, then a device for a client paired in one
+# step with --fuzznet-pair, which prints its image -- and then
 # beersshd serving, a device on its UDP port asking the session helper its
 # version over fuzznet's words and the stream inside them, and the helper's
 # answer coming back. Then the same without --sessions, which must answer
@@ -33,7 +33,7 @@ pair="--fuzznet-service=1 --fuzznet-product=1"
 # Made first: fuzznet given a directory that is not there says it created an
 # identity in it and keeps none (reported to fuzznet 2026-11-18). beersshd
 # and the helper side by side, as --sessions finds it.
-mkdir "$dir/server" "$dir/client" "$dir/bin" "$dir/s" || exit 1
+mkdir "$dir/server" "$dir/bin" "$dir/s" || exit 1
 cp "$bin" "$dir/bin/beersshd" && cp "$helper" "$dir/bin/beerssh-session" || exit 1
 bin=$dir/bin/beersshd
 
@@ -48,11 +48,20 @@ run() {
 }
 
 run --fuzznet-dir="$dir/server" --new-root
-run --fuzznet-dir="$dir/client" --prekey
-run --fuzznet-dir="$dir/server" --pair="$out"
-run --fuzznet-dir="$dir/client" --accept="$out"
-run --fuzznet-dir="$dir/client" --device-image="$out"
-image=$out
+
+# The pairing in one step, as a person does it: a device made and paired
+# off to one side and its image printed (src/sshd/fuzznet_pair.h). And
+# refused for a directory holding no host, rather than making one there.
+# shellcheck disable=SC2086
+if timeout 60 "$bin" --fuzznet-pair --fuzznet-dir="$dir/nobody" $pair >/dev/null 2>&1; then
+	echo "check-fuzznet: FAILED -- --fuzznet-pair paired with no host to pair to" >&2
+	exit 1
+fi
+# shellcheck disable=SC2086
+if ! image=$(timeout 60 "$bin" --fuzznet-pair --fuzznet-dir="$dir/server" $pair 2>"$dir/err"); then
+	echo "check-fuzznet: beersshd --fuzznet-pair failed: $(head -c 400 "$dir/err")" >&2
+	exit 1
+fi
 case "$image" in
 FZD1:*) ;;
 *) echo "check-fuzznet: FAILED -- no device image, got: $(printf '%s' "$image" | head -c 200)" >&2; exit 1 ;;
@@ -103,5 +112,5 @@ if said=$(timeout 30 "$probe" "$image" 127.0.0.1 "$port" 2>/dev/null); then
 fi
 stop
 
-echo "check-fuzznet: paired through beersshd --fuzznet; the helper answered over fuzznet with" \
+echo "check-fuzznet: paired with beersshd --fuzznet-pair; the helper answered over fuzznet with" \
      "--sessions, again to a new stream, and nothing answered without"

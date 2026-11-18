@@ -2127,8 +2127,13 @@ connects go nowhere until a shell is open, as over SSH -- the first run sent the
 ahead of the command line and beersshd refused the "command". `fuzznet_session_test`
 now runs a `bssh_session` for such a host: a shell through beersshd, a reconnect,
 and what the shell wrote meanwhile arriving from the same shell, in about five
-seconds. **Not yet:** pairing from inside the apps (today it is beersshd's command
-line and a paste), Android on either side, and a host key-style check that the
+seconds. **Pairing is one command on the host:** `beersshd --fuzznet-pair
+--fuzznet-dir=DIR` makes a device in a store of its own, pairs it, prints its image
+and removes the store -- fuzznet's own design for a small device, whose key
+exchange happens off it ("the image is the manual key exchange"). It will not make
+an estate root for a directory that holds no host: that is a choice about whom
+the host trusts, and a mistyped path would quietly become a new one. **Not yet:**
+pairing from inside the apps (today the image is pasted), Android on either side, and a host key-style check that the
 gateway named in the image is the host at that address -- fuzznet's session
 authenticates the gateway, so a wrong address fails rather than reaching another.
 
