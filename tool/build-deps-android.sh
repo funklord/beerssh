@@ -177,9 +177,16 @@ if [ ! -f "$prefix/lib/libssh.a" ] ||
 	# Android, so this is not a version that can be waited out (checked:
 	# 0.11.5 has it too). Supplied as a define rather than a patch to
 	# their source, so it survives the next version bump.
+	#
+	# And glob() told absent: bionic has it from API 28 but not GLOB_TILDE,
+	# which libssh's config Include passes unguarded once it finds glob --
+	# so the floor's move to 28 broke this build on "undeclared identifier
+	# GLOB_TILDE" (CI, 2026-11-18). Absent, libssh reads an Include as one
+	# path, which is what every build at 26 did.
 	rm -rf libssh-build
 	cmake -S "$root/libssh" -B libssh-build \
 		-DCMAKE_C_FLAGS="-DS_IWRITE=S_IWUSR" \
+		-DHAVE_GLOB=0 \
 		-DCMAKE_TOOLCHAIN_FILE="$toolchain" \
 		-DANDROID_ABI="$abi" \
 		-DANDROID_PLATFORM="android-$api" \
