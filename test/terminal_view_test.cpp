@@ -3343,9 +3343,17 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * whether a mode is changing the keys -- what tells a user whether
 	 * Reset above is the cure. The fourth brings back the tmux and screen
 	 * drawer (sec 10.2a), here disabled: there is no session to list for.
+	 * Where fuzznet builds, a fifth pairs the host over fuzznet (sec 5.6),
+	 * File's entry for the front door with no menu bar; disabled too.
 	 */
 	const QList<QAction *> state = actions.at(5)->menu()->actions();
+#ifdef BSSH_FUZZNET
+	QCOMPARE(state.size(), 5);
+	QCOMPARE(state.at(4)->text(), QStringLiteral("Pair Over &Fuzznet..."));
+	QVERIFY(!state.at(4)->isEnabled());
+#else
 	QCOMPARE(state.size(), 4);
+#endif
 	QCOMPARE(state.at(0)->text(), QStringLiteral("Clear Scroll&back"));
 	QCOMPARE(state.at(1)->text(), QStringLiteral("&Reset Terminal"));
 	QCOMPARE(state.at(2)->text(), QStringLiteral("Connection &Details"));

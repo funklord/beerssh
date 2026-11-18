@@ -442,9 +442,6 @@ android {
     CONFIG += link_pkgconfig
     PKGCONFIG += libsixel libcrypto libsecret-1
     include($$PWD/libssh.pri)
-    include($$PWD/fuzznet.pri)
-    # The stream the client link carries; the tests compile it already.
-    !isEmpty(BSSH_FUZZNET_LIB): SOURCES += src/session/stream.c
 
     # The X server, asked which window is under the pointer during the
     # app's own session drag (project.md sec 8.4): the one way to tell a
@@ -452,6 +449,13 @@ android {
     # which has no X server; the code asks QT_CONFIG(xcb) and steps aside.
     !win32: PKGCONFIG += xcb
 }
+
+# A host reached over fuzznet, on both front doors: the Makefile hands the
+# archives in where fuzznet builds -- Linux, and Android at the floor sec 2
+# raised for it. The stream the client link carries comes with it; the
+# tests compile it already.
+include($$PWD/fuzznet.pri)
+!isEmpty(BSSH_FUZZNET_LIB): SOURCES += src/session/stream.c
 
 # Header dependencies from the compiler: tool/qmake-deps.mk says why.
 QMAKE_CFLAGS   += -MMD -MP

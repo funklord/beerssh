@@ -2165,8 +2165,16 @@ number: fuzznet has no default, and a client pairing over SSH has no other way t
 learn it; the app serves on its SSH port, 8022 unless changed. One question is
 asked beside the shell at a time, so a pairing while a listing or the helper's
 probe is out is refused, and one still out when the connection drops is said to
-have failed. Desktop only, as fuzznet is: the menu entry is there where fuzznet
-builds. BeerSSH's own Android build
+have failed. **And on the phone (2026-11-18), once the floor was 28 (sec 2):**
+BeerSSH's Android build links the client -- fuzznet's archive built a second
+time, at API 28 in the `embedded-device` preset (beersshd's is at 30), and the
+link over it -- and the pairing is in the terminal's long-press menu under
+Terminal, the phone having no menu bar. The arm64 APK declares minSdk 28 and
+takes `getrandom` from bionic's `LIBC_P`; not yet run on a phone or emulator.
+A build directory made before a switch like this moved kept objects compiled
+without its define, since qmake's objects do not depend on its Makefile, so the
+Android build keeps `config.source`, which `tool/qmake-deps.mk` makes every
+object depend on. BeerSSH's own Android build
 linking the client waits on a choice: fuzznet's randomness is `getrandom()`,
 bionic's from API 28, and BeerSSH's floor is 26 -- raise the floor (the
 holder's) or a fallback in fuzznet (fuzznet's; reported there). Also not yet:

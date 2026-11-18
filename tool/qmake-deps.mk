@@ -14,3 +14,13 @@
 # (the media build's object_parallel_to_source): unread, those trees
 # would never rebuild for a changed header.
 -include $(wildcard *.d */*.d */*/*.d */*/*/*.d)
+
+# And what the build was configured with, where the caller keeps a record
+# of it: a switch handed to qmake (a DEFINES, a library) changes how every
+# object compiles, but qmake's objects depend on their sources and headers,
+# not on the Makefile it rewrote -- so a build directory made before the
+# switch moved kept objects compiled without it. The record is rewritten
+# only when the configuration moves, so this costs nothing otherwise.
+ifneq ($(wildcard config.source),)
+$(OBJECTS): config.source
+endif

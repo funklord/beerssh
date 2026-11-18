@@ -1,7 +1,8 @@
 # A host reached over fuzznet (src/ssh/fuzznet_session.h, project.md sec 5.6),
 # for BeerSSH and its tests alike: the Makefile builds the vendored fuzznet's
 # libfuzznetd.a and this tree's client link over it, and passes both in where
-# fuzznet builds (Linux, for now). Empty, and none of it is compiled.
+# fuzznet builds (Linux, and Android from API 28). Empty, and none of it is
+# compiled.
 !isEmpty(BSSH_FUZZNET_LIB) {
     DEFINES += BSSH_FUZZNET
     SOURCES += $$PWD/src/ssh/fuzznet_session.cpp

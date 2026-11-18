@@ -1595,6 +1595,44 @@ $(ANDROID_FUZZNET_BIN): src/sshd/fuzznet_main.c src/sshd/fuzznet_node.c src/sess
 
 ANDROID_SESSION_DEPS = $(if $(ANDROID_SESSION_HELPER),$(ANDROID_SESSION_BIN) $(ANDROID_FUZZNET_BIN))
 
+# BeerSSH's own end of it: a host reached over fuzznet (fuzznet.pri,
+# src/ssh/fuzznet_session.h), so a phone keeps its sessions over fuzznet as
+# the desktop does. The same archive and preset as the host's, built a
+# second time at BeerSSH's floor rather than beersshd's -- an archive built
+# for 30 resolves symbols a 28 phone does not have -- and the client link
+# over it. beersshd sets this empty (SSHD_ANDROID).
+ANDROID_FUZZNET_CLIENT ?= 1
+ANDROID_CLIENT_FUZZNET_BUILD = build-fuzznet-android/$(ANDROID_ABI)-api$(ANDROID_API)
+ANDROID_CLIENT_FUZZNET_LIB = $(ANDROID_CLIENT_FUZZNET_BUILD)/libfuzznetd.a
+ANDROID_CLIENT_LINK_OBJ = $(ANDROID_CLIENT_FUZZNET_BUILD)/bssh-fuzznet-link.o
+ANDROID_CLIENT_LINK_LIB = $(ANDROID_CLIENT_FUZZNET_BUILD)/libbssh-fuzznet-link.a
+$(ANDROID_CLIENT_FUZZNET_LIB): FORCE $(FUZZNET_LIB)
+	@test -n "$(ANDROID_TRIPLE)" || { echo "android: no NDK triple for '$(ANDROID_ABI)'" >&2; exit 1; }
+	@mkdir -p $(ANDROID_CLIENT_FUZZNET_BUILD)
+	@$(MAKE) -s --no-print-directory -C $(FUZZNET_DIR) BUILD_DIR=$(abspath $(ANDROID_CLIENT_FUZZNET_BUILD)) \
+	         CC='$(NDK_BIN)/clang --target=$(ANDROID_TRIPLE)$(ANDROID_API)' AR=$(NDK_BIN)/llvm-ar \
+	         FZN_LOG_PACK=0 PRESET=embedded-device daemon-lib
+$(ANDROID_CLIENT_LINK_OBJ): src/session/fuzznet_link.c src/session/fuzznet_link.h src/session/stream.h \
+                            $(ANDROID_CLIENT_FUZZNET_LIB)
+	$(NDK_BIN)/clang --target=$(ANDROID_TRIPLE)$(ANDROID_API) -std=gnu11 -Os -fPIC -Wall -Wextra \
+	        -ffunction-sections -fdata-sections -I$(FUZZNET_DIR) -Isrc -c -o $@ src/session/fuzznet_link.c
+$(ANDROID_CLIENT_LINK_LIB): $(ANDROID_CLIENT_LINK_OBJ)
+	rm -f $@
+	$(NDK_BIN)/llvm-ar rcs $@ $^
+ANDROID_CLIENT_DEPS = $(if $(ANDROID_FUZZNET_CLIENT),$(ANDROID_CLIENT_LINK_LIB))
+
+# What qmake is told beyond the .pro, kept where tool/qmake-deps.mk makes
+# every object depend on it: turning the client or the media build on in a
+# directory built without them would otherwise rerun qmake and recompile
+# nothing, leaving the old objects without the define.
+ANDROID_CONFIG_SOURCE = $(ANDROID_BUILD_DIR)/config.source
+$(ANDROID_CONFIG_SOURCE): FORCE
+	@mkdir -p $(ANDROID_BUILD_DIR); \
+	printf '%s\n' 'media=$(ANDROID_MEDIA) fuzznet=$(ANDROID_FUZZNET_CLIENT) helper=$(ANDROID_SESSION_HELPER)' > $@.new; \
+	if cmp -s $@.new $@; then rm -f $@.new; else mv $@.new $@; fi
+ANDROID_CLIENT_QMAKE = $(if $(ANDROID_FUZZNET_CLIENT),BSSH_FUZZNET_LIB=$(abspath $(ANDROID_CLIENT_FUZZNET_LIB)) \
+                                                      BSSH_FUZZNET_CLIENT_LIB=$(abspath $(ANDROID_CLIENT_LINK_LIB)))
+
 # ANDROID_KIT_SOURCE, the record of which Qt kit this build directory
 # was built with, comes from tool/android.mk.
 #
@@ -1604,10 +1642,12 @@ ANDROID_SESSION_DEPS = $(if $(ANDROID_SESSION_HELPER),$(ANDROID_SESSION_BIN) $(A
 # file anybody can execute. qmake has no variable for it (CMake has
 # QT_ANDROID_LEGACY_PACKAGING); androiddeployqt reads the key from this file
 # and nowhere else, and qmake rewrites the file only when this rule runs.
-$(ANDROID_BUILD_DIR)/Makefile: android-check $(ANDROID_KIT_SOURCE) $(VTERM_ANDROID_LIB) $(ANDROID_PRO) $(ANDROID_MEDIA_DEPS) $(ANDROID_SESSION_DEPS)
+$(ANDROID_BUILD_DIR)/Makefile: android-check $(ANDROID_KIT_SOURCE) $(VTERM_ANDROID_LIB) $(ANDROID_PRO) $(ANDROID_MEDIA_DEPS) $(ANDROID_SESSION_DEPS) \
+                              $(ANDROID_CLIENT_DEPS) $(ANDROID_CONFIG_SOURCE) fuzznet.pri
 	mkdir -p $(ANDROID_BUILD_DIR)
 	cd $(ANDROID_BUILD_DIR) && $(QT_ANDROID_ROOT)/bin/qmake ../$(ANDROID_PRO) $(QMAKE_CONFIG) \
 	        BSSH_VERSION=$(VERSION) BSSH_VERSION_CODE=$(ANDROID_VERSION_CODE) $(ANDROID_MEDIA_QMAKE) \
+	        $(ANDROID_CLIENT_QMAKE) \
 	        $(if $(ANDROID_SESSION_HELPER),BSSH_SESSION_HELPER=$(abspath $(ANDROID_SESSION_BIN)) \
 	                                       BSSH_FUZZNET_NODE=$(abspath $(ANDROID_FUZZNET_BIN)))
 	@# A shell test rather than $(if): the JSON's comma would end make's argument.
@@ -1887,7 +1927,7 @@ endif
 # one no generated Makefile uses.
 SSHD_APP_ID = se.vibes.beersshd
 SSHD_ANDROID = ANDROID_PROGRAM=$(SSHD_TARGET) APP_ID=$(SSHD_APP_ID) ANDROID_PRO=beersshd.pro \
-               ANDROID_BUILD_DIR=build-sshd-android-$(ANDROID_ABI) ANDROID_ASSETS= ANDROID_MEDIA= \
+               ANDROID_BUILD_DIR=build-sshd-android-$(ANDROID_ABI) ANDROID_ASSETS= ANDROID_MEDIA= ANDROID_FUZZNET_CLIENT= \
                STORE_VIEWS='server setup' ANDROID_SESSION_HELPER=1
 
 # android-sshd-aab is beersshd's Play bundle (sec 13): the same rule as

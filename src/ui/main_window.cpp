@@ -6383,6 +6383,17 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 	multiplexers->setObjectName(QStringLiteral("terminal_multiplexers"));
 	multiplexers->setEnabled(m_current && m_current->can_offer_multiplexers());
 
+#ifdef BSSH_FUZZNET
+	/*
+	 * File's Pair Over Fuzznet, for the front door with no menu bar: a
+	 * phone pairs through the SSH connection this tab has, as the desktop
+	 * does, rather than by pasting a device image into the host editor.
+	 */
+	QAction *pair = terminal_menu->addAction(QStringLiteral("Pair Over &Fuzznet..."));
+	pair->setObjectName(QStringLiteral("terminal_pair_over_fuzznet"));
+	pair->setEnabled(m_current && !m_current->profile().fuzznet && !m_current->profile().local);
+#endif
+
 	menu->addSeparator();
 
 	/*
@@ -6862,6 +6873,14 @@ void bssh_main_window::act_on_terminal_menu(QMenu *menu, const QAction *chosen,
 		if (m_current) m_current->offer_multiplexers_again();
 		return;
 	}
+
+#ifdef BSSH_FUZZNET
+	const QAction *pair = menu->findChild<QAction *>(QStringLiteral("terminal_pair_over_fuzznet"));
+	if (chosen == pair) {
+		if (m_current) m_current->pair_over_fuzznet();
+		return;
+	}
+#endif
 
 	const QAction *clear_history =
 	        menu->findChild<QAction *>(QStringLiteral("terminal_clear_scrollback"));
