@@ -93,6 +93,8 @@ android {
     # Makefile for this ABI and passed in; shipped as a library so that it
     # lands in the native library directory, where the app may run it.
     !isEmpty(BSSH_SESSION_HELPER): ANDROID_EXTRA_LIBS += $$BSSH_SESSION_HELPER
+    # And the fuzznet host (src/sshd/fuzznet_main.c), the same way.
+    !isEmpty(BSSH_FUZZNET_NODE): ANDROID_EXTRA_LIBS += $$BSSH_FUZZNET_NODE
 
     isEmpty(BSSH_VERSION_CODE): BSSH_VERSION_CODE = 1
     ANDROID_VERSION_CODE = $$BSSH_VERSION_CODE

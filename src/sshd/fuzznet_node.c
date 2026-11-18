@@ -328,12 +328,15 @@ static const char *helper_beside(void) {
 	char *slash = strrchr(self, '/');
 	if (!slash) return "can't find where this program is, to find beerssh-session beside it";
 	*slash = '\0';
-	if (snprintf(node.helper, sizeof(node.helper), "%s/beerssh-session", self)
-	    >= (int)sizeof(node.helper))
-		return "this program's path is too long";
-	if (access(node.helper, X_OK) != 0)
-		return "--sessions needs beerssh-session installed beside beersshd";
-	return NULL;
+	/* Its desktop name, then its name in an Android app's native library directory. */
+	static const char *const names[] = { "beerssh-session", "libbeerssh_session.so" };
+	for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); ++i) {
+		if (snprintf(node.helper, sizeof(node.helper), "%s/%s", self, names[i])
+		    >= (int)sizeof(node.helper))
+			return "this program's path is too long";
+		if (access(node.helper, X_OK) == 0) return NULL;
+	}
+	return "--sessions needs beerssh-session installed beside beersshd";
 }
 
 static const char *option(void *ctx, const char *name, const char *value) {

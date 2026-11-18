@@ -2132,8 +2132,18 @@ seconds. **Pairing is one command on the host:** `beersshd --fuzznet-pair
 and removes the store -- fuzznet's own design for a small device, whose key
 exchange happens off it ("the image is the manual key exchange"). It will not make
 an estate root for a directory that holds no host: that is a choice about whom
-the host trusts, and a mistyped path would quietly become a new one. **Not yet:**
-pairing from inside the apps (today the image is pasted), Android on either side, and a host key-style check that the
+the host trusts, and a mistyped path would quietly become a new one. **beersshd's
+APK carries the node (2026-11-18):** `src/sshd/fuzznet_main.c` built with the NDK,
+static, as `libbeersshd_fuzznet.so` beside the helper and for the helper's reason
+(the native library directory is the one place an app may execute from), against
+fuzznet's archive built by fuzznet's make with the NDK's clang in its
+`embedded-device` preset; for API 30, beersshd's floor, since fuzznet's
+`getrandom()` is bionic's from 28. The node finds the helper under either name.
+Run on this machine's kernel, the x86_64 pair answered the desktop probe over
+fuzznet; the APK itself was not rebuilt or run (no emulator room, as before).
+**Not yet:** the app starting the node and a pairing button in its window,
+pairing from inside BeerSSH (today the image is pasted), BeerSSH's own Android
+build linking the client, and a host key-style check that the
 gateway named in the image is the host at that address -- fuzznet's session
 authenticates the gateway, so a wrong address fails rather than reaching another.
 

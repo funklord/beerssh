@@ -1557,7 +1557,36 @@ $(ANDROID_SESSION_BIN): $(SESSION_SRCS) $(VTERM_ANDROID_LIB) $(wildcard src/sess
 	        -fdata-sections -Wl,--gc-sections -Wl,-z,max-page-size=16384 -static -Isrc \
 	        -I$(VTERM_DIR)/include -o $@ $(filter %.c,$^) $(VTERM_ANDROID_LIB)
 
-ANDROID_SESSION_DEPS = $(if $(ANDROID_SESSION_HELPER),$(ANDROID_SESSION_BIN))
+# And the fuzznet host beside it (src/sshd/fuzznet_main.c), for kept
+# sessions over fuzznet: fuzznet's consumer archive built by fuzznet's make
+# with the NDK's compiler, in its embedded-device preset -- the desktop's
+# tables are sized for thousands of contacts, 171 MB of bss a phone has no
+# use for -- and the node linked static against it, named lib*.so for the
+# helper's reason. After the desktop archive, which is what fetches the
+# submodule and checks the situ runtimes agree.
+ANDROID_FUZZNET_BUILD = build-fuzznet-android/$(ANDROID_ABI)
+ANDROID_FUZZNET_LIB = $(ANDROID_FUZZNET_BUILD)/libfuzznetd.a
+ANDROID_FUZZNET_BIN = $(ANDROID_SESSION_DIR)/libbeersshd_fuzznet.so
+# beersshd's own floor, Android 11 (beersshd.pro), rather than BeerSSH's: fuzznet
+# draws its randomness with getrandom(), which bionic has from API 28.
+ANDROID_FUZZNET_API = 30
+$(ANDROID_FUZZNET_LIB): FORCE $(FUZZNET_LIB)
+	@test -n "$(ANDROID_TRIPLE)" || { echo "android: no NDK triple for '$(ANDROID_ABI)'" >&2; exit 1; }
+	@mkdir -p $(ANDROID_FUZZNET_BUILD)
+	@$(MAKE) -s --no-print-directory -C $(FUZZNET_DIR) BUILD_DIR=$(abspath $(ANDROID_FUZZNET_BUILD)) \
+	         CC='$(NDK_BIN)/clang --target=$(ANDROID_TRIPLE)$(ANDROID_FUZZNET_API)' AR=$(NDK_BIN)/llvm-ar \
+	         FZN_LOG_PACK=0 PRESET=embedded-device daemon-lib
+$(ANDROID_FUZZNET_BIN): src/sshd/fuzznet_main.c src/sshd/fuzznet_node.c src/session/stream.c \
+                        src/session/generated/frame.c src/session/generated/situ.c \
+                        $(wildcard src/sshd/fuzznet_node.h src/session/*.h src/session/generated/*.h) \
+                        $(ANDROID_FUZZNET_LIB)
+	@mkdir -p $(ANDROID_SESSION_DIR)
+	$(NDK_BIN)/clang --target=$(ANDROID_TRIPLE)$(ANDROID_FUZZNET_API) -std=gnu11 -Os -ffunction-sections \
+	        -fdata-sections -Wl,--gc-sections -Wl,-z,max-page-size=16384 -static -Isrc \
+	        -I$(FUZZNET_DIR) -I$(FUZZNET_DIR)/node -I$(FUZZNET_DIR)/wire/generated \
+	        -o $@ $(filter %.c,$^) $(ANDROID_FUZZNET_LIB)
+
+ANDROID_SESSION_DEPS = $(if $(ANDROID_SESSION_HELPER),$(ANDROID_SESSION_BIN) $(ANDROID_FUZZNET_BIN))
 
 # ANDROID_KIT_SOURCE, the record of which Qt kit this build directory
 # was built with, comes from tool/android.mk.
@@ -1572,7 +1601,8 @@ $(ANDROID_BUILD_DIR)/Makefile: android-check $(ANDROID_KIT_SOURCE) $(VTERM_ANDRO
 	mkdir -p $(ANDROID_BUILD_DIR)
 	cd $(ANDROID_BUILD_DIR) && $(QT_ANDROID_ROOT)/bin/qmake ../$(ANDROID_PRO) $(QMAKE_CONFIG) \
 	        BSSH_VERSION=$(VERSION) BSSH_VERSION_CODE=$(ANDROID_VERSION_CODE) $(ANDROID_MEDIA_QMAKE) \
-	        $(if $(ANDROID_SESSION_HELPER),BSSH_SESSION_HELPER=$(abspath $(ANDROID_SESSION_BIN)))
+	        $(if $(ANDROID_SESSION_HELPER),BSSH_SESSION_HELPER=$(abspath $(ANDROID_SESSION_BIN)) \
+	                                       BSSH_FUZZNET_NODE=$(abspath $(ANDROID_FUZZNET_BIN)))
 	@# A shell test rather than $(if): the JSON's comma would end make's argument.
 	@[ -z "$(ANDROID_SESSION_HELPER)" ] || { \
 		settings=$$(ls $(ANDROID_BUILD_DIR)/android-*-deployment-settings.json) || exit 1; \
@@ -2168,7 +2198,7 @@ deb-clean:
 # this build's own. Each expansion still goes through the checks above.
 veryclean: clean deb-clean
 	$(call bssh_remove_tree,$(ANDROID_BUILD_DIR) build-android-* build-sshd-android-* \
-	        $(VTERM_ANDROID_BASE) build-session-android)
+	        $(VTERM_ANDROID_BASE) build-session-android build-fuzznet-android)
 
 # `distclean` removes what the build generated and `veryclean` does not.
 # `.qmake.stash` is qmake's, is named, and is disposable by construction.
