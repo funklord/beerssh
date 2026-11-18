@@ -1,7 +1,10 @@
 #ifndef BSSH_SFTP_HANDLER_H
 #define BSSH_SFTP_HANDLER_H
 
+#include <QByteArray>
 #include <QSet>
+
+#include <functional>
 
 /*
  * libssh declares its server API only under WITH_SERVER. Set here, in the
@@ -30,7 +33,15 @@
  */
 class bssh_sftp_handler {
 public:
-	bssh_sftp_handler(sftp_session sftp, const bssh_root_path &root);
+	/*
+	 * A file this channel changed, by its real path: one it wrote and
+	 * closed, removed, or renamed (both names). Android indexes nothing an
+	 * app writes with all-files access, so the platform announces these to
+	 * MediaStore (sec 19.6); called on the connection's thread.
+	 */
+	using changed_t = std::function<void(const QByteArray &real)>;
+
+	bssh_sftp_handler(sftp_session sftp, const bssh_root_path &root, changed_t changed = {});
 	~bssh_sftp_handler();
 
 	bssh_sftp_handler(const bssh_sftp_handler &) = delete;
@@ -69,6 +80,7 @@ private:
 
 	sftp_session m_sftp;
 	const bssh_root_path &m_root;
+	changed_t m_changed;
 	QSet<open_t *> m_open;
 };
 

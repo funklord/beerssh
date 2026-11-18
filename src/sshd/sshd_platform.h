@@ -108,6 +108,15 @@ public:
 	virtual QString fuzznet_node() const { return QString(); }
 
 	/*
+	 * A file a client wrote, removed or renamed (bssh_sshd::file_changed),
+	 * told to whatever indexes the device's files. On Android that is
+	 * MediaStore, which indexes nothing an app writes with all-files
+	 * access: on the Fold an upload was in Download/ and missing from every
+	 * view MediaStore feeds (sec 19.6). Any thread; nothing elsewhere.
+	 */
+	virtual void file_changed(const QString &path) { Q_UNUSED(path); }
+
+	/*
 	 * What the platform calls, on whatever thread it is on, when it will
 	 * no longer keep the server alive -- before time_limit_reached, which
 	 * is only queued to Qt's thread.

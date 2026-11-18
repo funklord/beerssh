@@ -20773,6 +20773,33 @@ caught.
   `Download/`, then look in My Files under Downloads and under Internal
   storage > Download. Nothing changed in the code for it.
 
+  **Measured on the Fold, 2026-11-18 (fuzzypickles' 1640Z and 1650Z), with
+  the holder's leave:** two files uploaded by `scp` through beersshd into
+  `Download/` were on disk with the right sha256 and, more than a minute
+  later, **not in MediaStore** (`content query --uri
+  content://media/external/file` listed neither), while four files a shell
+  made in the same folder were listed at once. So on the Fold an app's
+  POSIX write with all-files access is not indexed, unlike the shell's on
+  the emulator. My Files browsing Internal storage > Download still shows
+  them, so a person looking in the folder finds an upload; what MediaStore
+  feeds -- categories, recents, another app's picker -- does not. Whether
+  the 2026-11-17 upload was missed that way or was gone from the disk is
+  not known; the decoys were left in place to see. The fix for the gap is
+  to announce each file a session wrote when it is closed
+  (`MediaScannerConnection.scanFile`). **Built 2026-11-18:** the SFTP handler
+  reports a file written and closed (or left open by a client that went),
+  both names of a rename, and a removal; `bssh_sshd::file_changed` carries it
+  from the connection's thread, and on Android the platform hands the path to
+  `SshdStorage.announce`, which scans it -- a path that is gone loses its
+  entry. `each_file_a_client_changes_is_announced` holds the list; on the
+  Fold it is not yet seen.
+
+  **And an adb server this session left (1525Z):** `adb -L tcp:5590`, from
+  06:18, held the Fold's interface whenever it appeared, so the default
+  server could list nothing; fuzzypickles worked through it. Stopped
+  2026-11-18 evening. A push of 38 MB to the Fold times out on its hub port
+  (1-8.1.x), a link fault rather than beersshd's.
+
 - **The time limit: fixed, and seen fixed on the phone.** On the Fold,
   2026-10-07, with the limit shortened (`device_config put activity_manager
   data_sync_fgs_timeout_duration 60000`; `device_config delete` restores

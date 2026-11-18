@@ -45,6 +45,9 @@ bssh_sshd_keeper::bssh_sshd_keeper(bssh_sshd_platform *platform, QObject *parent
 		                          Qt::QueuedConnection);
 	}, Qt::DirectConnection);
 	connect(&m_server, &bssh_sshd::connections_changed, this, &bssh_sshd_keeper::report);
+	/* On the connection's thread: the platform's call takes any. */
+	connect(&m_server, &bssh_sshd::file_changed, this,
+	        [this](const QString &path) { m_platform->file_changed(path); }, Qt::DirectConnection);
 	connect(&m_server, &bssh_sshd::listening_changed, this, &bssh_sshd_keeper::report);
 
 	/*

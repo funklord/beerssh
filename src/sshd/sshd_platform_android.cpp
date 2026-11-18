@@ -175,6 +175,15 @@ public:
 		return native_program(QStringLiteral("libbeerssh_session.so"));
 	}
 
+	void file_changed(const QString &path) override {
+		const QJniObject context = android_context();
+		if (!context.isValid()) return;
+		QJniObject::callStaticMethod<void>(STORAGE_CLASS, "announce",
+		                                   "(Landroid/content/Context;Ljava/lang/String;)V",
+		                                   context.object(), QJniObject::fromString(path).object<jstring>());
+		QJniEnvironment().checkAndClearExceptions();
+	}
+
 	/* The fuzznet host, shipped the same way beside it (sec 5.6). */
 	QString fuzznet_node() const override {
 		return native_program(QStringLiteral("libbeersshd_fuzznet.so"));

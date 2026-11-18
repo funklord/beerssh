@@ -28,6 +28,7 @@ private slots:
 	void the_root_itself_is_never_removed_or_replaced();
 
 	void files_go_up_and_down_inside_the_root();
+	void each_file_a_client_changes_is_announced();
 	void nothing_outside_the_root_is_reachable_over_the_wire();
 	void only_a_listed_key_logs_in();
 	void a_password_is_stored_as_a_salted_hash();

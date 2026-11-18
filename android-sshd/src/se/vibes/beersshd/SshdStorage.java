@@ -3,6 +3,7 @@ package se.vibes.beersshd;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
+import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Environment;
 import android.os.PowerManager;
@@ -13,7 +14,9 @@ import android.provider.Settings;
  *
  * Three questions the C++ side cannot answer itself: where shared storage
  * is, whether "All files access" has been granted, and how to send the
- * user to the one screen that grants it. Nothing here reads a file.
+ * user to the one screen that grants it -- and one thing it cannot do,
+ * telling MediaStore about a file a client changed. Nothing here reads a
+ * file.
  */
 public class SshdStorage {
 
@@ -72,5 +75,16 @@ public class SshdStorage {
 			list.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 			context.startActivity(list);
 		}
+	}
+
+	/*
+	 * A file a client wrote, removed or renamed, told to MediaStore. On the
+	 * Fold an app's own writes with all-files access are not indexed, so an
+	 * upload was in Download/ and in no view MediaStore feeds -- recents,
+	 * categories, another app's picker (sec 19.6). Scanning a path that is
+	 * gone removes its entry. Asynchronous, from any thread.
+	 */
+	public static void announce(Context context, String path) {
+		MediaScannerConnection.scanFile(context, new String[] { path }, null, null);
 	}
 }

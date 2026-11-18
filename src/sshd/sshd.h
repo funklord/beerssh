@@ -137,6 +137,13 @@ signals:
 	/* listening() changed, from the accepting thread. */
 	void listening_changed(bool listening);
 
+	/*
+	 * A file a client wrote, removed or renamed, by its path on this
+	 * device; from the connection's thread. The keeper hands it to the
+	 * platform, which on Android tells MediaStore (sec 19.6).
+	 */
+	void file_changed(const QString &path);
+
 private:
 	void accept_loop();
 	void serve(connection_t *connection);

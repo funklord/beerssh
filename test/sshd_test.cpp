@@ -4,6 +4,8 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QStandardPaths>
@@ -269,6 +271,39 @@ void sshd_test::files_go_up_and_down_inside_the_root() {
 	QVERIFY(!QFile::exists(m_root + QStringLiteral("/up.bin")));
 	QVERIFY(QFileInfo(m_root + QStringLiteral("/made")).isDir());
 	QVERIFY(!QFile::exists(m_root + QStringLiteral("/hello.txt")));
+}
+
+/*
+ * What Android's MediaStore is told about (sec 19.6): a file written and
+ * closed, both names of a rename, a removal -- and nothing for a read or a
+ * directory. From the connection's thread, so collected under a lock.
+ */
+void sshd_test::each_file_a_client_changes_is_announced() {
+	if (!start_server()) QSKIP("the OpenSSH client is not installed");
+
+	QMutex lock;
+	QStringList changed;
+	connect(m_server.get(), &bssh_sshd::file_changed, this, [&](const QString &path) {
+		QMutexLocker held(&lock);
+		changed << QFileInfo(path).fileName();
+	}, Qt::DirectConnection);
+
+	const QString local = m_dir->filePath(QStringLiteral("local.txt"));
+	QVERIFY(write_file(local, "uploaded\n"));
+	const QByteArray batch = "put " + QFile::encodeName(local) + " up.txt\n"
+	                         "rename up.txt moved.txt\n"
+	                         "mkdir made\n"
+	                         "get moved.txt " + QFile::encodeName(m_dir->filePath(QStringLiteral("back.txt"))) + "\n"
+	                         "rm hello.txt\n";
+	QStringList args = client_options(m_config + QStringLiteral("/client"));
+	args << QStringLiteral("-b") << QStringLiteral("-") << QStringLiteral("-P")
+	     << QString::number(m_server->port()) << QStringLiteral("127.0.0.1");
+	QByteArray output;
+	QCOMPARE(client(QStringLiteral("sftp"), args, batch, &output), 0);
+
+	QMutexLocker held(&lock);
+	QCOMPARE(changed, (QStringList{ QStringLiteral("up.txt"), QStringLiteral("up.txt"),
+	                                QStringLiteral("moved.txt"), QStringLiteral("hello.txt") }));
 }
 
 void sshd_test::nothing_outside_the_root_is_reachable_over_the_wire() {

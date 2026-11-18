@@ -664,7 +664,9 @@ void bssh_sshd::serve(connection_t *connection) {
 #pragma GCC diagnostic pop
 
 			if (ready) {
-				bssh_sftp_handler handler(sftp, root);
+				bssh_sftp_handler handler(sftp, root, [this](const QByteArray &real) {
+					emit file_changed(QFile::decodeName(real));
+				});
 				while (!m_stopping) {
 					sftp_client_message message = sftp_get_client_message(sftp);
 					if (!message) break;
@@ -843,7 +845,8 @@ bool pump_helper(served_channel_t *served) {
 }
 
 /* What arrived for an SFTP channel, answered without waiting for more. */
-void pump_sftp(served_channel_t *served, ssh_session session, const bssh_root_path &root) {
+void pump_sftp(served_channel_t *served, ssh_session session, const bssh_root_path &root,
+               const bssh_sftp_handler::changed_t &changed) {
 	ssh_channel channel = served->channel;
 	bool ended = !ssh_channel_is_open(channel);
 
@@ -854,7 +857,7 @@ void pump_sftp(served_channel_t *served, ssh_session session, const bssh_root_pa
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 		const bool ready = served->sftp && sftp_server_init(served->sftp) == 0;
 #pragma GCC diagnostic pop
-		if (ready) served->handler = std::make_unique<bssh_sftp_handler>(served->sftp, root);
+		if (ready) served->handler = std::make_unique<bssh_sftp_handler>(served->sftp, root, changed);
 		else ended = true;
 	}
 	while (!ended && ssh_channel_poll(channel, 0) > 0) {
@@ -892,6 +895,9 @@ void bssh_sshd::serve_channels(connection_t *connection) {
 	ssh_event loop = ssh_event_new();
 	ssh_event_add_session(loop, session);
 	auto idle_since = std::chrono::steady_clock::now();
+	const bssh_sftp_handler::changed_t changed = [this](const QByteArray &real) {
+		emit file_changed(QFile::decodeName(real));
+	};
 
 	while (!m_stopping) {
 		bool busy = false;
@@ -900,7 +906,7 @@ void bssh_sshd::serve_channels(connection_t *connection) {
 				busy |= pump_helper(served.get());
 				watch(served.get(), loop, served->finished);
 			} else if (served->kind == served_channel_t::SFTP) {
-				pump_sftp(served.get(), session, root);
+				pump_sftp(served.get(), session, root, changed);
 			} else if (!ssh_channel_is_open(served->channel)) {
 				served->finished = true;   /* opened, asked for nothing, closed */
 			}

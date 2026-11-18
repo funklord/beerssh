@@ -15,6 +15,7 @@ struct bssh_sftp_handler::open_t {
 	int fd = -1;
 	DIR *dir = nullptr;
 	QByteArray real;   /* what was opened, for a setstat on a directory handle */
+	bool writing = false; /* opened to write: announced as changed when closed */
 };
 
 namespace {
@@ -81,13 +82,15 @@ QByteArray path_of(sftp_client_message msg) {
 
 } /* namespace */
 
-bssh_sftp_handler::bssh_sftp_handler(sftp_session sftp, const bssh_root_path &root)
-    : m_sftp(sftp), m_root(root) {
+bssh_sftp_handler::bssh_sftp_handler(sftp_session sftp, const bssh_root_path &root, changed_t changed)
+    : m_sftp(sftp), m_root(root), m_changed(std::move(changed)) {
 }
 
 bssh_sftp_handler::~bssh_sftp_handler() {
 	for (open_t *open : std::as_const(m_open)) {
 		if (open->fd >= 0) ::close(open->fd);
+		/* A client gone mid-upload left a file too, and it is on the disk. */
+		if (open->writing && m_changed) m_changed(open->real);
 		if (open->dir) ::closedir(open->dir);
 		sftp_handle_remove(m_sftp, open);
 		delete open;
@@ -189,6 +192,7 @@ bool bssh_sftp_handler::do_open(sftp_client_message msg) {
 	open_t *open = new open_t;
 	open->fd = fd;
 	open->real = path.real;
+	open->writing = (mode & O_ACCMODE) != O_RDONLY || (mode & O_TRUNC);
 
 	ssh_string handle = sftp_handle_alloc(m_sftp, open);
 	if (!handle) {
@@ -210,6 +214,7 @@ bool bssh_sftp_handler::do_close(sftp_client_message msg) {
 	int error = 0;
 	if (open->fd >= 0 && ::close(open->fd) != 0) error = errno;
 	if (open->dir) ::closedir(open->dir);
+	if (open->writing && m_changed) m_changed(open->real);
 
 	sftp_handle_remove(m_sftp, open);
 	m_open.remove(open);
@@ -404,6 +409,7 @@ bool bssh_sftp_handler::do_remove(sftp_client_message msg, bool directory) {
 
 	const int rc = directory ? ::rmdir(path.real.constData()) : ::unlink(path.real.constData());
 	if (rc != 0) return reply_errno(msg, errno);
+	if (!directory && m_changed) m_changed(path.real);
 	return reply_ok(msg);
 }
 
@@ -428,6 +434,10 @@ bool bssh_sftp_handler::do_rename(sftp_client_message msg, bool overwrite) {
 		return sftp_reply_status(msg, SSH_FX_FAILURE, "Target exists") == 0;
 
 	if (::rename(from.real.constData(), to.real.constData()) != 0) return reply_errno(msg, errno);
+	if (m_changed) {
+		m_changed(from.real);
+		m_changed(to.real);
+	}
 	return reply_ok(msg);
 }
 
