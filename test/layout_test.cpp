@@ -203,6 +203,8 @@ void layout_test::the_media_player_is_started_as_hydra_starts_it() {
 	QCOMPARE(bssh_player_arguments(QStringLiteral("mplayer"), QString(), file),
 	         QStringList({ QStringLiteral("-cache"), QStringLiteral("8192"), file }));
 	QCOMPARE(bssh_player_arguments(QStringLiteral("vlc"), QString(), file), QStringList({ file }));
+	/* snurra: the URL alone, as hydra hands it, since it refuses an option it does not know. */
+	QCOMPARE(bssh_player_arguments(QStringLiteral("snurra"), QString(), file), QStringList({ file }));
 	/* Custom: %U where it says, and last where it says nothing. */
 	QCOMPARE(bssh_player_arguments(QStringLiteral("custom"), QStringLiteral("mpv --fs %U --loop"), file),
 	         QStringList({ QStringLiteral("--fs"), url, QStringLiteral("--loop") }));
@@ -212,6 +214,7 @@ void layout_test::the_media_player_is_started_as_hydra_starts_it() {
 	/* mplayer in a terminal; Custom only when asked. */
 	QVERIFY(bssh_player_wants_terminal(QStringLiteral("mplayer")));
 	QVERIFY(!bssh_player_wants_terminal(QStringLiteral("mpv")));
+	QVERIFY(!bssh_player_wants_terminal(QStringLiteral("snurra")));
 	bssh_app_settings settings;
 	settings.set_player_custom_in_terminal(false);
 	QVERIFY(!bssh_player_wants_terminal(QStringLiteral("custom")));
@@ -299,11 +302,12 @@ void layout_test::a_media_player_is_stored_only_when_chosen() {
 	QVERIFY(player);
 	QCOMPARE(player->currentIndex(), 0);
 	QVERIFY(!QSettings(path, QSettings::IniFormat).contains(QStringLiteral("player/selected")));
-	/* Every entry there: Default, the system's, hydra's six, Custom. */
+	/* Every entry there: Default, the system's, hydra's seven, Custom. */
 	QStringList ids;
 	for (int i = 0; i < player->count(); ++i) ids << player->itemData(i).toString();
 	for (const QString &id : { QString(), QStringLiteral("system"), QStringLiteral("mpv"), QStringLiteral("vlc"),
-	                           QStringLiteral("smplayer"), QStringLiteral("ffplay"), QStringLiteral("mplayer2"),
+	                           QStringLiteral("smplayer"), QStringLiteral("ffplay"), QStringLiteral("snurra"),
+	                           QStringLiteral("mplayer2"),
 	                           QStringLiteral("mplayer"), QStringLiteral("custom") })
 		QVERIFY2(ids.contains(id), qPrintable(QStringLiteral("no entry for '%1'").arg(id)));
 

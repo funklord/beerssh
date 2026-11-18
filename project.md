@@ -5018,6 +5018,12 @@ model on a finger.
   and handed the film's URL), `a_media_player_is_stored_only_when_chosen`,
   `play_goes_to_the_chosen_player`; three sabotages. Told to hydra, whose
   vocabulary this is (its inbox).
+  **hydra added snurra on PATH (its d4036a9, 2026-11-13; its inbox note
+  here, 2026-11-18 1940Z), so BeerSSH did:** id and label "snurra", after
+  ffplay as in hydra, handed the file alone -- its QCommandLineParser stops
+  on an option it does not know -- and not in a terminal. BeerSSH's
+  "builtin" is snurra too, embedded; the two names mean different things,
+  worth a word if the two lists are ever one code.
   **The panel on a phone, measured by the sweeps it had missed
   (2026-11-12).** `every_touch_surface_names_its_controls` and
   `every_touch_surface_fits_a_phone` predate the panel; with it added,

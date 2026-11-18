@@ -23,6 +23,10 @@ const known_player_t known_players[] = {
 	{ "vlc", "VLC" },
 	{ "smplayer", "SMPlayer" },
 	{ "ffplay", "ffplay" },
+	/* snurra on PATH, hydra's since its d4036a9 (2026-11-13): the URL
+	 * alone, since its QCommandLineParser stops on an option it does not
+	 * know, and no terminal. Not "builtin", which is snurra embedded. */
+	{ "snurra", "snurra" },
 	{ "mplayer2", "mplayer2" },
 	{ "mplayer", "mplayer" },
 };
