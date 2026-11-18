@@ -20705,6 +20705,20 @@ caught.
 
 ### 19.6 Still open — **[OPEN]**
 
+- **An upload the Fold did not show, reported by fuzzypickles (its inbox
+  messages of 2026-11-18, 1440Z and its correction at 1525Z).** On 2026-11-17
+  it copied an APK to the holder's Fold through beersshd -- `scp` into
+  `Download/`, exit 0, read back with the same sha256 -- and the holder could
+  not find it on the phone. Its first guess, that a POSIX write is never
+  indexed, was its own to retract: on an API 36 emulator a file written
+  into `/sdcard/Download` by `adb push` or a shell is in MediaStore at once
+  and the stock Files app's Downloads lists it. Such files were not in the
+  separate downloads collection (`content://media/external/downloads`),
+  which matters only if Samsung's My Files lists from it -- untested. So
+  the cause is unknown, and what would settle it is the Fold: upload into
+  `Download/`, then look in My Files under Downloads and under Internal
+  storage > Download. Nothing changed in the code for it.
+
 - **The time limit: fixed, and seen fixed on the phone.** On the Fold,
   2026-10-07, with the limit shortened (`device_config put activity_manager
   data_sync_fgs_timeout_duration 60000`; `device_config delete` restores
