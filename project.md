@@ -2174,11 +2174,16 @@ takes `getrandom` from bionic's `LIBC_P`; not yet run on a phone or emulator.
 A build directory made before a switch like this moved kept objects compiled
 without its define, since qmake's objects do not depend on its Makefile, so the
 Android build keeps `config.source`, which `tool/qmake-deps.mk` makes every
-object depend on. BeerSSH's own Android build
-linking the client waits on a choice: fuzznet's randomness is `getrandom()`,
-bionic's from API 28, and BeerSSH's floor is 26 -- raise the floor (the
-holder's) or a fallback in fuzznet (fuzznet's; reported there). Also not yet:
-pairing from inside BeerSSH (today the image is pasted), and a host key-style check that the
+object depend on. **fuzznet answered (its sec 1275, 2026-11-18):** a running daemon loads its
+peers at start, and `--pair` beside it had both processes writing the store's
+journal; `--pair` now takes the store's claim and is refused, exit 1, where a
+serving daemon holds it, naming fuzznet's device invite (`add invite` on the
+host, `add join CODE` on the device -- a node's join, not a device image's).
+So the app's host is stopped for a pairing and started after it rather than
+restarted only after, and a desktop `beersshd --fuzznet-pair` beside a
+serving `beersshd --fuzznet` says to stop it, pair and start it. Pairing a
+running host without a restart would want an image device to join by invite,
+which fuzznet does not offer. Also not yet: a host key-style check that the
 gateway named in the image is the host at that address -- fuzznet's session
 authenticates the gateway, so a wrong address fails rather than reaching another.
 

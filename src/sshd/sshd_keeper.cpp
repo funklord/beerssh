@@ -223,19 +223,19 @@ QString bssh_sshd_keeper::pair_device(QString *why) {
 	if (!why) why = &ignored;
 	if (!can_pair()) return bssh_sshd_control::pair_device(why);
 	if (!ensure_fuzznet_store(why)) return QString();
-	const QString image = bssh_fuzznet_pair(m_platform->fuzznet_node(),
-	                                        { QStringLiteral("--fuzznet-dir=") + fuzznet_store() }, why);
-	if (image.isEmpty()) return image;
-	log(tr("Paired a device for BeerSSH over fuzznet"));
 	/*
-	 * A host already serving read its store when it started and does not
-	 * know the device yet: started again, as the pairing is written. The
+	 * Stopped for the pairing and started again after it, whichever way it
+	 * went. A host serving read its store when it started and would not
+	 * know the device; and beside it the pairing and the host both wrote
+	 * the store's journal, which fuzznet now refuses (its sec 1275). The
 	 * sessions it carried are attachments; each goes on in its own process.
 	 */
-	if (fuzznet_running()) {
-		stop_fuzznet();
-		start_fuzznet(m_server.port());
-	}
+	const bool serving = fuzznet_running();
+	if (serving) stop_fuzznet();
+	const QString image = bssh_fuzznet_pair(m_platform->fuzznet_node(),
+	                                        { QStringLiteral("--fuzznet-dir=") + fuzznet_store() }, why);
+	if (serving) start_fuzznet(m_server.port());
+	if (!image.isEmpty()) log(tr("Paired a device for BeerSSH over fuzznet"));
 	return image;
 }
 

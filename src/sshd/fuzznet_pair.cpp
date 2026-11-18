@@ -71,6 +71,17 @@ QString bssh_fuzznet_pair(const QString &program, const QStringList &options, QS
 	const QString prekey = step(program, QStringList{ at_device, QStringLiteral("--prekey") } + rest, why);
 	if (prekey.isEmpty()) return QString();
 	const QString card = step(program, QStringList{ at_host, QStringLiteral("--pair=") + prekey } + rest, why);
+	/*
+	 * Refused beside a host serving the store (fuzznet's sec 1275), which
+	 * reads its peers at start and would not see the device. fuzznet names
+	 * its invite, which lets a node join; what this pairs is a device image,
+	 * so the way here is a restart, said in beersshd's words.
+	 */
+	if (card.isEmpty() && why->contains(QLatin1String("is served by a running"))) {
+		*why = QStringLiteral("a beersshd --fuzznet is serving %1 and would not see a device paired beside "
+		                      "it: stop it, pair, and start it again")
+		               .arg(host_dir);
+	}
 	if (card.isEmpty()) return QString();
 	const QString gateway = step(program, QStringList{ at_device, QStringLiteral("--accept=") + card } + rest, why);
 	if (gateway.isEmpty()) return QString();
