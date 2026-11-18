@@ -983,7 +983,11 @@ check-build-tree:
 		echo "check-build-tree: $$seen generated source(s), every one names a header that exists"; \
 	fi
 
-test: check-build-tree $(TARGET) $(TEST_BIN)
+# The session helper, for beersshd's kept-session test: Linux only, being
+# linked -static, which macOS cannot do. Elsewhere that one test skips.
+TEST_SESSION_BIN = $(if $(filter Linux,$(shell uname -s)),$(SESSION_BIN))
+
+test: check-build-tree $(TARGET) $(TEST_BIN) $(TEST_SESSION_BIN)
 	@sandbox=$$(mktemp -d) && \
 	 HOME=$$sandbox XDG_CONFIG_HOME=$$sandbox/config XDG_DATA_HOME=$$sandbox/data \
 	 QT_QPA_PLATFORM=offscreen ./$(TARGET) --self-test; \
@@ -1003,7 +1007,8 @@ test: check-build-tree $(TARGET) $(TEST_BIN)
 	@# TMPDIR moves the sandbox, since QDir::tempPath honours it: that is
 	@# the fix when /tmp is a tmpfs somebody else is filling.
 	@tmp=$${TMPDIR:-/tmp}; 	free=$$(df -Pm "$$tmp" 2>/dev/null | awk 'NR==2 {print $$4}'); 	if [ -n "$$free" ] && [ "$$free" -lt 64 ]; then 		echo "test: only $${free}MB free on $$tmp -- refusing to run." >&2; 		echo "test:   The suite sandboxes into a temporary directory, so a full" >&2; 		echo "test:   filesystem surfaces as failing assertions rather than as a" >&2; 		echo "test:   disk error, and looks like a regression that is not there." >&2; 		echo "test:   Free some space, or point TMPDIR somewhere with room." >&2; 		exit 1; 	fi
-	QT_QPA_PLATFORM=offscreen $(BSSH_TEST_CRASH_ENV) ./$(TEST_BIN)
+	QT_QPA_PLATFORM=offscreen $(BSSH_TEST_CRASH_ENV) \
+	  $(if $(TEST_SESSION_BIN),BSSH_TEST_SESSION_BIN=$(TEST_SESSION_BIN)) ./$(TEST_BIN)
 
 # Throughput through the emulator, in MB/s (project.md sec 9.5, sec 12.3).
 # Built by `test` but not run by it: these take seconds and their numbers

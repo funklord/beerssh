@@ -3,7 +3,9 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QProcess>
+#include <QRegularExpression>
 #include <QStandardPaths>
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -18,8 +20,10 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "model/session.h"
 #include "sshd/root_path.h"
 #include "sshd/sshd.h"
+#include "term/emulator.h"
 
 namespace {
 
@@ -168,7 +172,7 @@ void sshd_test::the_root_itself_is_never_removed_or_replaced() {
 	QCOMPARE(root.client_view(root.existing("/").real), QByteArray("/"));
 }
 
-bool sshd_test::start_server(long exchange_seconds) {
+bool sshd_test::start_server(long exchange_seconds, const QByteArray &session_helper) {
 	if (!have_openssh()) return false;
 
 	const QString key = m_config + QStringLiteral("/client");
@@ -186,6 +190,7 @@ bool sshd_test::start_server(long exchange_seconds) {
 	config.bind_address = "127.0.0.1";
 	config.port = 0;
 	config.exchange_seconds = exchange_seconds;
+	config.session_helper = session_helper;
 
 	m_server = std::make_unique<bssh_sshd>();
 	QString error;
@@ -589,6 +594,11 @@ void sshd_test::sftp_is_all_it_serves() {
 	QVERIFY(client(QStringLiteral("ssh"), args, QByteArray(), &output) != 0);
 	QVERIFY2(output.contains("request failed"), output.constData());
 	QVERIFY(!QFile::exists(m_root + QStringLiteral("/ran-a-command")));
+
+	/* The helper's own words too, while sessions are off, as they are by default. */
+	args.replace(args.size() - 1, QStringLiteral("beerssh-session version"));
+	QVERIFY(client(QStringLiteral("ssh"), args, QByteArray(), &output) != 0);
+	QVERIFY2(!output.contains("beerssh-session 1"), output.constData());
 }
 
 void sshd_test::scp_finishes_with_a_clean_exit() {
@@ -672,4 +682,219 @@ void sshd_test::a_listener_the_system_takes_away_comes_back_without_spinning() {
 	QVERIFY(probe.waitForConnected(3000));
 	QTRY_VERIFY(probe.bytesAvailable() >= 8 || probe.waitForReadyRead(100));
 	QVERIFY(probe.readAll().startsWith("SSH-2.0-"));
+}
+
+/*
+ * --sessions (project.md sec 5.6, holder 2026-11-18): the helper's two
+ * commands run, word for word, and every other exec is refused as before.
+ * The helper here is a stand-in script, so what is shown is beersshd's
+ * half: the words it passes, both directions of bytes, the client's EOF
+ * reaching the helper, and the helper's exit status reaching the client.
+ */
+void sshd_test::with_sessions_on_it_runs_the_helper_and_nothing_else() {
+	if (QStandardPaths::findExecutable(QStringLiteral("ssh")).isEmpty()) QSKIP("no ssh client");
+	const QString helper = m_config + QStringLiteral("/beerssh-session");
+	QVERIFY(write_file(helper, "#!/bin/sh\n"
+	                           "case \"$1 $2\" in\n"
+	                           "'version ') echo 'beerssh-session 1' ;;\n"
+	                           "'attach fail') echo 'it went wrong' >&2; exit 7 ;;\n"
+	                           "attach*) echo \"attached $2\"; cat; echo 'stdin ended' ;;\n"
+	                           "*) exit 99 ;;\n"
+	                           "esac\n"));
+	QVERIFY(QFile::setPermissions(helper, QFileDevice::ReadOwner | QFileDevice::WriteOwner
+	                                      | QFileDevice::ExeOwner));
+	if (!start_server(30, QFile::encodeName(helper))) QSKIP("the OpenSSH client is not installed");
+
+	QStringList args = client_options(m_config + QStringLiteral("/client"));
+	args << QStringLiteral("-p") << QString::number(m_server->port()) << QStringLiteral("127.0.0.1");
+	const auto run = [&](const QString &command, const QByteArray &input, QByteArray *output) {
+		return client(QStringLiteral("ssh"), QStringList(args) << command, input, output);
+	};
+
+	QByteArray output;
+	QCOMPARE(run(QStringLiteral("beerssh-session version"), QByteArray(), &output), 0);
+	QCOMPARE(output, QByteArray("beerssh-session 1\n"));
+
+	/* Through, and back, and the EOF arrives: cat ends only on it. */
+	QCOMPARE(run(QStringLiteral("beerssh-session attach t1"), "hello\n", &output), 0);
+	QCOMPARE(output, QByteArray("attached t1\nhello\nstdin ended\n"));
+
+	/* Larger than any one buffer on the way, in both directions. */
+	QByteArray big;
+	for (int i = 0; i < 40000; ++i) big += QByteArray::number(i) + '\n';
+	QCOMPARE(run(QStringLiteral("beerssh-session attach t2"), big, &output), 0);
+	QCOMPARE(output, QByteArray("attached t2\n") + big + "stdin ended\n");
+
+	/* Its status and its stderr, as ssh(1) reports a command's. */
+	QCOMPARE(run(QStringLiteral("beerssh-session attach fail"), QByteArray(), &output), 7);
+	QVERIFY2(output.contains("it went wrong"), output.constData());
+
+	/* Anything else: another program, a shell's syntax, a name with a path in it. */
+	const QStringList refused = {
+		QStringLiteral("touch ran-a-command"),
+		QStringLiteral("beerssh-session version; touch ran-a-command"),
+		QStringLiteral("beerssh-session attach ../x"),
+		QStringLiteral("beerssh-session attach"),
+		QStringLiteral("beerssh-session  version"),
+		QStringLiteral("/bin/sh -c beerssh-session"),
+	};
+	for (const QString &command : refused) {
+		QVERIFY2(run(command, QByteArray(), &output) != 0, qPrintable(command));
+		QVERIFY2(output.contains("request failed"), qPrintable(command + QStringLiteral(": ") + output));
+	}
+	QVERIFY(!QFile::exists(m_root + QStringLiteral("/ran-a-command")));
+
+	/* And SFTP as before, with sessions on. */
+	QCOMPARE(client(QStringLiteral("sftp"), client_options(m_config + QStringLiteral("/client"))
+	                        << QStringLiteral("-b") << QStringLiteral("-") << QStringLiteral("-P")
+	                        << QString::number(m_server->port()) << QStringLiteral("127.0.0.1"),
+	                "get hello.txt " + QFile::encodeName(m_outside) + "/fetched.txt\n", &output),
+	         0);
+	QCOMPARE(read_file(m_outside + QStringLiteral("/fetched.txt")), QByteArray("hello\n"));
+
+	/*
+	 * Two channels of one login at once, as BeerSSH's probe, attach and file
+	 * panel are: an attach held open while a second command runs beside it,
+	 * over one connection that OpenSSH's ControlMaster shares between them.
+	 */
+	const QString control = m_dir->filePath(QStringLiteral("m"));
+	if (control.size() > 90) QSKIP("the temporary directory is too deep for a control socket");
+	QStringList shared = client_options(m_config + QStringLiteral("/client"));
+	shared << QStringLiteral("-S") << control << QStringLiteral("-p") << QString::number(m_server->port());
+	QProcess master;
+	master.start(QStringLiteral("ssh"), QStringList(shared) << QStringLiteral("-M") << QStringLiteral("-N")
+	                                                        << QStringLiteral("127.0.0.1"));
+	QVERIFY(master.waitForStarted(5000));
+	struct stop_t {
+		QProcess &process;
+		~stop_t() {
+			process.kill();
+			process.waitForFinished(5000);
+		}
+	} stop_master{ master };
+	QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(control), 10000);
+
+	QProcess attach;
+	attach.setProcessChannelMode(QProcess::MergedChannels);
+	attach.start(QStringLiteral("ssh"), QStringList(shared) << QStringLiteral("127.0.0.1")
+	                                                        << QStringLiteral("beerssh-session attach m"));
+	QVERIFY(attach.waitForStarted(5000));
+	struct stop_attach_t {
+		QProcess &process;
+		~stop_attach_t() {
+			process.kill();
+			process.waitForFinished(5000);
+		}
+	} stop_attach{ attach };
+	attach.write("one\n");
+	QByteArray seen;
+	QTRY_VERIFY_WITH_TIMEOUT((seen += attach.readAll()).contains("one\n"), 10000);
+
+	QCOMPARE(client(QStringLiteral("ssh"), QStringList(shared) << QStringLiteral("127.0.0.1")
+	                                                           << QStringLiteral("beerssh-session version"),
+	                QByteArray(), &output),
+	         0);
+	QCOMPARE(output, QByteArray("beerssh-session 1\n"));
+
+	attach.write("two\n");
+	attach.closeWriteChannel();
+	QVERIFY(attach.waitForFinished(10000));
+	seen += attach.readAll();
+	QCOMPARE(seen, QByteArray("attached m\none\ntwo\nstdin ended\n"));
+	QCOMPARE(attach.exitCode(), 0);
+}
+
+/*
+ * The whole of it: BeerSSH's own client, a session kept by the real
+ * helper behind beersshd, a dropped connection, and the same shell found
+ * on the next. The probe and the attach are two channels of one login,
+ * which beersshd without sessions never allowed.
+ */
+void sshd_test::a_kept_session_comes_back_through_beersshd() {
+	const QByteArray helper = qgetenv("BSSH_TEST_SESSION_BIN");
+	if (helper.isEmpty() || !QFileInfo(QFile::decodeName(helper)).isExecutable())
+		QSKIP("no beerssh-session: make test builds it on Linux");
+
+	/* Its sessions, and the shell they run, kept to this test. */
+	const QString runtime = m_dir->filePath(QStringLiteral("runtime"));
+	QVERIFY(QDir().mkpath(runtime));
+	QVERIFY(QFile::setPermissions(runtime, QFileDevice::ReadOwner | QFileDevice::WriteOwner
+	                                       | QFileDevice::ExeOwner));
+	struct environment_t {
+		QByteArray runtime = qgetenv("XDG_RUNTIME_DIR");
+		QByteArray shell = qgetenv("SHELL");
+		~environment_t() {
+			qputenv("XDG_RUNTIME_DIR", runtime);
+			qputenv("SHELL", shell);
+		}
+	} restore;
+	qputenv("XDG_RUNTIME_DIR", QFile::encodeName(runtime));
+	qputenv("SHELL", "/bin/sh");
+
+	if (!start_server(30, QFile::encodeName(QFileInfo(QFile::decodeName(helper)).absoluteFilePath())))
+		QSKIP("the OpenSSH client is not installed");
+
+	bssh_profile_t profile;
+	profile.name = QStringLiteral("kept");
+	profile.host = QStringLiteral("127.0.0.1");
+	profile.port = m_server->port();
+	profile.user = QStringLiteral("anyone");
+	profile.identity_file = m_config + QStringLiteral("/client");
+	profile.resume_choice = bssh_profile_t::RESUME_ALWAYS;
+
+	bssh_session session(profile);
+	connect(&session, &bssh_session::host_key_unknown, &session,
+	        [&session](const QString &) { session.accept_host_key(); });
+
+	const auto shows = [&session](const QRegularExpression &pattern, int ms) {
+		QElapsedTimer timer;
+		timer.start();
+		QRegularExpressionMatch match;
+		while (timer.elapsed() < ms) {
+			QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+			match = pattern.match(session.emulator()->screen().to_text());
+			if (match.hasMatch()) return match;
+			QTest::qWait(20);
+		}
+		return match;
+	};
+	const auto type = [&session](const QString &text) {
+		session.emulator()->send_paste(text);
+		session.emulator()->send_char(U'\r', 0);
+	};
+	struct hang_up_t {
+		bssh_session &session;
+		~hang_up_t() {
+			session.disconnect_from_host();
+			QTest::qWait(300);
+		}
+	} hang_up{ session };
+
+	session.connect_to_host();
+
+	QRegularExpressionMatch first;
+	for (int tries = 0; tries < 10 && !first.hasMatch(); ++tries) {
+		type(QStringLiteral("KEPT=$$; echo \"kept\"\"=$KEPT.\""));
+		first = shows(QRegularExpression(QStringLiteral("kept=(\\d+)\\.")), 2000);
+	}
+	QVERIFY2(first.hasMatch(), qPrintable(session.emulator()->screen().to_text()));
+	const QString shell = first.captured(1);
+
+	type(QStringLiteral("(sleep 2; echo \"while\"\"-away:$KEPT.\") &"));
+	QTest::qWait(300);
+	session.reconnect();
+
+	QVERIFY2(shows(QRegularExpression(QStringLiteral("while-away:") + shell + QStringLiteral("\\.")), 10000)
+	                 .hasMatch(),
+	         qPrintable(session.emulator()->screen().to_text()));
+	type(QStringLiteral("echo \"sa\"\"me:$$.\""));
+	QVERIFY2(shows(QRegularExpression(QStringLiteral("same:") + shell + QStringLiteral("\\.")), 8000)
+	                 .hasMatch(),
+	         qPrintable(session.emulator()->screen().to_text()));
+
+	/* Closed by the user: the session ends, and nothing stays behind. */
+	session.disconnect_from_host();
+	const QDir sockets(runtime + QStringLiteral("/beerssh-session"));
+	QTRY_VERIFY_WITH_TIMEOUT(sockets.entryList(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::System).isEmpty(),
+	                         5000);
 }

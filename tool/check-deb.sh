@@ -362,6 +362,18 @@ if ! zcat -f /usr/share/man/man1/beerssh-session.1* 2>/dev/null | grep -q "Keep 
 fi
 echo "check-deb: beerssh-session answers, is static, and has its manual page"
 
+# beersshd --sessions looks for the helper beside itself, and its package
+# depends on beerssh-session so that it is there: started, it serves (and
+# timeout ends it) rather than refusing for want of the helper.
+mkdir -p /tmp/served
+timeout 3 beersshd --root /tmp/served --port 0 --sessions > /tmp/sessions.log 2>&1
+if ! grep -q "^serving " /tmp/sessions.log; then
+	echo "check-deb: beersshd --sessions did not start" >&2
+	cat /tmp/sessions.log >&2
+	exit 1
+fi
+echo "check-deb: beersshd --sessions finds the helper it depends on"
+
 # And removing it leaves nothing behind, which is the other half of what a
 # package is for.
 apt-get remove -y -qq beerssh beerssh-fonts >/dev/null 2>&1

@@ -42,13 +42,21 @@ struct bssh_sshd_config_t {
 	 * Generous for a phone on bad Wi-Fi; see serve().
 	 */
 	long exchange_seconds = 30;
+	/*
+	 * The session helper (project.md sec 5.6), or empty for none, which is
+	 * the default: with one, a login may also run "beerssh-session version"
+	 * and "beerssh-session attach NAME" -- that program and nothing else --
+	 * which is a shell as this user, outside the folder above.
+	 */
+	QByteArray session_helper;
 };
 
 /*
  * beersshd's server: SFTP and nothing else, inside one directory, to keys
  * listed in one file (project.md sec 19).
  *
- * No shell, no exec, no forwarding. Keys, and a password where one is set
+ * No shell, no exec, no forwarding -- except, where session_helper is set,
+ * the helper's two commands. Keys, and a password where one is set
  * (the holder, 2026-10-09: a key has to be carried to the phone first, and
  * a password does not). Modern scp runs over
  * SFTP and so works; `scp -O`, the legacy protocol, is an exec request
@@ -132,6 +140,7 @@ signals:
 private:
 	void accept_loop();
 	void serve(connection_t *connection);
+	void serve_channels(connection_t *connection);
 	void reap(bool all);
 
 	bssh_sshd_config_t m_config;

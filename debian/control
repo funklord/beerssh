@@ -29,13 +29,18 @@ Description: curated terminal fonts for BeerSSH
 
 Package: beersshd
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends},
+ beerssh-session (= ${binary:Version})
 Description: SFTP-only server for one folder
  Serves one folder over SFTP, and nothing else, to the keys in an
  authorized keys file and to a password once one is set. It runs
  no shell and no commands, forwards nothing, and keeps every path
  inside the folder. Modern scp works; the legacy scp protocol
  does not. Independent of the BeerSSH terminal.
+ .
+ Started with --sessions it also runs beerssh-session for a login
+ that asks, so BeerSSH's shell there survives a dropped connection.
+ That is a shell as the server's user, so it is off by default.
 
 Package: beerssh-session
 Architecture: any

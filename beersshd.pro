@@ -36,11 +36,13 @@ INCLUDEPATH += $$PWD/src
 CONFIG += no_include_pwd
 
 SOURCES += \
+    src/sshd/helper_channel.cpp \
     src/sshd/root_path.cpp \
     src/sshd/sftp_handler.cpp \
     src/sshd/sshd.cpp
 
 HEADERS += \
+    src/sshd/helper_channel.h \
     src/sshd/root_path.h \
     src/sshd/sftp_handler.h \
     src/sshd/login_throttle.h \

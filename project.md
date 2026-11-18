@@ -2141,9 +2141,9 @@ with any SFTP client.
 **Open, and whose.**
 
 - *How the helper reaches a server*: **beersshd carries it, settled by the
-  holder 2026-11-18.** A host running beersshd has the session helper. This
-  widens beersshd, whose `--help` still says it "runs no shell", and is the
-  same direction as the holder's 2026-11-06 "maybe we should put it in
+  holder 2026-11-18.** A host running beersshd has the session helper:
+  built for the desktop server as `--sessions` (sec 19.1), off by default
+  because it is a shell; the Android app is next. It is the same direction as the holder's 2026-11-06 "maybe we should put it in
   beersshd if it links fuzznet" above. **Uploading it on first use, to a
   plain `sshd` host, stays open as a second route** (holder, 2026-11-18: not
   to be dismissed; an earlier edit of this entry wrongly recorded it as
@@ -20220,7 +20220,36 @@ is reachable by neither route, nor by anything short of root.
 
 ### 19.1 What the server is
 
-SFTP and nothing else, inside one directory, to the keys in one file.
+SFTP and nothing else, inside one directory, to the keys in one file --
+unless started with `--sessions`, the first bullet.
+
+- **`--sessions` runs the session helper, since 2026-11-18** (the holder:
+  "beersshd is supposed to have the helper program", sec 5.6). Off by
+  default, because it is a shell as the server's user, outside the folder;
+  an install that never asked keeps exactly the server above. With it, an
+  exec request is taken only as `beerssh-session version` or
+  `beerssh-session attach NAME`, word for word as the client joins them
+  (single spaces, a name of letters, digits, `-` and `_`), and the words go
+  to `execv` of the `beerssh-session` installed beside beersshd -- never to
+  a shell, so no syntax in the request means anything. Everything else is
+  refused as before. The helper gets every other descriptor of the server
+  closed, or the session it leaves running would hold the listening port
+  after beersshd exited. A connection may then hold up to eight channels,
+  because BeerSSH's probe, attach and file panel are three channels of one
+  login, all driven from one poll loop (`serve_channels`): SFTP there is
+  answered as its requests arrive rather than by the blocking loop the
+  SFTP-only path keeps, and a login with no channel at all is let go after
+  60 s, as it holds one of the four slots. The client's EOF reaches the
+  helper as EOF, its stderr arrives as stderr and its exit status as the
+  channel's; at most 256 KiB waits in the server in either direction.
+  The Debian `beersshd` package depends on `beerssh-session` at the same
+  version, so `--sessions` finds it. **Measured while building it:**
+  `ssh_disconnect` frees every channel the session still has, so the
+  channel list is emptied before it -- the first version freed them after
+  and crashed on a channel opened and refused. **Not yet:** the Android
+  app (the helper as a `lib*.so` in the native library directory, the
+  sandbox's `/system/bin/sh` and a runtime directory), and uploading the
+  helper to plain `sshd` hosts, which stays open (sec 5.6).
 
 - **Keys, and a password once one is set — [password added 2026-10-09,
   the holder: "I need the key or a password prompt, we should also have a
@@ -20355,11 +20384,25 @@ trip of 300 KB through many READ/WRITE requests and the 64 KB read limit;
 reads, writes, removes and renames out of the root by `..` and by a link,
 each refused with the outside untouched; an unlisted key refused, then
 accepted once listed without a restart; an options line not honoured; an
-exec request refused; `scp` exiting 0 with no "closed by remote host". The
+exec request refused, the helper's own words included while `--sessions`
+is off; `scp` exiting 0 with no "closed by remote host". With it on,
+`with_sessions_on_it_runs_the_helper_and_nothing_else` drives a stand-in
+helper through `ssh` (both directions, 40,000 lines through, EOF, status 7
+and stderr back, six other commands refused, SFTP beside), and
+`a_kept_session_comes_back_through_beersshd` runs BeerSSH's own client
+against the real helper: a dropped connection, the same shell after it,
+and no session left once the user closes it. `make test` builds the helper
+on Linux for that one and passes it in; elsewhere it skips. A
+ControlMaster connection holds an attach open while `version` runs beside
+it, which is the only part that sees two channels at once: BeerSSH's own
+probe has closed before its attach opens, so the first sabotage of the
+channel limit went uncaught until that was added. The
 live tests skip without the OpenSSH client, so CI's package list carries
 `openssh-client`. `tool/sabotage/beersshd.toml` breaks containment, the
 symlink-leaf check, the key lookup, the exit status and the hangup wait,
-and all five are caught.
+and all five are caught; its five `--sessions` edits (any exec taken, a
+path in the name, the EOF, the status, one channel) are caught too, and
+the three that are not there are named in the file with why.
 
 ### 19.5 The Android app
 

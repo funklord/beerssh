@@ -185,3 +185,48 @@ file = "src/sshd/sshd.cpp"
 find = "\t\tif (waiting >= m_config.max_connections - 1) {\n"
 replace = "\t\tif (false) {\n"
 expect = "silent_connections_do_not_hold_the_server"
+
+# --sessions (sec 5.6): the helper's two commands and nothing else, both
+# directions of bytes, the client's EOF and the helper's status
+# (with_sessions_on_it_runs_the_helper_and_nothing_else).
+[[sabotage]]
+name = "any exec request runs the helper, whatever it asks"
+file = "src/sshd/helper_channel.cpp"
+find = "\tif (words.value(0) != PROGRAM) return {};\n"
+replace = "\tif (words.value(0) != PROGRAM) return { PROGRAM, \"version\" };\n"
+expect = "with_sessions_on_it_runs_the_helper_and_nothing_else"
+
+[[sabotage]]
+name = "a session name with a path in it is passed on"
+file = "src/sshd/helper_channel.cpp"
+find = "&& name_is_safe(words.at(2))) return words;"
+replace = ") return words;"
+expect = "with_sessions_on_it_runs_the_helper_and_nothing_else"
+
+[[sabotage]]
+name = "the client's EOF never reaches the helper"
+file = "src/sshd/sshd.cpp"
+find = "\t\tif (client_done && served->to_helper.isEmpty()) {\n"
+replace = "\t\tif (false) {\n"
+expect = "with_sessions_on_it_runs_the_helper_and_nothing_else"
+
+[[sabotage]]
+name = "the helper's exit status is not passed on"
+file = "src/sshd/sshd.cpp"
+find = "\t\t\t\tssh_channel_request_send_exit_status(channel, served->status);\n"
+replace = "\t\t\t\tssh_channel_request_send_exit_status(channel, 0);\n"
+expect = "with_sessions_on_it_runs_the_helper_and_nothing_else"
+
+# Not here, though tried 2026-11-18: dropping the --sessions branch at
+# channel open, or the empty-path refusal in on_served_exec -- each guard
+# alone keeps the helper's words refused without --sessions, so breaking
+# one leaves the other answering -- and writing past the client's window,
+# where ssh_channel_write waits for the window instead. All left every
+# test green and none breaks anything.
+
+[[sabotage]]
+name = "one channel to a connection, as SFTP alone needed"
+file = "src/sshd/sshd.cpp"
+find = "\t\tif (connection->channels.size() >= MAX_CHANNELS) return nullptr;\n"
+replace = "\t\tif (connection->channels.size() >= 1) return nullptr;\n"
+expect = "with_sessions_on_it_runs_the_helper_and_nothing_else"

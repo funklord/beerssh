@@ -111,6 +111,7 @@ SOURCES += \
     ../src/ssh/ssh_session.cpp \
     ../src/ssh/jump_tunnel.cpp \
     ../src/ssh/ssh_session_libssh.cpp \
+    ../src/sshd/helper_channel.cpp \
     ../src/sshd/root_path.cpp \
     ../src/sshd/sftp_handler.cpp \
     ../src/sshd/sshd.cpp \
@@ -248,6 +249,7 @@ HEADERS += \
     ../src/ssh/ssh_session.h \
     ../src/ssh/jump_tunnel.h \
     ../src/ssh/ssh_session_libssh.h \
+    ../src/sshd/helper_channel.h \
     ../src/sshd/root_path.h \
     ../src/sshd/sftp_handler.h \
     ../src/sshd/login_throttle.h \
@@ -356,7 +358,7 @@ win32 {
         pty_session_test.cpp sshd_test.cpp sshd_window_test.cpp \
         ../src/ssh/pty_session.cpp ../src/model/handoff_wire.cpp \
         ../src/session/session_host.c \
-        ../src/sshd/root_path.cpp ../src/sshd/sftp_handler.cpp \
+        ../src/sshd/root_path.cpp ../src/sshd/sftp_handler.cpp ../src/sshd/helper_channel.cpp \
         ../src/sshd/sshd.cpp ../src/sshd/sshd_demo.cpp \
         ../src/sshd/sshd_keeper.cpp ../src/sshd/sshd_platform.cpp \
         ../src/sshd/sshd_remote.cpp ../src/sshd/sshd_platform_desktop.cpp \
@@ -366,7 +368,7 @@ win32 {
         pty_session_test.h sshd_test.h sshd_window_test.h \
         ../src/ssh/pty_session.h ../src/model/handoff_wire.h \
         ../src/session/session_host.h \
-        ../src/sshd/root_path.h ../src/sshd/sftp_handler.h \
+        ../src/sshd/root_path.h ../src/sshd/sftp_handler.h ../src/sshd/helper_channel.h \
         ../src/sshd/login_throttle.h ../src/sshd/sshd.h \
         ../src/sshd/sshd_platform.h ../src/sshd/sshd_control.h \
         ../src/sshd/sshd_demo.h ../src/sshd/sshd_keeper.h \

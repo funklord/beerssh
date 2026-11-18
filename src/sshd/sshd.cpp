@@ -23,6 +23,7 @@
 
 #include <arpa/inet.h>
 #include <cerrno>
+#include <csignal>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
@@ -34,6 +35,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "sshd/helper_channel.h"
 #include "sshd/root_path.h"
 #include "sshd/sftp_handler.h"
 
@@ -47,6 +49,18 @@ const auto HANGUP_GRACE = std::chrono::seconds(5);
 
 /* Keys offered before giving up; an agent with many keys offers each in turn. */
 const int AUTH_ATTEMPT_LIMIT = 20;
+
+/* Session channels a connection may hold where the helper is served. */
+const size_t MAX_CHANNELS = 8;
+
+/* How much of either direction waits in this process before the other side is made to. */
+const int HELPER_BUFFER = 256 * 1024;
+
+/*
+ * A logged-in connection with no channel at all, between a client's probe
+ * and its attach, is held this long and no longer: it holds a slot.
+ */
+const auto IDLE_LIMIT = std::chrono::seconds(60);
 
 /*
  * Passwords, unlike keys, can be guessed: three tries a connection, a
@@ -169,6 +183,46 @@ QString prepare_host_key(const QString &path, QString *error) {
 
 } /* namespace */
 
+/*
+ * One session channel of a connection that may hold several: where the
+ * helper is served, a client opens one to ask its version, one to attach,
+ * and one for SFTP beside them (its file panel), all on one login.
+ */
+struct served_channel_t {
+	bssh_sshd::connection_t *connection = nullptr;
+	ssh_channel channel = nullptr;
+	struct ssh_channel_callbacks_struct callbacks;
+
+	enum kind_t { OPEN, SFTP, HELPER } kind = OPEN;
+	bool finished = false;
+
+	sftp_session sftp = nullptr;
+	std::unique_ptr<bssh_sftp_handler> handler;
+
+	bssh_helper_process_t helper;
+	QList<QByteArray> arguments;
+	QByteArray to_helper;      /* from the client, not yet taken by the helper */
+	QByteArray from_helper;    /* its stdout, not yet sent */
+	QByteArray errors_out;     /* its stderr, not yet sent */
+	bool input_shut = false;   /* the client's EOF passed on */
+	bool output_ended = false;
+	bool errors_ended = false;
+	bool watching = false;     /* its stdout is in the event loop */
+	bool watching_errors = false;
+	int status = -1;
+
+	~served_channel_t() {
+		/* Only where the connection ended before its loop did: the loop reaps its own. */
+		if (helper.pid >= 0) {
+			::kill(helper.pid, SIGKILL);
+			bssh_helper_reap(&helper, true);
+		}
+		if (sftp) sftp_server_free(sftp);
+		bssh_helper_close(&helper);
+		if (channel) ssh_channel_free(channel);
+	}
+};
+
 struct bssh_sshd::connection_t {
 	bssh_sshd *owner = nullptr;
 	ssh_session session = nullptr;
@@ -185,8 +239,13 @@ struct bssh_sshd::connection_t {
 	bool sftp_requested = false;
 	struct ssh_channel_callbacks_struct channel_callbacks;
 
+	/* Where the helper is served: every channel, and whether any asked for something. */
+	std::list<std::unique_ptr<served_channel_t>> channels;
+	bool requested = false;
+
 	/* Freed only once the thread has been joined; see the end of serve(). */
 	~connection_t() {
+		channels.clear();   /* serve() has emptied it; their channels belong to the session */
 		if (session) ssh_free(session);
 	}
 };
@@ -198,6 +257,8 @@ int on_auth_pubkey(ssh_session, const char *user, struct ssh_key_struct *key,
 int on_auth_password(ssh_session, const char *user, const char *password, void *userdata);
 ssh_channel on_channel_open(ssh_session session, void *userdata);
 int on_subsystem(ssh_session, ssh_channel channel, const char *subsystem, void *userdata);
+int on_served_subsystem(ssh_session, ssh_channel, const char *subsystem, void *userdata);
+int on_served_exec(ssh_session, ssh_channel, const char *command, void *userdata);
 
 } /* namespace */
 
@@ -571,7 +632,7 @@ void bssh_sshd::serve(connection_t *connection) {
 		ssh_event_add_session(loop, session);
 		const auto deadline = std::chrono::steady_clock::now() + LOGIN_DEADLINE;
 
-		while (!connection->sftp_requested && !m_stopping) {
+		while (!connection->sftp_requested && !connection->requested && !m_stopping) {
 			if (ssh_event_dopoll(loop, 100) == SSH_ERROR) break;
 			if (std::chrono::steady_clock::now() > deadline) break;
 			if (connection->attempts > AUTH_ATTEMPT_LIMIT) break;
@@ -583,7 +644,9 @@ void bssh_sshd::serve(connection_t *connection) {
 		ssh_event_remove_session(loop, session);
 		ssh_event_free(loop);
 
-		if (connection->sftp_requested && connection->authenticated && !m_stopping) {
+		if (connection->requested && connection->authenticated && !m_stopping) {
+			serve_channels(connection);
+		} else if (connection->sftp_requested && connection->authenticated && !m_stopping) {
 			emit logged(QStringLiteral("%1: %2 started SFTP").arg(connection->peer, connection->user));
 
 			sftp_session sftp = sftp_server_new(session, connection->channel);
@@ -644,6 +707,11 @@ void bssh_sshd::serve(connection_t *connection) {
 		ssh_channel_free(connection->channel);
 		connection->channel = nullptr;
 	}
+	/*
+	 * Before the disconnect, which frees every channel the session still
+	 * has: one opened and never asked for anything is still in this list.
+	 */
+	connection->channels.clear();
 	ssh_disconnect(session);
 
 	emit logged(QStringLiteral("%1: disconnected").arg(connection->peer));
@@ -655,6 +723,227 @@ void bssh_sshd::serve(connection_t *connection) {
 	 * lock to shut it down. The session goes with the connection when it
 	 * is reaped, after this thread has been joined.
 	 */
+}
+
+namespace {
+
+/* A helper's stdout or stderr, read into its buffer; the loop sends it on. */
+int helper_readable(socket_t fd, int, void *userdata) {
+	auto *served = static_cast<served_channel_t *>(userdata);
+	const bool errors = fd == served->helper.errors;
+	QByteArray &into = errors ? served->errors_out : served->from_helper;
+	bool &ended = errors ? served->errors_ended : served->output_ended;
+
+	char chunk[16384];
+	while (!ended && into.size() < HELPER_BUFFER) {
+		const ssize_t got = ::read(fd, chunk, sizeof chunk);
+		if (got > 0) {
+			into.append(chunk, int(got));
+		} else if (got < 0 && errno == EINTR) {
+			continue;
+		} else if (got < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+			break;
+		} else {
+			ended = true;
+		}
+	}
+	return 0;
+}
+
+/*
+ * In the event loop exactly while there is room to read into: a full
+ * buffer left in would wake the loop for ever with nothing it could do.
+ */
+void watch(served_channel_t *served, ssh_event loop, bool stopping) {
+	const bool output = !stopping && !served->output_ended && served->from_helper.size() < HELPER_BUFFER;
+	if (output != served->watching) {
+		if (output) ssh_event_add_fd(loop, served->helper.io, POLLIN, helper_readable, served);
+		else ssh_event_remove_fd(loop, served->helper.io);
+		served->watching = output;
+	}
+	const bool errors = !stopping && !served->errors_ended && served->errors_out.size() < HELPER_BUFFER;
+	if (errors != served->watching_errors) {
+		if (errors) ssh_event_add_fd(loop, served->helper.errors, POLLIN, helper_readable, served);
+		else ssh_event_remove_fd(loop, served->helper.errors);
+		served->watching_errors = errors;
+	}
+}
+
+/* As much of `bytes` as the client's window takes now; the rest waits. */
+void send_some(ssh_channel channel, QByteArray *bytes, bool errors) {
+	if (bytes->isEmpty()) return;
+	if (!ssh_channel_is_open(channel)) {
+		bytes->clear();
+		return;
+	}
+	const int room = int(qMin<qint64>(ssh_channel_window_size(channel), bytes->size()));
+	if (room <= 0) return;
+	const int wrote = errors ? ssh_channel_write_stderr(channel, bytes->constData(), uint32_t(room))
+	                         : ssh_channel_write(channel, bytes->constData(), uint32_t(room));
+	if (wrote > 0) bytes->remove(0, wrote);
+	else if (wrote == SSH_ERROR) bytes->clear();
+}
+
+/*
+ * One turn of a helper's channel: the client's bytes to the helper, the
+ * helper's to the client, and the end passed on either way. True while
+ * something waits that a moment will move.
+ */
+bool pump_helper(served_channel_t *served) {
+	ssh_channel channel = served->channel;
+
+	if (!served->input_shut) {
+		const int available = ssh_channel_poll(channel, 0);
+		const int room = HELPER_BUFFER - int(served->to_helper.size());
+		if (available > 0 && room > 0) {
+			QByteArray chunk(qMin(available, room), Qt::Uninitialized);
+			const int got = ssh_channel_read_nonblocking(channel, chunk.data(), uint32_t(chunk.size()), 0);
+			if (got > 0) served->to_helper.append(chunk.constData(), got);
+		}
+		while (!served->to_helper.isEmpty()) {
+			const ssize_t sent = ::send(served->helper.io, served->to_helper.constData(),
+			                            size_t(served->to_helper.size()), BSSH_MSG_NOSIGNAL);
+			if (sent > 0) {
+				served->to_helper.remove(0, int(sent));
+			} else if (sent < 0 && errno == EINTR) {
+				continue;
+			} else if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+				break;
+			} else {
+				served->to_helper.clear();   /* it has gone, and nothing will read this */
+			}
+		}
+		/* EOF, an error, or a channel the client closed outright: the helper hears it as EOF. */
+		const bool client_done = ssh_channel_poll(channel, 0) < 0 || !ssh_channel_is_open(channel);
+		if (client_done && served->to_helper.isEmpty()) {
+			::shutdown(served->helper.io, ssh_channel_is_open(channel) ? SHUT_WR : SHUT_RDWR);
+			served->input_shut = true;
+		}
+	}
+
+	send_some(channel, &served->from_helper, false);
+	send_some(channel, &served->errors_out, true);
+
+	if (served->output_ended && served->errors_ended && served->from_helper.isEmpty()
+	    && served->errors_out.isEmpty()) {
+		if (served->status < 0) served->status = bssh_helper_reap(&served->helper, false);
+		if (served->status >= 0) {
+			/* Ended as sshd ends a command: its status, EOF, close. */
+			if (ssh_channel_is_open(channel)) {
+				ssh_channel_request_send_exit_status(channel, served->status);
+				ssh_channel_send_eof(channel);
+				ssh_channel_close(channel);
+			}
+			served->finished = true;
+			return false;
+		}
+		return true;
+	}
+	return !served->to_helper.isEmpty() || !served->from_helper.isEmpty() || !served->errors_out.isEmpty();
+}
+
+/* What arrived for an SFTP channel, answered without waiting for more. */
+void pump_sftp(served_channel_t *served, ssh_session session, const bssh_root_path &root) {
+	ssh_channel channel = served->channel;
+	bool ended = !ssh_channel_is_open(channel);
+
+	if (!ended && !served->sftp) {
+		served->sftp = sftp_server_new(session, channel);
+		/* As in serve(): the one public way to answer INIT and drive the loop here. */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+		const bool ready = served->sftp && sftp_server_init(served->sftp) == 0;
+#pragma GCC diagnostic pop
+		if (ready) served->handler = std::make_unique<bssh_sftp_handler>(served->sftp, root);
+		else ended = true;
+	}
+	while (!ended && ssh_channel_poll(channel, 0) > 0) {
+		sftp_client_message message = sftp_get_client_message(served->sftp);
+		if (!message) {
+			ended = true;
+			break;
+		}
+		const bool answered = served->handler->handle(message);
+		sftp_client_message_free(message);
+		if (!answered) ended = true;
+	}
+	if (!ended && ssh_channel_poll(channel, 0) < 0) ended = true;
+	if (!ended) return;
+
+	if (ssh_channel_is_open(channel)) {
+		ssh_channel_request_send_exit_status(channel, 0);
+		ssh_channel_send_eof(channel);
+		ssh_channel_close(channel);
+	}
+	served->finished = true;
+}
+
+} /* namespace */
+
+/*
+ * A connection where the helper is served: any number of channels up to
+ * MAX_CHANNELS, each a helper or SFTP, driven from one loop so that one
+ * cannot stall another. Ends when the client hangs up, when the server
+ * stops, or when the connection has sat with no channel for IDLE_LIMIT.
+ */
+void bssh_sshd::serve_channels(connection_t *connection) {
+	ssh_session session = connection->session;
+	const bssh_root_path root(m_config.root);
+	ssh_event loop = ssh_event_new();
+	ssh_event_add_session(loop, session);
+	auto idle_since = std::chrono::steady_clock::now();
+
+	while (!m_stopping) {
+		bool busy = false;
+		for (const std::unique_ptr<served_channel_t> &served : connection->channels) {
+			if (served->kind == served_channel_t::HELPER) {
+				busy |= pump_helper(served.get());
+				watch(served.get(), loop, served->finished);
+			} else if (served->kind == served_channel_t::SFTP) {
+				pump_sftp(served.get(), session, root);
+			} else if (!ssh_channel_is_open(served->channel)) {
+				served->finished = true;   /* opened, asked for nothing, closed */
+			}
+		}
+		connection->channels.remove_if(
+		        [](const std::unique_ptr<served_channel_t> &served) { return served->finished; });
+
+		const auto now = std::chrono::steady_clock::now();
+		if (!connection->channels.empty()) idle_since = now;
+		else if (now - idle_since > IDLE_LIMIT) break;
+
+		if (ssh_get_status(session) & (SSH_CLOSED | SSH_CLOSED_ERROR)) break;
+		if (ssh_event_dopoll(loop, busy ? 20 : 200) == SSH_ERROR) break;
+	}
+
+	/*
+	 * Every helper still running is told its client has gone, which ends
+	 * an attach the way a dropped connection does -- the session itself
+	 * goes on, that being the point -- and is waited for, briefly.
+	 */
+	for (const std::unique_ptr<served_channel_t> &served : connection->channels) {
+		if (served->kind != served_channel_t::HELPER) continue;
+		watch(served.get(), loop, true);
+		if (served->helper.io >= 0) ::shutdown(served->helper.io, SHUT_RDWR);
+	}
+	for (const std::unique_ptr<served_channel_t> &served : connection->channels) {
+		if (served->kind != served_channel_t::HELPER) continue;
+		for (int waited = 0; served->helper.pid >= 0 && waited < 2000; waited += 20) {
+			if (bssh_helper_reap(&served->helper, false) >= 0) break;
+			std::this_thread::sleep_for(std::chrono::milliseconds(20));
+		}
+		if (served->helper.pid >= 0) {
+			::kill(served->helper.pid, SIGKILL);
+			bssh_helper_reap(&served->helper, true);
+		}
+		if (ssh_channel_is_open(served->channel)) {
+			ssh_channel_send_eof(served->channel);
+			ssh_channel_close(served->channel);
+		}
+	}
+	ssh_event_remove_session(loop, session);
+	ssh_event_free(loop);
+	connection->channels.clear();
 }
 
 namespace {
@@ -716,8 +1005,30 @@ int on_auth_password(ssh_session, const char *user, const char *password, void *
 ssh_channel on_channel_open(ssh_session session, void *userdata) {
 	auto *connection = static_cast<bssh_sshd::connection_t *>(userdata);
 
+	if (!connection->authenticated) return nullptr;
+
+	/*
+	 * Where the helper is served, several: its version, the attach and
+	 * SFTP beside them. Bounded all the same, as the connections are.
+	 */
+	if (!connection->owner->config().session_helper.isEmpty()) {
+		if (connection->channels.size() >= MAX_CHANNELS) return nullptr;
+		auto served = std::make_unique<served_channel_t>();
+		served->connection = connection;
+		served->channel = ssh_channel_new(session);
+		if (!served->channel) return nullptr;
+		std::memset(&served->callbacks, 0, sizeof served->callbacks);
+		served->callbacks.userdata = served.get();
+		served->callbacks.channel_subsystem_request_function = on_served_subsystem;
+		served->callbacks.channel_exec_request_function = on_served_exec;
+		ssh_callbacks_init(&served->callbacks);
+		ssh_set_channel_callbacks(served->channel, &served->callbacks);
+		connection->channels.push_back(std::move(served));
+		return connection->channels.back()->channel;
+	}
+
 	/* One session channel per connection: SFTP needs no more. */
-	if (!connection->authenticated || connection->channel) return nullptr;
+	if (connection->channel) return nullptr;
 
 	connection->channel = ssh_channel_new(session);
 	ssh_set_channel_callbacks(connection->channel, &connection->channel_callbacks);
@@ -729,6 +1040,47 @@ int on_subsystem(ssh_session, ssh_channel channel, const char *subsystem, void *
 	if (channel != connection->channel || std::strcmp(subsystem, "sftp") != 0) return SSH_ERROR;
 
 	connection->sftp_requested = true;
+	return SSH_OK;
+}
+
+int on_served_subsystem(ssh_session, ssh_channel, const char *subsystem, void *userdata) {
+	auto *served = static_cast<served_channel_t *>(userdata);
+	if (served->kind != served_channel_t::OPEN || std::strcmp(subsystem, "sftp") != 0) return SSH_ERROR;
+	served->kind = served_channel_t::SFTP;
+	served->connection->requested = true;
+	return SSH_OK;
+}
+
+/*
+ * The helper's two commands, and nothing else: anything more is what the
+ * server without a helper refuses as well. Started here, so that a client
+ * told OK finds it running.
+ */
+int on_served_exec(ssh_session, ssh_channel, const char *command, void *userdata) {
+	auto *served = static_cast<served_channel_t *>(userdata);
+	bssh_sshd::connection_t *connection = served->connection;
+	const QByteArray program = connection->owner->config().session_helper;
+	if (served->kind != served_channel_t::OPEN || program.isEmpty()) return SSH_ERROR;
+
+	QList<QByteArray> arguments = bssh_helper_arguments(QByteArray(command));
+	if (arguments.isEmpty()) {
+		emit connection->owner->logged(QStringLiteral("%1: refused to run %2")
+		                               .arg(connection->peer, QString::fromUtf8(command).left(80)));
+		return SSH_ERROR;
+	}
+	if (!bssh_helper_start(program, arguments, &served->helper)) {
+		emit connection->owner->logged(QStringLiteral("%1: the session helper would not start")
+		                               .arg(connection->peer));
+		return SSH_ERROR;
+	}
+	served->arguments = arguments;
+	served->kind = served_channel_t::HELPER;
+	connection->requested = true;
+	if (arguments.at(1) == "attach") {
+		emit connection->owner->logged(QStringLiteral("%1: %2 attached to session %3")
+		                               .arg(connection->peer, connection->user,
+		                                    QString::fromUtf8(arguments.at(2))));
+	}
 	return SSH_OK;
 }
 

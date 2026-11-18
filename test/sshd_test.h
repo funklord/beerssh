@@ -40,9 +40,11 @@ private slots:
 	void sftp_is_all_it_serves();
 	void scp_finishes_with_a_clean_exit();
 	void a_listener_the_system_takes_away_comes_back_without_spinning();
+	void with_sessions_on_it_runs_the_helper_and_nothing_else();
+	void a_kept_session_comes_back_through_beersshd();
 
 private:
-	bool start_server(long exchange_seconds = 30);
+	bool start_server(long exchange_seconds = 30, const QByteArray &session_helper = QByteArray());
 	int client(const QString &program, const QStringList &args, const QByteArray &input = QByteArray(),
 	           QByteArray *output = nullptr, const QStringList &environment = QStringList());
 	QStringList client_options(const QString &key) const;

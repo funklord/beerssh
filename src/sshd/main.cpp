@@ -55,6 +55,10 @@ const sshd_option_t SSHD_OPTIONS[] = {
 	                             "~/.config/beersshd." },
 	{ "password-file", "FILE", "Where the password's hash is kept, re-read at every "
 	                           "login; by default password in ~/.config/beersshd." },
+	{ "sessions", nullptr, "Also run beerssh-session, installed beside this program, for "
+	                       "a login that asks: a terminal session that survives a dropped "
+	                       "connection, as the BeerSSH app offers. That is a shell as this "
+	                       "user, outside the served folder, so it is off unless asked for." },
 	{ "set-password", nullptr, "Read a password from standard input, without echoing "
 	                           "it at a terminal, and store its salted hash; an empty "
 	                           "line removes the password. Serves nothing." },
@@ -66,12 +70,13 @@ const sshd_option_t SSHD_OPTIONS[] = {
 void usage(QTextStream &out) {
 	out << "usage: beersshd --root DIR [--port N] [--bind ADDRESS]\n"
 	       "                [--host-key FILE] [--authorized-keys FILE]\n"
-	       "                [--password-file FILE]\n"
+	       "                [--password-file FILE] [--sessions]\n"
 	       "       beersshd --set-password [--password-file FILE]\n"
 	       "\n"
 	       "Serves DIR over SFTP, and nothing else, to the keys in the\n"
 	       "authorized keys file and to the password, if one is set.\n"
-	       "Modern scp works; scp -O does not.\n"
+	       "Modern scp works; scp -O does not. With --sessions, also\n"
+	       "BeerSSH's sessions that survive a dropped connection.\n"
 	       "\n";
 	for (const sshd_option_t &option : SSHD_OPTIONS) {
 		QString head = QStringLiteral("--") + QLatin1String(option.name);
@@ -113,7 +118,8 @@ void man_page(QTextStream &out) {
 	               "beersshd serves one folder over SFTP to the keys in its authorized "
 	               "keys file and, once one is set, to a password. It runs no shell and "
 	               "no commands, forwards nothing, and keeps every path inside the "
-	               "folder. Modern scp works, being SFTP underneath; scp -O, the old "
+	               "folder -- unless started with --sessions, below. Modern scp "
+	               "works, being SFTP underneath; scp -O, the old "
 	               "protocol, does not.")) << "\n.PP\n"
 	    << roff(QStringLiteral(
 	               "The same server runs on Android as an app of its own. It writes a "
@@ -189,6 +195,9 @@ int main(int argc, char *argv[]) {
 			config.authorized_keys_path = args.at(++i);
 		} else if (arg == QStringLiteral("--password-file") && has_value) {
 			config.password_path = args.at(++i);
+		} else if (arg == QStringLiteral("--sessions")) {
+			config.session_helper = QFile::encodeName(QCoreApplication::applicationDirPath()
+			                                          + QStringLiteral("/beerssh-session"));
 		} else if (arg == QStringLiteral("--set-password")) {
 			set_password = true;
 		} else {
@@ -233,6 +242,13 @@ int main(int argc, char *argv[]) {
 	if (config.root.isEmpty()) {
 		usage(err);
 		return 2;
+	}
+
+	if (!config.session_helper.isEmpty()
+	    && !QFileInfo(QFile::decodeName(config.session_helper)).isExecutable()) {
+		err << "beersshd: --sessions needs " << QFile::decodeName(config.session_helper)
+		    << ", which is not there.\n";
+		return 1;
 	}
 
 	if (!QFile::exists(config.authorized_keys_path)
