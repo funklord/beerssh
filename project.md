@@ -12,6 +12,16 @@
 
 ---
 
+## State of play -- read first
+
+**Newest fold: *Fold 2026-11-19: device checks, a packaging fault, two open
+questions* at the end of this file.** In short: BeerSSH's Android floor is API 28
+(sec 2); the phone app reaches hosts over fuzznet and pairs from the terminal's
+long-press menu; beersshd's APK no longer aborts at start with its helpers
+(sec 19.1); both apps were seen working end to end on an API 36 emulator, not yet
+on the Fold. Open and the holder's: a "swap this terminal for another" feature,
+and whether a package's version should name its commit.
+
 ## 0.1 Name and identity — **[DECIDED]**
 
 | Field | Value |
@@ -21364,3 +21374,70 @@ machine -- the untried case -- a build now reaches the network without
 `BSSH_CI_ENGINE=hull` (sec 12.4): the package step names its network,
 and the run says `(network none)`, since nothing the job does after
 the packages are installed needs one.
+
+## Fold 2026-11-19: device checks, a packaging fault, two open questions
+
+What sessions on 2026-11-18 and 19 learned and had not yet written down;
+the rest is in the sections each item names.
+
+**Done and recorded where it belongs.** minSdk 28 (sec 2); libssh built
+with `HAVE_GLOB=0` at API 28, bionic having `glob()` but no `GLOB_TILDE`;
+BeerSSH's Android build links the fuzznet client and pairs from the long-press
+menu (sec 5.6); beersshd stops its fuzznet host for a pairing (fuzznet's
+sec 1275) and answers `beersshd --fuzznet-pair` over a login; uploads are
+announced to MediaStore (sec 19.6); snurra in the player list. **`7a35ad1`
+fixed beersshd's APK exiting before its window** whenever it carried the
+session helper (since `de63836`): `ANDROID_EXTRA_LIBS` puts a file in Qt's
+`bundled_libs`, which the loader `dlopen()`s, and the helper and fuzznet host
+are static executables. They are installed into `/libs/<abi>` by qmake's
+`INSTALLS` now (sec 19.1). **Lens taken from it:** a packaging fault only a
+device shows; the only other `ANDROID_EXTRA_LIBS` use, FFmpeg's libraries in
+`beerssh.pro`, is real shared objects, and BeerSSH started with them.
+
+**Driving beersshd on an emulator, the recipe that worked (API 36,
+`fzp_api36` with `-read-only`, so the AVD is untouched):**
+- Settings without the UI: `run-as se.vibes.beersshd` and write
+  `files/.config/vibes.se/beersshd.conf` (`[General]` / `sessions=true`) and
+  `files/authorized_keys`; `appops set ... MANAGE_EXTERNAL_STORAGE allow`.
+- The server binds the Wi-Fi address only (10.0.2.16 there), so neither
+  `adb forward` nor the console's `redir` reaches it. A relay inside the
+  device does: `adb shell 'nc -L -p 8023 nc 10.0.2.16 8022'` and
+  `adb forward tcp:18022 tcp:8023`.
+- BeerSSH on the same device reaches 10.0.2.16:8022 directly. A plain host
+  fails with "Channel request pty-req failed" -- beersshd gives no plain
+  shell -- so the host needs *Keep the shell on the server* On.
+- Qt's widgets are in `uiautomator dump` by their accessible names, which
+  is the cheap way to find a field. Under host load the emulator's own
+  System UI raises "isn't responding"; Wait dismisses it.
+
+**Open, the holder's: replace one terminal with another (asked 2026-11-19).**
+The holder: "one terminal can be replaced by another terminal running on the
+same machine ... hide the current terminal into the same global list and
+replace it with another ... If that terminal is in a window already, the
+other one would be closed." Fits what exists: the registry is process-wide,
+a session is shown in one pane at a time (sec 8.4), and `take_session` is
+already a move announced through the registry. Missing is a **set-aside**
+state -- alive, in no pane -- and a pane action, *Swap with...*, listing
+every session (set aside, and in other windows by name); a pick shows it
+here, sets this pane's aside, and the source pane falls back to its next tab
+or closes, a window with no pane closing as a dragged-out last tab's does.
+Precedent: Emacs's buffers (`C-x b`), with the one difference that a buffer
+may show in two windows and a session here moves. Points to settle: whether
+set-aside is simply a tab with no pane (on a phone they nearly coincide);
+where set-aside sessions are listed (host list's Sessions section made
+process-wide -- it is per window now, `set_open_sessions(m_shown)` -- the
+tray, and the quit prompt's count, which is process-wide already); restart
+behaviour the same as a hidden tab's. Cost: moderate, the move itself being
+built. **Waiting on the holder's go-ahead.**
+
+**Open, the holder's: a package's version does not say which build it is.**
+The holder could not find maximise (`504b559`, 2026-11-18 13:48) and asked
+whether the install was current. It was not: `/usr/bin/beerssh` came from a
+deb built 2026-11-17 11:56 and reinstalled 2026-11-18 20:47, and every build
+is `1.0`, so dpkg cannot tell a stale deb from a fresh one. Checked by the
+binary itself: Qt literals are UTF-16, so `strings -el` is the search --
+"Sessions and Hosts" found, "Show every pane" absent. Offered: carry the
+commit and date in the Debian version (`1.0+git<date>.<sha>`), so `dpkg -l`
+answers. Not made: the version is `VERSION`'s single source, and what a
+package's version says is the holder's call.
+
