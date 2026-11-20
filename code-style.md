@@ -369,7 +369,8 @@ headers keep their own names, as the paragraph above requires.
 ### Indentation in C++
 
 Alignment within a line also covers a constructor's member-initialiser
-list. A tab width of 2 renders the tree as it reads in review.
+list. No tab width is prescribed; reviews here have used 2, as a viewing
+choice only.
 
 ```cpp
 void bssh_terminal_view::recompute_grid() {
@@ -384,16 +385,6 @@ void bssh_terminal_view::recompute_grid() {
 
 `switch` bodies get a full tab too: a `case`/`default` body is one level
 deeper than its brace nesting, since C and C++ labels open no brace.
-
-**A single-statement body wants braces or a one-liner**, not a bare
-indented line:
-
-```cpp
-if (!view) return;              /* fine */
-if (self_test) {                /* fine */
-→   QTimer::singleShot(0, &app, &QCoreApplication::quit);
-}
-```
 
 **A braceless single-statement body is permitted, and sometimes better.**
 It used to be discouraged here for a tool's convenience: the old
