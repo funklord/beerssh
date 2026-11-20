@@ -1,0 +1,28 @@
+# Sabotages for the Terminals sidebar asking other processes (2026-11-20):
+# off the window's thread, and never waiting on a process that does not
+# accept.
+
+# A blocking connect: a process alive and not accepting fills its queue,
+# and the next question waits until it is read -- for ever.
+[[sabotage]]
+name = "a connect waits on a process that never accepts"
+file = "src/model/handoff_point.cpp"
+find = "\tif (flags < 0 || ::fcntl(socket, F_SETFL, flags | O_NONBLOCK) != 0 ||\n"
+replace = "\tif (flags < 0 ||\n"
+expect = "the_terminals_list_asks_other_processes_without_waiting"
+
+# Asked on the window's thread again: half a second a slow process.
+[[sabotage]]
+name = "the window waits while other processes are asked"
+file = "src/ui/main_window.cpp"
+find = "\t\t\tif (terminals_panel_shown()) m_terminals_panel->set_entries(terminal_entries());\n\t\t}, Qt::QueuedConnection);\n\t}, Qt::QueuedConnection);\n"
+replace = "\t\t\tif (terminals_panel_shown()) m_terminals_panel->set_entries(terminal_entries());\n\t\t}, Qt::QueuedConnection);\n\t}, Qt::BlockingQueuedConnection);\n"
+expect = "the_terminals_list_asks_other_processes_without_waiting"
+
+# The answer kept and never shown.
+[[sabotage]]
+name = "other processes' terminals never reach the list"
+file = "src/ui/main_window.cpp"
+find = "\t\t\tm_other_processes = found;\n"
+replace = ""
+expect = "the_terminals_list_asks_other_processes_without_waiting"

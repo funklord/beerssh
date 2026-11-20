@@ -43,6 +43,7 @@
 #include <QMimeData>
 #include <QShowEvent>
 #include <QProcess>
+#include <QThread>
 #include <QTimer>
 
 #include <algorithm>
@@ -2843,28 +2844,59 @@ QList<bssh_terminal_entry_t> bssh_main_window::terminal_entries() const {
 		out.append(entry);
 	}
 
-	/*
-	 * Other processes, each asked briefly: a stale socket refuses at
-	 * once, and a live BeerSSH answers from its event loop. Only what it
-	 * would give is listed -- a connected session -- since a row that
-	 * then refused to come would be a row that lies.
-	 */
-	for (const QString &path : bssh_handoff_point::peers()) {
-		for (const bssh_handoff_point::listed_t &listed : bssh_handoff_point::terminals(path)) {
-			bssh_terminal_entry_t entry;
-			entry.place = bssh_terminal_entry_t::OTHER_PROCESS;
-			entry.title = listed.title;
-			entry.path = path;
-			entry.id = listed.id;
-			out.append(entry);
-		}
-	}
+	/* Other processes, as they last answered (ask_other_processes). */
+	out.append(m_other_processes);
 	return out;
 }
 
 void bssh_main_window::refresh_terminals_panel() {
 	if (!terminals_panel_shown()) return;
 	m_terminals_panel->set_entries(terminal_entries());
+	ask_other_processes();
+}
+
+/*
+ * Every other process asked briefly -- a stale socket refuses at once, and
+ * a live BeerSSH answers from its event loop -- off this thread, and the
+ * list shown again when they have answered. Only what a process would give
+ * is listed, a connected session, since a row that then refused to come
+ * would be a row that lies. One question out at a time; the timer asks
+ * again.
+ */
+void bssh_main_window::ask_other_processes() {
+	if (m_terminals_asking) return;
+	if (!m_terminals_thread) {
+		m_terminals_thread = new QThread(this);
+		m_terminals_thread->setObjectName(QStringLiteral("terminals_asker"));
+		m_terminals_asker = new QObject;
+		m_terminals_asker->moveToThread(m_terminals_thread);
+		m_terminals_thread->start();
+	}
+	m_terminals_asking = true;
+	const QStringList peers = bssh_handoff_point::peers();
+	QMetaObject::invokeMethod(m_terminals_asker, [this, peers] {
+		QList<bssh_terminal_entry_t> found;
+		for (const QString &path : peers) {
+			for (const bssh_handoff_point::listed_t &listed : bssh_handoff_point::terminals(path)) {
+				bssh_terminal_entry_t entry;
+				entry.place = bssh_terminal_entry_t::OTHER_PROCESS;
+				entry.title = listed.title;
+				entry.path = path;
+				entry.id = listed.id;
+				found.append(entry);
+			}
+		}
+		/*
+		 * Back to the window's thread. The window waits for this thread
+		 * before it goes, so it is here to be posted to; an answer still
+		 * queued when it goes is dropped with it.
+		 */
+		QMetaObject::invokeMethod(this, [this, found] {
+			m_terminals_asking = false;
+			m_other_processes = found;
+			if (terminals_panel_shown()) m_terminals_panel->set_entries(terminal_entries());
+		}, Qt::QueuedConnection);
+	}, Qt::QueuedConnection);
 }
 
 void bssh_main_window::open_terminal_entry(const bssh_terminal_entry_t &entry) {
@@ -5097,6 +5129,15 @@ void bssh_main_window::keyPressEvent(QKeyEvent *event) {
  * keyboard before the target it types into, which is a member here.
  */
 bssh_main_window::~bssh_main_window() {
+	/* A question still out to another process is answered first, at most
+	 * half a second a process. */
+	if (m_terminals_thread) {
+		m_terminals_thread->quit();
+		m_terminals_thread->wait();
+		/* Its thread has stopped, so nothing can be running in it. */
+		delete m_terminals_asker;
+		m_terminals_asker = nullptr;
+	}
 	disconnect(qApp, &QApplication::focusChanged, this, nullptr);
 	delete m_form_keyboard;
 	m_form_keyboard = nullptr;

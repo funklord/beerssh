@@ -1268,6 +1268,17 @@ private:
 	QTimer *m_terminals_timer = nullptr;
 
 	/*
+	 * Other processes' terminals, asked on a thread of their own and kept
+	 * until the next answer: asked on this one, a process slow to answer
+	 * held the window for up to half a second each, every three seconds.
+	 */
+	class QThread *m_terminals_thread = nullptr;
+	QObject *m_terminals_asker = nullptr;
+	bool m_terminals_asking = false;
+	QList<bssh_terminal_entry_t> m_other_processes;
+	void ask_other_processes();
+
+	/*
 	 * The tab bar's handle dragged (sec 8.7a): the side of the bar's own
 	 * pane the pointer is nearest is lit on that pane, and letting go puts
 	 * every bar there -- the tabs-side-by-side setting, moved by hand.

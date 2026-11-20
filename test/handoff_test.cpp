@@ -8,6 +8,7 @@
 #include <QTimer>
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QDir>
 #include <QFileInfo>
 #include <QMimeData>
 #include <QProcess>
@@ -38,6 +39,7 @@
 #include "ui/pane_bar.h"
 #include "ui/pane_container.h"
 #include "ui/terminal_view.h"
+#include "ui/terminals_panel.h"
 #include "term/emulator.h"
 
 namespace {
@@ -661,6 +663,14 @@ int bssh_handoff_arranged_mode() {
 		return nullptr;
 	});
 	point.set_arranger([] { return bssh_main_window::describe_arrangement().to_text(); });
+	point.set_cataloguer([registry] {
+		QList<bssh_handoff_point::listed_t> entries;
+		for (bssh_session *session : registry->sessions()) {
+			if (session->state() == bssh_ssh_session::CONNECTED)
+				entries.append({ session->handoff_id(), session->title() });
+		}
+		return entries;
+	});
 	QObject::connect(&point, &bssh_handoff_point::session_given, registry,
 	                 &bssh_session_registry::give_away);
 	QString why;
@@ -950,6 +960,97 @@ void handoff_test::each_pane_gesture_rebuilds_once() {
 	QVERIFY2(built_there <= 1,
 	         qPrintable(QStringLiteral("a tab behind: the other window was built %1 times").arg(built_there)));
 	QVERIFY(window.shown_sessions().contains(behind));
+}
+
+void handoff_test::the_terminals_list_asks_other_processes_without_waiting() {
+	runtime_dir_t runtime;
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	const auto tidy = qScopeGuard([shared] {
+		while (shared->count() > 0) shared->close(shared->at(0));
+	});
+
+	/* A process that takes the question and never answers it. */
+	QDir().mkpath(bssh_handoff_point::directory());
+	QFile::setPermissions(bssh_handoff_point::directory(),
+	                      QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+	const QString silent_path = bssh_handoff_point::directory() + QStringLiteral("/handoff-999999.sock");
+	const int silent = ::socket(AF_UNIX, SOCK_STREAM, 0);
+	QVERIFY(silent >= 0);
+	const auto unlisten = qScopeGuard([silent, silent_path] {
+		::close(silent);
+		QFile::remove(silent_path);
+	});
+	sockaddr_un address;
+	std::memset(&address, 0, sizeof address);
+	address.sun_family = AF_UNIX;
+	std::strncpy(address.sun_path, QFile::encodeName(silent_path).constData(), sizeof address.sun_path - 1);
+	QVERIFY(::bind(silent, reinterpret_cast<sockaddr *>(&address), sizeof address) == 0);
+	QVERIFY(::listen(silent, 1) == 0);
+	/*
+	 * Its queue filled, as a wedged process's fills: a connect that waited
+	 * would wait for ever. Connections are queued until accepted, closed
+	 * or not, so these are held until the end.
+	 */
+	QList<int> queued;
+	const auto unqueue = qScopeGuard([&queued] {
+		for (int fd : queued) ::close(fd);
+	});
+	for (int i = 0; i < 8; ++i) {
+		const int fd = ::socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0);
+		if (::connect(fd, reinterpret_cast<sockaddr *>(&address), sizeof address) != 0) {
+			::close(fd);
+			break;
+		}
+		queued.append(fd);
+	}
+	QVERIFY2(!queued.isEmpty() && queued.size() < 8, "the silent process's queue did not fill");
+
+	/* And one with room left, which takes the question and sits on it. */
+	const QString slow_path = bssh_handoff_point::directory() + QStringLiteral("/handoff-999998.sock");
+	const int slow = ::socket(AF_UNIX, SOCK_STREAM, 0);
+	QVERIFY(slow >= 0);
+	const auto unlisten_slow = qScopeGuard([slow, slow_path] {
+		::close(slow);
+		QFile::remove(slow_path);
+	});
+	sockaddr_un slow_address = address;
+	std::memset(slow_address.sun_path, 0, sizeof slow_address.sun_path);
+	std::strncpy(slow_address.sun_path, QFile::encodeName(slow_path).constData(),
+	             sizeof slow_address.sun_path - 1);
+	QVERIFY(::bind(slow, reinterpret_cast<sockaddr *>(&slow_address), sizeof slow_address) == 0);
+	QVERIFY(::listen(slow, 64) == 0);
+
+	/* And one that answers: the old version's four terminals. */
+	QProcess old_version;
+	old_version.start(QCoreApplication::applicationFilePath(), { QStringLiteral("--handoff-arranged") });
+	const auto stop = qScopeGuard([&old_version] {
+		old_version.kill();
+		old_version.waitForFinished(5000);
+	});
+	QVERIFY(old_version.waitForStarted(10000));
+	QElapsedTimer timer;
+	timer.start();
+	while (!old_version.canReadLine() && timer.elapsed() < 30000 && old_version.state() != QProcess::NotRunning)
+		old_version.waitForReadyRead(100);
+	const QString path = QString::fromLocal8Bit(old_version.readLine()).trimmed();
+	QVERIFY2(path.endsWith(QStringLiteral(".sock")), qPrintable(path));
+
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	timer.restart();
+	window.set_terminals_panel_shown(true);
+	window.refresh_terminals_panel();
+	QVERIFY2(timer.elapsed() < 250,
+	         qPrintable(QStringLiteral("the window waited %1 ms for other processes").arg(timer.elapsed())));
+
+	const auto from_there = [&window, &path] {
+		int count = 0;
+		for (const bssh_terminal_entry_t &entry : window.terminals_panel()->entries())
+			if (entry.place == bssh_terminal_entry_t::OTHER_PROCESS && entry.path == path) ++count;
+		return count;
+	};
+	QTRY_COMPARE_WITH_TIMEOUT(from_there(), 4, 10000);
 }
 
 void handoff_test::a_torn_out_tab_and_a_new_window_start_processes_of_their_own() {

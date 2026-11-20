@@ -21453,6 +21453,20 @@ and in one place.
   `open_terminal_entry()`. Tests: `another_process_lists_its_terminals_by_title`
   (across a real process boundary), `the_terminals_sidebar_opens_another_windows_terminal_here`
   (by clicking the row). Sabotages in `tool/sabotage/terminals-sidebar.toml`.
+- **Other processes are asked off the window's thread** (2026-11-20). The
+  list was asked on it, every 3 s, with half a second's patience per
+  process, so a BeerSSH slow to answer held every window showing the list
+  for that long, every time. And worse: a process alive and not accepting
+  -- wedged, or stopped -- lets its queue fill, after which a blocking
+  `connect()` waits until somebody reads it, which may be never; one such
+  process would have frozen every sidebar for good. Now a thread of the
+  window's own asks, this process's terminals are listed at once and the
+  others' as they answer; and every hand-off connect (`connect_now()` in
+  `handoff_point.cpp`) is non-blocking, a full queue reading as not
+  answering -- `sweep_stale()` treats it as busy, not stale. A window
+  going waits for a question still out, at most half a second a process.
+  `handoff_test` `the_terminals_list_asks_other_processes_without_waiting`,
+  sabotages in `tool/sabotage/terminals-asking.toml`.
 - **Not yet:** whether it stays open across a restart (not remembered); a
   way to open it without the menu bar (no chord, no corner entry); a phone,
   which is one process and has the host list's Sessions section. Each waits

@@ -41,6 +41,13 @@ private slots:
 
 	/* And the pane gestures: split, split beside, move a pane, a grid. */
 	void each_pane_gesture_rebuilds_once();
+
+	/*
+	 * The Terminals list names another process's terminals, asked off the
+	 * window's thread: a process that never answers does not hold the
+	 * window (it held it half a second, every three seconds).
+	 */
+	void the_terminals_list_asks_other_processes_without_waiting();
 	void a_torn_out_tab_and_a_new_window_start_processes_of_their_own();
 	void a_start_brings_back_every_window_not_open_elsewhere();
 	void a_torn_out_tab_arrives_in_a_process_of_its_own();

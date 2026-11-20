@@ -84,6 +84,30 @@ bool fill_address(sockaddr_un &address, const QString &path, QString *why) {
 	return true;
 }
 
+/*
+ * A socket connected to `address` now, or -1 with errno set. Never waits:
+ * a process that is alive and not accepting -- wedged, or stopped -- lets
+ * its queue fill, and a blocking connect to a full queue waits until it
+ * is read, which may be never. The Terminals sidebar asks every process
+ * every three seconds, so one wedged BeerSSH filled its queue in a few
+ * rounds and then held every other window's question for good. A full
+ * queue is EAGAIN here, which reads as not answering. The socket stays
+ * non-blocking; the wire's own reads and writes wait with poll().
+ */
+int connect_now(const sockaddr_un &address) {
+	const int socket = bssh_socket(AF_UNIX, SOCK_STREAM, BSSH_CLOEXEC);
+	if (socket < 0) return -1;
+	const int flags = ::fcntl(socket, F_GETFL);
+	if (flags < 0 || ::fcntl(socket, F_SETFL, flags | O_NONBLOCK) != 0 ||
+	    ::connect(socket, reinterpret_cast<const sockaddr *>(&address), sizeof(address)) != 0) {
+		const int error = errno;
+		::close(socket);
+		errno = error;
+		return -1;
+	}
+	return socket;
+}
+
 }  // namespace
 
 bssh_handoff_point::bssh_handoff_point(finder_t finder, QObject *parent)
@@ -308,10 +332,9 @@ bssh_session *bssh_handoff_point::take(const QString &path, const QString &hando
 	sockaddr_un address;
 	if (!fill_address(address, path, why)) return nullptr;
 
-	const int socket = bssh_socket(AF_UNIX, SOCK_STREAM, BSSH_CLOEXEC);
-	if (socket < 0 || ::connect(socket, reinterpret_cast<sockaddr *>(&address), sizeof(address)) != 0) {
+	const int socket = connect_now(address);
+	if (socket < 0) {
 		if (why) *why = QStringLiteral("the other BeerSSH is not listening");
-		if (socket >= 0) ::close(socket);
 		return nullptr;
 	}
 	if (!bssh_handoff_wire::peer_is_same_user(socket)) {
@@ -384,10 +407,9 @@ bool ask(const QString &path, const QByteArray &request, QByteArray &verb, QStri
          QString *why, int timeout_ms = BSSH_HANDOFF_STEP_MS) {
 	sockaddr_un address;
 	if (!fill_address(address, path, why)) return false;
-	const int socket = bssh_socket(AF_UNIX, SOCK_STREAM, BSSH_CLOEXEC);
-	if (socket < 0 || ::connect(socket, reinterpret_cast<sockaddr *>(&address), sizeof(address)) != 0) {
+	const int socket = connect_now(address);
+	if (socket < 0) {
 		if (why) *why = QStringLiteral("the other BeerSSH is not listening");
-		if (socket >= 0) ::close(socket);
 		return false;
 	}
 	bssh_handoff_message_t answer;
@@ -462,11 +484,10 @@ int bssh_handoff_point::sweep_stale() {
 		const QString path = dir.filePath(name);
 		sockaddr_un address;
 		if (!fill_address(address, path, nullptr)) continue;
-		const int probe = bssh_socket(AF_UNIX, SOCK_STREAM, BSSH_CLOEXEC);
-		if (probe < 0) continue;
-		const bool refused = ::connect(probe, reinterpret_cast<sockaddr *>(&address), sizeof(address)) != 0
-		                     && errno == ECONNREFUSED;
-		::close(probe);
+		/* Busy is not stale: only a refusal says nobody listens there. */
+		const int probe = connect_now(address);
+		const bool refused = probe < 0 && errno == ECONNREFUSED;
+		if (probe >= 0) ::close(probe);
 		if (refused && ::unlink(address.sun_path) == 0) ++removed;
 	}
 	return removed;
