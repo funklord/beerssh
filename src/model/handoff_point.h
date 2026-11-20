@@ -146,9 +146,14 @@ public:
 	 * -- or, with active false, has left it or ended without a drop
 	 * (sec 8.7a). The target draws where a drop would land; a drag shows
 	 * its zones only in the process that started it otherwise.
+	 *
+	 * Asked every 30 ms of a drag, on the dragging window's thread, and
+	 * only to light the target's zones: patient for a quarter of a second,
+	 * not the hand-off's ten, which a process taking the question and
+	 * sitting on it held the drag for, each time.
 	 */
 	static bool hover(const QString &path, const QPoint &global, bool active,
-	                  QString *why = nullptr);
+	                  QString *why = nullptr, int timeout_ms = 250);
 
 signals:
 	/*

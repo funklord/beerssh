@@ -278,6 +278,29 @@ void handoff_test::a_hover_says_where_and_then_that_it_left() {
 	QVERIFY(send(QPoint(), false));
 	QTRY_COMPARE(hovered.count(), 2);
 	QCOMPARE(hovered.at(1).at(1).toBool(), false);
+
+	/*
+	 * A process that takes the hover and never answers holds the drag a
+	 * moment, not the hand-off's ten seconds: hover() runs every 30 ms of
+	 * a drag, on the dragging window's thread.
+	 */
+	const QString silent_path = bssh_handoff_point::directory() + QStringLiteral("/handoff-999997.sock");
+	const int silent = ::socket(AF_UNIX, SOCK_STREAM, 0);
+	QVERIFY(silent >= 0);
+	const auto unlisten = qScopeGuard([silent, silent_path] {
+		::close(silent);
+		QFile::remove(silent_path);
+	});
+	sockaddr_un address;
+	std::memset(&address, 0, sizeof address);
+	address.sun_family = AF_UNIX;
+	std::strncpy(address.sun_path, QFile::encodeName(silent_path).constData(), sizeof address.sun_path - 1);
+	QVERIFY(::bind(silent, reinterpret_cast<sockaddr *>(&address), sizeof address) == 0);
+	QVERIFY(::listen(silent, 64) == 0);
+	QElapsedTimer held;
+	held.start();
+	QVERIFY(!bssh_handoff_point::hover(silent_path, QPoint(1, 1), true));
+	QVERIFY2(held.elapsed() < 1000, qPrintable(QStringLiteral("a hover held the drag %1 ms").arg(held.elapsed())));
 }
 
 /* Asked for a session it does not have, the giver says so, and the taker

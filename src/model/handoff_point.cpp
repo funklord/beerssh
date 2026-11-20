@@ -494,12 +494,13 @@ int bssh_handoff_point::sweep_stale() {
 }
 
 bool bssh_handoff_point::hover(const QString &path, const QPoint &global, bool active,
-                               QString *why) {
+                               QString *why, int timeout_ms) {
 	QByteArray verb;
 	QString text;
 	const QString what = active ? QString::number(global.x()) + QLatin1Char(',') + QString::number(global.y())
 	                            : QString();
-	return ask(path, word(BSSH_HANDOFF_HOVER, what), verb, text, why) && verb == BSSH_HANDOFF_OK;
+	return ask(path, word(BSSH_HANDOFF_HOVER, what), verb, text, why, timeout_ms) &&
+	       verb == BSSH_HANDOFF_OK;
 }
 
 bool bssh_handoff_point::request_quit(const QString &path, QString *why) {
@@ -601,7 +602,9 @@ bool bssh_handoff_point::request_quit(const QString &path, QString *why) {
 	return false;
 }
 
-bool bssh_handoff_point::hover(const QString &path, const QPoint &global, bool active, QString *why) {
+bool bssh_handoff_point::hover(const QString &path, const QPoint &global, bool active, QString *why,
+                               int timeout_ms) {
+	Q_UNUSED(timeout_ms);
 	Q_UNUSED(path);
 	Q_UNUSED(global);
 	Q_UNUSED(active);

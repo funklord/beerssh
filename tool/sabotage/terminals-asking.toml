@@ -26,3 +26,12 @@ file = "src/ui/main_window.cpp"
 find = "\t\t\tm_other_processes = found;\n"
 replace = ""
 expect = "the_terminals_list_asks_other_processes_without_waiting"
+
+# A drag's hover as patient as a hand-off: a process sitting on the
+# question holds the drag ten seconds, every 30 ms of it.
+[[sabotage]]
+name = "a hover holds the drag for the hand-off's ten seconds"
+file = "src/model/handoff_point.h"
+find = "\t                  QString *why = nullptr, int timeout_ms = 250);"
+replace = "\t                  QString *why = nullptr, int timeout_ms = 10000);"
+expect = "a_hover_says_where_and_then_that_it_left"
