@@ -19008,6 +19008,13 @@ machine above an overlay). Why hull: a killed run takes its machine with it
 `/`, which had 1.9 GB free that day with docker's images and build cache on
 it -- too little to run the docker engine beside it safely, so it was not.
 
+**`beerssh/check-ci` is the only image name this tree keeps.** hull's store
+was collected on 2026-11-19, keeping every tag a tree still names (inbox
+20261119T1346Z, from claude-guidelines): `beerssh/check-ci-trial`, a 1.2 GB
+image from the trial runs of 2026-11-09, was untagged because nothing here
+names it, and nothing needs it. A rig that wants a second image names it in
+`tool/check-ci.sh`, or the next collection takes it too.
+
 - **Measured at hull e47cb881:** the image baked in 73 s, the whole Qt dev
   set installed with apt's own sandbox user (the open question of
   2026-10-22); the job on `8122834`, 1062 passed, 0 failed, 17 skipped, 9
