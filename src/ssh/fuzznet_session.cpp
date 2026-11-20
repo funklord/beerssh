@@ -3,6 +3,8 @@
 #include <QMetaObject>
 #include <QMutexLocker>
 
+#include <chrono>
+
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <sys/socket.h>
@@ -21,6 +23,13 @@ const unsigned SILENT_BACKOFFS = 5;
 
 /* How long the thread waits to hear the host before it looks again. */
 const unsigned PUMP_MS = 50;
+
+/*
+ * How long a close waits for the host to acknowledge what was queued
+ * before it. Bounded, because the thread asking is the window's, and a
+ * host that has stopped answering must not hold it.
+ */
+const auto DRAIN = std::chrono::milliseconds(500);
 
 /* fuzznet takes a numeric address and resolves nothing, so it is done here. */
 QByteArray ipv4_for(const QByteArray &host) {
@@ -186,19 +195,25 @@ void bssh_fuzznet_session::run(QByteArray image, QByteArray host, quint16 port) 
 		return;
 	}
 
-	bool up = false;
-	while (!m_stopping) {
-		{
-			QMutexLocker held(&m_lock);
-			if (!m_outgoing.isEmpty()) {
-				const size_t taken = bssh_fuzznet_link_write(
-				        link, reinterpret_cast<const uint8_t *>(m_outgoing.constData()),
-				        size_t(m_outgoing.size()));
-				m_outgoing.remove(0, int(taken));
-			}
+	/* Hands the link what is queued; true when nothing is left queued. */
+	const auto write_queued = [this, link] {
+		QMutexLocker held(&m_lock);
+		if (!m_outgoing.isEmpty()) {
+			const size_t taken = bssh_fuzznet_link_write(
+			        link, reinterpret_cast<const uint8_t *>(m_outgoing.constData()),
+			        size_t(m_outgoing.size()));
+			m_outgoing.remove(0, int(taken));
 		}
+		return m_outgoing.isEmpty();
+	};
+
+	bool up = false;
+	bool failed = false;
+	while (!m_stopping) {
+		write_queued();
 		if (bssh_fuzznet_link_pump(link, PUMP_MS) != 0) {
 			post_failed(QStringLiteral("%1 did not answer over fuzznet").arg(QString::fromUtf8(host)));
+			failed = true;
 			break;
 		}
 		if (!up && bssh_fuzznet_link_up(link)) {
@@ -207,7 +222,23 @@ void bssh_fuzznet_session::run(QByteArray image, QByteArray host, quint16 port) 
 		}
 		if (bssh_fuzznet_link_backoffs(link) >= SILENT_BACKOFFS) {
 			post_failed(QStringLiteral("%1 stopped answering over fuzznet").arg(QString::fromUtf8(host)));
+			failed = true;
 			break;
+		}
+	}
+
+	/*
+	 * Stopped by a close: what was queued before it is said first, and
+	 * waited for until the host has it. That is the hangup ending the
+	 * shell there (sec 5.6) -- dropped here, every tab closed over
+	 * fuzznet left its shell running on the host with no time limit; the
+	 * suite left twelve on one machine in an hour (2026-11-20).
+	 */
+	if (up && !failed) {
+		const auto deadline = std::chrono::steady_clock::now() + DRAIN;
+		while (std::chrono::steady_clock::now() < deadline) {
+			if (write_queued() && bssh_fuzznet_link_pending(link) == 0) break;
+			if (bssh_fuzznet_link_pump(link, 20) != 0) break;
 		}
 	}
 	bssh_fuzznet_link_close(link);

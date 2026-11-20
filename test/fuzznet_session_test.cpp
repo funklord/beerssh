@@ -7,9 +7,12 @@
 #include <QRegularExpression>
 #include <QFile>
 #include <QProcess>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+
+#include <signal.h>
 
 #ifdef BSSH_FUZZNET
 #include "model/profile.h"
@@ -108,6 +111,23 @@ private:
 struct store_left_as_found_t {
 	~store_left_as_found_t() { bssh_secret_store::set_instance(nullptr); }
 };
+
+/*
+ * Processes keeping the shell named `name`: the helper's "attach NAME",
+ * the host it leaves running included -- each sent `signal`, if given. By command line, because the host
+ * makes itself undumpable and its /proc exe link cannot be read.
+ */
+int helpers_keeping(const QByteArray &name, int signal = 0) {
+	int count = 0;
+	const QByteArray wanted = QByteArrayLiteral("beerssh-session") + '\0' + "attach" + '\0' + name + '\0';
+	for (const QString &pid : QDir(QStringLiteral("/proc")).entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+		QFile cmdline(QStringLiteral("/proc/%1/cmdline").arg(pid));
+		if (!cmdline.open(QIODevice::ReadOnly) || cmdline.readAll() != wanted) continue;
+		++count;
+		if (signal) ::kill(pid.toInt(), signal);
+	}
+	return count;
+}
 
 /* The two binaries the Makefile hands over, or why this cannot run. */
 QString binaries(QString *sshd, QString *helper) {
@@ -261,6 +281,18 @@ void fuzznet_session_test::a_fuzznet_host_keeps_its_shell_through_a_drop() {
 	QVERIFY2(shows(QRegularExpression(QStringLiteral("same:") + shell + QStringLiteral("\\.")), 10000)
 	                 .hasMatch(),
 	         qPrintable(session.emulator()->screen().to_text()));
+
+	/*
+	 * Closed, the shell ends on the host too: the hangup gets there before
+	 * the link goes. It did not, and every run of this left a helper and
+	 * its shell behind, twelve found on one machine (2026-11-20).
+	 */
+	const QByteArray name = session.kept_name();
+	QVERIFY2(!name.isEmpty() && helpers_keeping(name) > 0, "no helper found to see end");
+	/* Should the close fail to end them, this run's own are ended here, not left. */
+	const auto reap = qScopeGuard([name] { helpers_keeping(name, SIGTERM); });
+	session.disconnect_from_host();
+	QTRY_COMPARE_WITH_TIMEOUT(helpers_keeping(name), 0, 10000);
 #endif
 }
 

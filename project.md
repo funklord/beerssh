@@ -21459,6 +21459,22 @@ and in one place.
 - **Swap With** (a Pane-menu verb built to the first reading, set-aside as a
   tab behind) was tested and not committed: "swap is a bit confusing".
 
+**Fixed 2026-11-20: closing a tab over fuzznet left its shell on the host.**
+`disconnect_from_host()` queues the `hangup` frame and then stops the
+link's thread, which left its loop without writing what was queued; the
+host's helper never heard it, and the shell ran on with no time limit. The
+suite's fuzznet test left one helper and `/bin/sh` per run -- twelve found
+on the holder's machine, which the holder took for leaked terminals of
+their own. The link now writes what is queued and pumps until the host has
+acknowledged it, for at most 500 ms, before closing. SSH was not affected:
+its send and disconnect run in order on one worker thread.
+`a_fuzznet_host_keeps_its_shell_through_a_drop` now closes the session and
+counts the processes still running `beerssh-session attach <its name>`, by
+command line: the host the helper leaves running makes itself undumpable,
+so its `/proc/<pid>/exe` cannot be read, and a count by program path saw
+nothing and passed with the shell still there. With the drain disabled it
+fails with two left; six runs with it left none.
+
 **Open, the holder's: a package's version does not say which build it is.**
 The holder could not find maximise (`504b559`, 2026-11-18 13:48) and asked
 whether the install was current. It was not: `/usr/bin/beerssh` came from a

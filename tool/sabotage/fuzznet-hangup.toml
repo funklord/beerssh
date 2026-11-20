@@ -1,0 +1,10 @@
+# The hangup a closed fuzznet tab owes its host (project.md sec 5.6): lost,
+# the shell runs on there with no time limit.
+
+# A close over fuzznet stops the link before the hangup is out.
+[[sabotage]]
+name = "a closed fuzznet tab leaves its shell on the host"
+file = "src/ssh/fuzznet_session.cpp"
+find = "\tif (up && !failed) {\n\t\tconst auto deadline"
+replace = "\tif (false) {\n\t\tconst auto deadline"
+expect = "a_fuzznet_host_keeps_its_shell_through_a_drop"
