@@ -21531,6 +21531,15 @@ second window (`handoff_test` `a_move_rebuilds_each_window_once`):
 Each move is now one rebuild per window and one resize per terminal. No
 loop was found: no rebuild set off another (the fold sweep above).
 
+**Open 2026-11-20: "terminal swapping doesn't work anymore, it puts them in
+tabs" (the holder).** No change to the drop path was found:
+`bssh_layout_manager::place()` with `EDGE_MIDDLE` swaps two panes, except
+that a terminal dragged out of ANOTHER pane's tab bar trades places with
+the target's front, which then goes into that bar -- the documented
+trade, and the likeliest reading of the report. Asked, and unanswered:
+which window, a tab or a whole pane dragged, dropped where, and what
+happened instead. Blocks any change to the drop code.
+
 **Asked 2026-11-20, to build once the open bugs are fixed (the holder):**
 
 - **Put the Terminals sidebar away and bring it back quickly** -- **done
