@@ -1254,7 +1254,16 @@ bool bssh_session::export_handoff(QByteArray &state, QList<int> &fds, QString *w
 	out << QByteArray(BSSH_SESSION_HANDOFF_MAGIC) << BSSH_SESSION_HANDOFF_FORMAT;
 	write_profile(out, m_profile);
 	out << QJsonDocument(m_settings).toJson(QJsonDocument::Compact) << qint32(m_font_zoom)
-	    << qint32(m_cols) << qint32(m_rows) << m_remote_title << m_password
+	    /*
+	     * The size the screen has, not the one asked for: a pane laid out
+	     * again holds its size for a moment (hold_size), and asked then --
+	     * as the next of several taken at once is, the panes closing up
+	     * behind the first -- the two differ, and the taker refused the
+	     * terminal as not fitting (the holder, 2026-11-20: two of four).
+	     * The screen's is also the size the shell was last told.
+	     */
+	    << qint32(m_emulator->screen().cols()) << qint32(m_emulator->screen().rows())
+	    << m_remote_title << m_password
 	    /* Where the unseen-bell mark was, which a session no longer keeps;
 	     * held so a handoff between two builds still reads. */
 	    << m_used_key_auth << m_password_requested << false

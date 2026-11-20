@@ -21523,6 +21523,34 @@ so its `/proc/<pid>/exe` cannot be read, and a count by program path saw
 nothing and passed with the shell still there. With the drain disabled it
 fails with two left; six runs with it left none.
 
+**Fixed 2026-11-20: taking several terminals at once refused some as "not
+fitting".** The holder's first upgrade with `--adopt-from` moved two of four
+terminals; the other two were refused, "the terminal's state does not fit
+this BeerSSH", and stayed in the old process (nothing lost). The old window
+held a 2x2 grid: once the first terminal left, its panes were laid out again,
+and each held its size for 50 ms (`hold_size`), recording the new size while
+the screen kept the old one. The next take came inside those 50 ms, the
+state carried the recorded size beside a screen of another, and the taker's
+`import_state()` refused the pair. Found by asking the old process for the
+two states and refusing them (a refused take resumes the session): every
+field decoded and imported cleanly once the layout had settled, which ruled
+out the data. The state now carries the size the screen has, which is also
+the size the shell was last told. `a_session_mid_resize_still_moves` holds a
+session mid-resize, moves it, and fails with the holder's message without
+the fix. The fault is the giver's, so an older BeerSSH still has it; moving
+terminals out of one a little apart, as the Terminals sidebar does, avoids
+it.
+
+**Open: on macOS, a Serial replay once said "caught up" short of the end.**
+`session_host_test::a_live_client_far_behind_is_sent_the_screen_not_every_byte`
+failed in CI on `dfc875c` (a documentation commit), and passed on the 14
+macOS runs around it: the Serial client's text began at line 1 but lacked
+"29999\r\n30000\r\nfinished", though the Live check just before it had
+found "30000\nfinished" on the host's screen. So the host had the tail, and
+the Serial client stopped on "caught up" before it. Whether "caught up" can
+be sent ahead of the last replayed bytes, or the test's read loop drops a
+chunk on macOS, is not yet known; not seen on Linux.
+
 **Open, the holder's: a package's version does not say which build it is.**
 The holder could not find maximise (`504b559`, 2026-11-18 13:48) and asked
 whether the install was current. It was not: `/usr/bin/beerssh` came from a

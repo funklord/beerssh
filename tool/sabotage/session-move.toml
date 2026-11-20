@@ -87,3 +87,13 @@ file = "src/model/handoff_point.cpp"
 find = "\t\tif (refused && ::unlink(address.sun_path) == 0) ++removed;"
 replace = "\t\t(void) refused;\n\t\tif (::unlink(address.sun_path) == 0) ++removed;"
 expect = "only_sockets_nobody_listens_on_are_swept"
+
+# The size asked for rather than the size the screen has: a session asked
+# for mid-layout, as the next of several taken at once is, is refused by
+# the taker as "not fitting this BeerSSH" (the holder, 2026-11-20).
+[[sabotage]]
+name = "a session mid-resize is handed over at a size its screen does not have"
+file = "src/model/session.cpp"
+find = "\t    << qint32(m_emulator->screen().cols()) << qint32(m_emulator->screen().rows())\n"
+replace = "\t    << qint32(m_cols) << qint32(m_rows)\n"
+expect = "a_session_mid_resize_still_moves"

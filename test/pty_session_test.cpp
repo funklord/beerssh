@@ -674,6 +674,42 @@ void pty_session_test::a_live_local_session_moves_to_another_session() {
 	delete to;
 }
 
+/*
+ * Asked for while its pane is being laid out again -- the size held, the
+ * new one recorded and not yet on the screen -- a session still moves, at
+ * the size its screen has. Taking several at once asks exactly then: the
+ * panes close up behind the first, and two of four were refused as "not
+ * fitting this BeerSSH" (the holder, 2026-11-20).
+ */
+void pty_session_test::a_session_mid_resize_still_moves() {
+	bssh_session *from = new bssh_session(local_shell_profile());
+	from->resize(60, 12);
+	from->connect_to_host();
+	QTRY_COMPARE(from->state(), bssh_ssh_session::CONNECTED);
+	from->input_router()->send_text(QStringLiteral("echo before-move\n"));
+	QVERIFY(screen_shows(from, QStringLiteral("before-move")));
+
+	from->hold_size(true);
+	from->resize(90, 20);
+	QCOMPARE(from->emulator()->screen().cols(), 60);
+
+	QByteArray state;
+	QList<int> fds;
+	QString why;
+	QVERIFY2(from->export_handoff(state, fds, &why), qPrintable(why));
+	QList<int> received = { ::dup(fds.first()) };
+	bssh_session *to = bssh_session::import_handoff(state, received, nullptr, &why);
+	QVERIFY2(to, qPrintable(why));
+	from->release_handoff();
+	delete from;
+
+	QCOMPARE(to->emulator()->screen().cols(), 60);
+	QCOMPARE(to->emulator()->screen().rows(), 12);
+	QVERIFY(to->emulator()->screen().to_text().contains(QStringLiteral("before-move")));
+	to->disconnect_from_host();
+	delete to;
+}
+
 void pty_session_test::a_refused_move_leaves_the_session_running() {
 	bssh_session *from = new bssh_session(local_shell_profile());
 	from->resize(60, 12);

@@ -26,13 +26,15 @@ find = "\t\tm_panes->focused_view()->setFocus();\n}"
 replace = "\t\t;\n}"
 expect = "a_new_version_takes_the_windows_as_they_were"
 
-# Windows listed in the toolkit's order: the old version's second window
-# taken first.
+# Windows listed in another order than they were made: the old version's
+# second window taken first. Reversed rather than left to the toolkit,
+# whose order happened to be right for a whole sabotage run (MISSED,
+# 2026-11-20) and wrong for the run before.
 [[sabotage]]
-name = "an arrangement lists windows in the toolkit's order"
+name = "an arrangement lists windows in another order than made"
 file = "src/ui/main_window.cpp"
 find = "\t\treturn a->m_made_as < b->m_made_as;"
-replace = "\t\treturn false;"
+replace = "\t\treturn a->m_made_as > b->m_made_as;"
 expect = "a_new_version_takes_the_windows_as_they_were"
 
 # The further windows not started: their terminals stay in the old version.
