@@ -5917,6 +5917,8 @@ void layout_test::the_tmux_drawer_switches_on_a_click() {
 		bssh_multiplexer_drawer *drawer = drawer_in(window);
 		QVERIFY(drawer);
 		drawer->set_open(true);
+		/* Opening lists them again, and a host answers. */
+		fakes.last()->simulate_side_output("work\t3\t1\n@@bssh-screen@@\n");
 		QToolButton *close = drawer->findChild<QToolButton *>(QStringLiteral("multiplexer_close"));
 		QVERIFY(close);
 		close->click();

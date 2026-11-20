@@ -1,0 +1,35 @@
+# Sabotages for the tmux/screen drawer listing again while it is looked at
+# (the holder, 2026-11-20: "almost always shows the wrong state").
+
+# Nobody asks the session: the drawer says what the connect found.
+[[sabotage]]
+name = "an opened drawer is not listed again"
+file = "src/ui/pane_container.cpp"
+find = "\tconnect(view, &bssh_terminal_view::multiplexers_wanted,\n\t         session, &bssh_session::relist_multiplexers);\n"
+replace = ""
+expect = "an_open_drawer_lists_them_again"
+
+# Listed on opening only, never while it stays open.
+[[sabotage]]
+name = "an open drawer is listed only as it opens"
+file = "src/ui/terminal_view.cpp"
+find = "\t\t\t\tm_mux_relist->start();\n"
+replace = ""
+expect = "an_open_drawer_lists_them_again"
+
+# Listed on and on after it was closed: a command beside the shell every
+# three seconds for nothing.
+[[sabotage]]
+name = "a closed drawer is still listed"
+file = "src/ui/terminal_view.cpp"
+find = "\t\t\t} else {\n\t\t\t\tm_mux_relist->stop();\n\t\t\t}"
+replace = "\t\t\t}"
+expect = "an_open_drawer_lists_them_again"
+
+# Each listing rebuilds the rows and loses the one the keyboard was on.
+[[sabotage]]
+name = "a listing loses the row the keyboard was on"
+file = "src/ui/multiplexer_drawer.cpp"
+find = "\t\tif (now >= 0) m_list->setCurrentRow(now);\n"
+replace = ""
+expect = "an_open_drawer_lists_them_again"

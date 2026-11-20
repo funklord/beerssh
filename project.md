@@ -21542,15 +21542,20 @@ loop was found: no rebuild set off another (the fold sweep above).
   button is otherwise unused, but it is not discoverable and a phone has
   no right button. Whether the shown or hidden state is remembered across
   a restart is the same open item as above.
-- **The screen/tmux picker shows stale state.** Its "(attached)" and
-  "(detached)" marks and the session names are "almost always" wrong when
-  opened. The list is read when a session connects, 800 ms after attaching
-  through it, and when asked again (`bssh_session::list_multiplexers()`);
-  nothing reads it when the drawer opens, and attaching or detaching from
-  another terminal changes nothing here. At least: list again when the
-  picker opens (one `tmux ls` / `screen -ls`, cheap) and show the last list
-  until the answer arrives; and while it is open, again every few seconds.
-  Measure first whether one listing on open is enough before adding a timer.
+- **The screen/tmux picker shows stale state** -- **done 2026-11-20.**
+  Its "(attached)" and "(detached)" marks and names were "almost always"
+  wrong, since the list was read only on connecting, 800 ms after
+  attaching through it, and when asked from the menu. Now opening the
+  drawer lists again at once (one `tmux ls` / `screen -ls` beside the
+  shell), and again every 3 s while it stays open; closed, it asks
+  nothing. A listing that changes nothing leaves the rows alone, and one
+  that does keeps the row the keyboard was on. Every 3 s rather than
+  only on opening because the holder asked for "more often otherwise
+  too" and the drawer is open only while somebody is choosing; a tab
+  whose drawer is closed is not listed in the background, since the
+  button's count is all it shows. `session_registry_test`
+  `an_open_drawer_lists_them_again`, sabotages in
+  `tool/sabotage/multiplexer-relist.toml`.
 
 
 

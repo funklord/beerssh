@@ -51,6 +51,13 @@ private slots:
 	void a_session_stopped_on_a_question_is_not_connecting();
 	void tmux_and_screen_listings_are_read();
 	void tmux_and_screen_are_offered_on_connect();
+
+	/*
+	 * An open drawer lists them again -- on opening and while it stays
+	 * open, and not once it is closed -- so who is attached where is what
+	 * it says (the holder, 2026-11-20: "almost always the wrong state").
+	 */
+	void an_open_drawer_lists_them_again();
 };
 
 #endif /* BSSH_SESSION_REGISTRY_TEST_H */

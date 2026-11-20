@@ -90,6 +90,22 @@ bssh_multiplexer_drawer::bssh_multiplexer_drawer(QWidget *parent) : QWidget(pare
 }
 
 void bssh_multiplexer_drawer::set_sessions(const QList<bssh_mux_session_t> &found) {
+	/*
+	 * Listed again every few seconds while open: the same list leaves the
+	 * rows alone, and a changed one keeps the row the keyboard was on.
+	 */
+	const auto rows = [](const QList<bssh_mux_session_t> &list) {
+		QStringList out;
+		for (const bssh_mux_session_t &session : list)
+			out.append(bssh_mux_label(session) + (session.current ? QStringLiteral("*") : QString()));
+		return out;
+	};
+	if (rows(found) == rows(m_found) && m_list->count() == found.size()) {
+		m_found = found;
+		return;
+	}
+	const int was = m_list->currentRow();
+	const bssh_mux_session_t on = was >= 0 && was < m_found.size() ? m_found.at(was) : bssh_mux_session_t();
 	m_found = found;
 	m_list->clear();
 	for (const bssh_mux_session_t &session : m_found) {
@@ -107,6 +123,10 @@ void bssh_multiplexer_drawer::set_sessions(const QList<bssh_mux_session_t> &foun
 			item->setFont(bold);
 			item->setToolTip(QStringLiteral("This tab is showing it"));
 		}
+	}
+	if (was >= 0) {
+		const int now = int(m_found.indexOf(on));
+		if (now >= 0) m_list->setCurrentRow(now);
 	}
 	updateGeometry();
 }

@@ -19,6 +19,9 @@
 #include "fake_ssh_session.h"
 #include "term/emulator.h"
 #include "ui/terminal_view.h"
+#include "ui/multiplexer_drawer.h"
+#include "ui/pane_container.h"
+#include <QListWidget>
 #include "ui/store_view.h"
 
 static bssh_profile_t profile_for(const QString &name, const QString &host) {
@@ -1467,4 +1470,52 @@ void session_registry_test::tmux_and_screen_are_offered_on_connect() {
 	QVERIFY(fakes.last()->side_commands().isEmpty());
 
 	bssh_ssh_session::set_factory(nullptr);
+}
+
+void session_registry_test::an_open_drawer_lists_them_again() {
+	const offer_multiplexers_t offer;
+	const bssh_factory_reset_t factory_reset;
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+	const auto unset = qScopeGuard([] { bssh_ssh_session::set_factory(nullptr); });
+
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	bssh_session *session = window.registry()->create(profile_for(QStringLiteral("mux"),
+	                                                               QStringLiteral("m.example")));
+	window.adopt_session(session);
+	session->connect_to_host();
+	QVERIFY(fake);
+	fake->simulate_key_auth_success();
+	fake->simulate_side_output(sample_listing);
+	QTRY_VERIFY(window.panes()->view_for(session) && window.panes()->view_for(session)->multiplexer_drawer());
+	bssh_multiplexer_drawer *drawer = window.panes()->view_for(session)->multiplexer_drawer();
+	QListWidget *rows = drawer->findChild<QListWidget *>(QStringLiteral("multiplexer_sessions"));
+	QVERIFY(rows);
+	QVERIFY(!rows->item(1)->text().contains(QStringLiteral("attached")));
+
+	/* Opened: listed now, and what changed meanwhile is what it shows. */
+	const int listed = int(fake->side_commands().size());
+	drawer->set_open(true);
+	QCOMPARE(fake->side_commands().size(), listed + 1);
+	QByteArray attached_elsewhere = sample_listing;
+	attached_elsewhere.replace("build\t1\t0\n", "build\t1\t1\n");
+	fake->simulate_side_output(attached_elsewhere);
+	QVERIFY2(rows->item(1)->text().contains(QStringLiteral("attached")), qPrintable(rows->item(1)->text()));
+
+	/* And again while it stays open. */
+	QTRY_COMPARE_WITH_TIMEOUT(fake->side_commands().size(), listed + 2, 5000);
+	rows->setCurrentRow(2);
+	fake->simulate_side_output(sample_listing);
+	QVERIFY(!rows->item(1)->text().contains(QStringLiteral("attached")));
+	QCOMPARE(rows->currentRow(), 2);
+
+	/* Closed: no more. */
+	drawer->set_open(false);
+	QTest::qWait(3500);
+	QCOMPARE(fake->side_commands().size(), listed + 2);
 }

@@ -315,6 +315,14 @@ public:
 	 */
 	void offer_multiplexers_again();
 
+	/*
+	 * What is running listed again, for a drawer being looked at: its
+	 * "(attached)", "(detached)" and names were "almost always" stale
+	 * (the holder, 2026-11-20), since nothing listed them after the
+	 * connect. Not after a decline, which took the drawer away.
+	 */
+	void relist_multiplexers();
+
 	/* Whether this tab can be offered them at all: live, and a shell
 	 * rather than a command of the profile's own. */
 	bool can_offer_multiplexers() const;

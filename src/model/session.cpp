@@ -1403,6 +1403,10 @@ void bssh_session::decline_multiplexers() {
 	}
 }
 
+void bssh_session::relist_multiplexers() {
+	list_multiplexers(true);
+}
+
 void bssh_session::offer_multiplexers_again() {
 	m_mux_answered = false;
 	list_multiplexers(true);

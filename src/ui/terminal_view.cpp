@@ -3994,6 +3994,9 @@ void bssh_terminal_view::on_screen_damaged() {
 	hold_cursor_on();
 }
 
+/* How often an open tmux/screen drawer lists what is running again. */
+static const int BSSH_MUX_RELIST_MS = 3000;
+
 void bssh_terminal_view::offer_multiplexers(const QList<bssh_mux_session_t> &found) {
 	if (found.isEmpty()) {
 		withdraw_multiplexers();
@@ -4001,9 +4004,25 @@ void bssh_terminal_view::offer_multiplexers(const QList<bssh_mux_session_t> &fou
 	}
 	if (!m_mux_drawer) {
 		m_mux_drawer = new bssh_multiplexer_drawer(this);
-		connect(m_mux_drawer, &bssh_multiplexer_drawer::open_changed, this, [this] {
+		connect(m_mux_drawer, &bssh_multiplexer_drawer::open_changed, this, [this](bool open) {
 			place_multiplexer_drawer();
 			sync_multiplexer_drawer_shown();
+			/*
+			 * Listed when it opens and every three seconds while it is
+			 * open: one listing is a command run beside the shell, and
+			 * the drawer is open only while somebody is choosing.
+			 */
+			if (!m_mux_relist) {
+				m_mux_relist = new QTimer(this);
+				m_mux_relist->setInterval(BSSH_MUX_RELIST_MS);
+				connect(m_mux_relist, &QTimer::timeout, this, &bssh_terminal_view::multiplexers_wanted);
+			}
+			if (open) {
+				m_mux_relist->start();
+				emit multiplexers_wanted();
+			} else {
+				m_mux_relist->stop();
+			}
 		});
 		connect(m_mux_drawer, &bssh_multiplexer_drawer::session_chosen, this,
 		         [this](const bssh_mux_session_t &chosen) {
@@ -4028,6 +4047,7 @@ void bssh_terminal_view::sync_multiplexer_drawer_shown() {
 }
 
 void bssh_terminal_view::withdraw_multiplexers() {
+	if (m_mux_relist) m_mux_relist->stop();
 	if (!m_mux_drawer) return;
 	m_mux_drawer->deleteLater();
 	m_mux_drawer = nullptr;

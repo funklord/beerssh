@@ -758,6 +758,10 @@ signals:
 	/* The drawer's answer (sec 10.2a); see offer_multiplexers(). */
 	void multiplexer_chosen(const bssh_mux_session_t &chosen);
 
+	/* The drawer is open and wants what is running now: on opening, and
+	 * every few seconds while it stays open. */
+	void multiplexers_wanted();
+
 	/*
 	 * Ctrl+wheel (sec 9.5): zoom this pane by the given number of steps.
 	 * A request rather than an action, for the same reason as the drag
@@ -1379,6 +1383,7 @@ private:
 	void place_multiplexer_drawer();
 	void sync_multiplexer_drawer_shown();
 	bssh_multiplexer_drawer *m_mux_drawer = nullptr;
+	class QTimer *m_mux_relist = nullptr;
 
 	/* The corner over the grid's top-right (sec 8.7a). */
 	void place_corner();
