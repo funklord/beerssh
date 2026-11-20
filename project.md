@@ -21460,6 +21460,45 @@ and in one place.
 - **Swap With** (a Pane-menu verb built to the first reading, set-aside as a
   tab behind) was tested and not committed: "swap is a bit confusing".
 
+**Open 2026-11-20: BeerSSH crashed closing a tab, for the holder, the first
+crash they have seen.** No trace: core dumps are off on the machine
+(`ulimit -c` 0) and the program's output reached no log. What is known:
+both processes of the morning's upgrade were gone afterwards, and the four
+bash shells -- children of the OLD process -- died with them, so the one
+that crashed held all four ptys: the window that had taken them over,
+built from `dfa2f7c` (the arrangement, the Terminals sidebar), its
+terminals imported over the hand-off socket. Not reproduced: four
+terminals moved in-process by `export_handoff`/`import_handoff`, adopted
+into a window with the sidebar shown, then closed through
+`m_registry->close()` one after another with waits past the sidebar's 3 s
+refresh -- passed, and clean under valgrind. Not yet tried: terminals
+taken from a real second process whose own windows then quit; a tab
+closed while it was a tab behind another; closing during a drag. The
+next crash wants a core: `ulimit -c unlimited` before starting it.
+
+**Asked 2026-11-20, to build once the open bugs are fixed (the holder):**
+
+- **Put the Terminals sidebar away and bring it back quickly.** The
+  holder's idea: right-click the pane corner's grip (the drag button) to
+  hide it, right-click again to show it. View > Terminals already toggles
+  it, but only through a menu. To weigh against the grip: a chord (Konsole
+  and Kate toggle their side panels with one), and a narrow strip left at
+  the window's edge when hidden that a click reopens -- the grip's right
+  button is otherwise unused, but it is not discoverable and a phone has
+  no right button. Whether the shown or hidden state is remembered across
+  a restart is the same open item as above.
+- **The screen/tmux picker shows stale state.** Its "(attached)" and
+  "(detached)" marks and the session names are "almost always" wrong when
+  opened. The list is read when a session connects, 800 ms after attaching
+  through it, and when asked again (`bssh_session::list_multiplexers()`);
+  nothing reads it when the drawer opens, and attaching or detaching from
+  another terminal changes nothing here. At least: list again when the
+  picker opens (one `tmux ls` / `screen -ls`, cheap) and show the last list
+  until the answer arrives; and while it is open, again every few seconds.
+  Measure first whether one listing on open is enough before adding a timer.
+
+
+
 **Built 2026-11-20: an upgrade keeps the windows, not only the terminals
 (the holder: "hand over all terminals from an older version into a new
 version and set up the layout in the same way ... this also builds us the
