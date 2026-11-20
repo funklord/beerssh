@@ -19,8 +19,10 @@ questions* at the end of this file.** In short: BeerSSH's Android floor is API 2
 (sec 2); the phone app reaches hosts over fuzznet and pairs from the terminal's
 long-press menu; beersshd's APK no longer aborts at start with its helpers
 (sec 19.1); both apps were seen working end to end on an API 36 emulator, not yet
-on the Fold. Open and the holder's: a "swap this terminal for another" feature,
-and whether a package's version should name its commit.
+on the Fold. Since (2026-11-20): no multi-line paste question under bracketed
+paste. Open and the holder's: a Terminals sidebar with the tray process holding
+background terminals (the fold's entry), and whether a package's version
+should name its commit.
 
 ## 0.1 Name and identity — **[DECIDED]**
 
@@ -21422,25 +21424,42 @@ device shows; the only other `ANDROID_EXTRA_LIBS` use, FFmpeg's libraries in
   is the cheap way to find a field. Under host load the emulator's own
   System UI raises "isn't responding"; Wait dismisses it.
 
-**Open, the holder's: replace one terminal with another (asked 2026-11-19).**
-The holder: "one terminal can be replaced by another terminal running on the
-same machine ... hide the current terminal into the same global list and
-replace it with another ... If that terminal is in a window already, the
-other one would be closed." Fits what exists: the registry is process-wide,
-a session is shown in one pane at a time (sec 8.4), and `take_session` is
-already a move announced through the registry. Missing is a **set-aside**
-state -- alive, in no pane -- and a pane action, *Swap with...*, listing
-every session (set aside, and in other windows by name); a pick shows it
-here, sets this pane's aside, and the source pane falls back to its next tab
-or closes, a window with no pane closing as a dragged-out last tab's does.
-Precedent: Emacs's buffers (`C-x b`), with the one difference that a buffer
-may show in two windows and a session here moves. Points to settle: whether
-set-aside is simply a tab with no pane (on a phone they nearly coincide);
-where set-aside sessions are listed (host list's Sessions section made
-process-wide -- it is per window now, `set_open_sessions(m_shown)` -- the
-tray, and the quit prompt's count, which is process-wide already); restart
-behaviour the same as a hidden tab's. Cost: moderate, the move itself being
-built. **Waiting on the holder's go-ahead.**
+**Open, the holder's: list terminals and open one from a sidebar; let the
+tray process hold background terminals (2026-11-19, redirected 2026-11-20).**
+The first ask: "one terminal can be replaced by another terminal running on
+the same machine ... hide the current terminal into the same global list and
+replace it with another." A *Swap With* in the Pane menu was built and tested
+on 2026-11-20 (the pick takes this pane's place, the current one goes behind
+it as a tab) and **not committed**: the holder, the same day, "The feature
+should be something like list terminals, then open the terminal from a
+sidebar, swap is a bit confusing for this feature. What can the tray process
+do? Maybe it should be about holding and opening background terminals as
+they'd be killed/lose their parent otherwise."
+
+What exists, measured 2026-11-20, for whoever builds it:
+- **Every desktop window is its own process** (New Window, a torn-out tab, a
+  restored layout; sec 8.4), and a session moves between processes over the
+  handoff socket with its descriptors, the SSH connection surviving
+  (`bssh_handoff_point`, `export_handoff`/`import_handoff`). Only CONNECTED
+  sessions can be listed or taken, and `list` returns ids without titles.
+- **The tray is per process** and offers only Show and Quit. "Keep running"
+  (only with `window/keep_sessions_on_close`, off on desktop) hides the
+  whole window; otherwise closing a window CLOSES its sessions -- that is
+  the "killed" the holder means.
+- **Nothing lists sessions across processes.** The host list's Sessions
+  section is per window and touch only; the desktop has no sidebar (no dock
+  scaffolding, by choice) -- the file panel is the only side panel.
+
+The shape this suggests, unbuilt: one resident **keeper** process owning the
+single tray icon; a window closing with live sessions hands them to it
+instead of closing them (the existing handoff); and a **Terminals** sidebar
+in every window listing every session -- this window's, other windows', the
+keeper's -- from `list` extended with title and state, a click taking it
+here. Decisions it needs: whether closing a window hands off by default or
+asks; whether the keeper is windowless; whether the extended `list` must
+stay readable by an older BeerSSH (Restart, Keeping Sessions hands between
+versions); and on a phone, one process, the sidebar is the host list's
+Sessions section made process-wide.
 
 **Open, the holder's: a package's version does not say which build it is.**
 The holder could not find maximise (`504b559`, 2026-11-18 13:48) and asked
