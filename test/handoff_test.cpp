@@ -17,6 +17,7 @@
 #include <QTemporaryDir>
 #include <QtTest>
 
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -1019,7 +1020,9 @@ void handoff_test::the_terminals_list_asks_other_processes_without_waiting() {
 		for (int fd : queued) ::close(fd);
 	});
 	for (int i = 0; i < 8; ++i) {
-		const int fd = ::socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0);
+		/* fcntl rather than SOCK_NONBLOCK, which macOS does not have. */
+		const int fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
+		::fcntl(fd, F_SETFL, ::fcntl(fd, F_GETFL) | O_NONBLOCK);
 		if (::connect(fd, reinterpret_cast<sockaddr *>(&address), sizeof address) != 0) {
 			::close(fd);
 			break;
