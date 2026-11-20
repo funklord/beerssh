@@ -35,6 +35,8 @@ const char BSSH_HANDOFF_IDS[] = "ids";
 const char BSSH_HANDOFF_QUIT[] = "quit";
 const char BSSH_HANDOFF_HOVER[] = "hover";
 const char BSSH_HANDOFF_OK[] = "ok";
+const char BSSH_HANDOFF_TERMINALS[] = "terminals";
+const char BSSH_HANDOFF_ENTRIES[] = "entries";
 
 bssh_handoff_point *g_instance = nullptr;
 
@@ -219,6 +221,22 @@ void bssh_handoff_point::serve(int socket) {
 		                        BSSH_HANDOFF_STEP_MS);
 		return;
 	}
+	if (verb == BSSH_HANDOFF_TERMINALS) {
+		/* "id<TAB>title" a line each; a title cannot break the framing. */
+		QStringList lines;
+		if (m_cataloguer) {
+			for (const listed_t &entry : m_cataloguer()) {
+				QString title = entry.title;
+				title.replace(QLatin1Char('\t'), QLatin1Char(' '));
+				title.replace(QLatin1Char('\n'), QLatin1Char(' '));
+				title.replace(QLatin1Char('\r'), QLatin1Char(' '));
+				lines.append(entry.id + QLatin1Char('\t') + title);
+			}
+		}
+		bssh_handoff_wire::send(socket, word(BSSH_HANDOFF_ENTRIES, lines.join(QLatin1Char('\n'))), {},
+		                        BSSH_HANDOFF_STEP_MS);
+		return;
+	}
 	if (verb == BSSH_HANDOFF_QUIT) {
 		bssh_handoff_wire::send(socket, word(BSSH_HANDOFF_OK), {}, BSSH_HANDOFF_STEP_MS);
 		QMetaObject::invokeMethod(this, [this] { emit quit_requested(); }, Qt::QueuedConnection);
@@ -356,7 +374,7 @@ namespace {
 
 /* One short request and its answer, for offer(), list() and request_quit(). */
 bool ask(const QString &path, const QByteArray &request, QByteArray &verb, QString &text,
-         QString *why) {
+         QString *why, int timeout_ms = BSSH_HANDOFF_STEP_MS) {
 	sockaddr_un address;
 	if (!fill_address(address, path, why)) return false;
 	const int socket = bssh_socket(AF_UNIX, SOCK_STREAM, BSSH_CLOEXEC);
@@ -367,8 +385,8 @@ bool ask(const QString &path, const QByteArray &request, QByteArray &verb, QStri
 	}
 	bssh_handoff_message_t answer;
 	const bool ok = bssh_handoff_wire::peer_is_same_user(socket) &&
-	        bssh_handoff_wire::send(socket, request, {}, BSSH_HANDOFF_STEP_MS, why) &&
-	        bssh_handoff_wire::receive(socket, answer, BSSH_HANDOFF_STEP_MS, why) &&
+	        bssh_handoff_wire::send(socket, request, {}, timeout_ms, why) &&
+	        bssh_handoff_wire::receive(socket, answer, timeout_ms, why) &&
 	        read_word(answer.bytes, verb, text);
 	close_all(answer.fds);
 	::close(socket);
@@ -392,6 +410,33 @@ QStringList bssh_handoff_point::list(const QString &path, QString *why) {
 	if (!ask(path, word(BSSH_HANDOFF_LIST), verb, text, why) || verb != BSSH_HANDOFF_IDS)
 		return QStringList();
 	return text.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+}
+
+QList<bssh_handoff_point::listed_t> bssh_handoff_point::terminals(const QString &path, QString *why,
+                                                                  int timeout_ms) {
+	QByteArray verb;
+	QString text;
+	QList<listed_t> out;
+	if (!ask(path, word(BSSH_HANDOFF_TERMINALS), verb, text, why, timeout_ms) ||
+	    verb != BSSH_HANDOFF_ENTRIES)
+		return out;
+	for (const QString &line : text.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
+		const int tab = line.indexOf(QLatin1Char('\t'));
+		if (tab <= 0) continue;
+		out.append({ line.left(tab), line.mid(tab + 1) });
+	}
+	return out;
+}
+
+QStringList bssh_handoff_point::peers() {
+	const QString own = g_instance ? g_instance->path() : QString();
+	const QDir dir(directory());
+	QStringList out;
+	for (const QString &name : dir.entryList({ QStringLiteral("handoff-*.sock") }, QDir::System, QDir::Name)) {
+		const QString path = dir.filePath(name);
+		if (path != own) out.append(path);
+	}
+	return out;
 }
 
 int bssh_handoff_point::sweep_stale() {
@@ -493,6 +538,18 @@ bool bssh_handoff_point::offer(const QString &target, const QString &source, con
 QStringList bssh_handoff_point::list(const QString &path, QString *why) {
 	Q_UNUSED(path);
 	if (why) *why = not_here;
+	return {};
+}
+
+QList<bssh_handoff_point::listed_t> bssh_handoff_point::terminals(const QString &path, QString *why,
+                                                                  int timeout_ms) {
+	Q_UNUSED(path);
+	Q_UNUSED(timeout_ms);
+	if (why) *why = not_here;
+	return {};
+}
+
+QStringList bssh_handoff_point::peers() {
 	return {};
 }
 

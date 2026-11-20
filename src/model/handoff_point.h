@@ -46,10 +46,21 @@ public:
 	 * version taking them all. */
 	using lister_t = std::function<QStringList()>;
 
+	/*
+	 * A terminal this process would give, as another process's Terminals
+	 * sidebar lists it: the handoff id to take it by, and its title.
+	 */
+	struct listed_t {
+		QString id;
+		QString title;
+	};
+	using cataloguer_t = std::function<QList<listed_t>()>;
+
 	explicit bssh_handoff_point(finder_t finder, QObject *parent = nullptr);
 	~bssh_handoff_point() override;
 
 	void set_lister(lister_t lister) { m_lister = std::move(lister); }
+	void set_cataloguer(cataloguer_t cataloguer) { m_cataloguer = std::move(cataloguer); }
 
 	/* Starts listening. False, with why, when the socket cannot be made. */
 	bool listen(QString *why = nullptr);
@@ -102,6 +113,22 @@ public:
 	static bool request_quit(const QString &path, QString *why = nullptr);
 
 	/*
+	 * The terminals the process at path would give, with their titles,
+	 * for a Terminals sidebar (the holder, 2026-11-20). Its own request
+	 * rather than a wider "list": a BeerSSH from before it ignores a word
+	 * it does not know and closes, which reads here as an empty answer,
+	 * and a new version taking everything over from an old one still asks
+	 * the old "list". Bounded by timeout_ms, short, since a sidebar asks
+	 * every process while somebody waits.
+	 */
+	static QList<listed_t> terminals(const QString &path, QString *why = nullptr,
+	                                 int timeout_ms = 500);
+
+	/* Where every OTHER BeerSSH of this user listens: directory()'s
+	 * sockets less this process's own. A stale one simply refuses. */
+	static QStringList peers();
+
+	/*
 	 * A drag from another BeerSSH is over the process at path, at global
 	 * -- or, with active false, has left it or ended without a drop
 	 * (sec 8.7a). The target draws where a drop would land; a drag shows
@@ -133,6 +160,7 @@ private:
 
 	finder_t m_finder;
 	lister_t m_lister;
+	cataloguer_t m_cataloguer;
 	QString m_path;
 	int m_listener = -1;
 	QSocketNotifier *m_notifier = nullptr;

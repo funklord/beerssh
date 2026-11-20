@@ -15,6 +15,7 @@
 #include "model/app_settings.h"
 #include "ui/input_mode.h"
 #include "ui/long_press.h"
+#include "ui/terminals_panel.h"
 
 #include "input/input_router.h"
 #include "softkeys/focus_target.h"
@@ -697,6 +698,25 @@ public:
 	void adopt_session(bssh_session *session);
 
 	/*
+	 * The Terminals sidebar (the holder, 2026-11-20): every terminal this
+	 * user has open, here, in another window, or in another BeerSSH, and
+	 * one picked opens HERE -- taken from wherever it was, which is the
+	 * easy hand-off a window needs now that closing it closes its
+	 * terminals. View > Terminals; desktop, where windows are processes.
+	 *
+	 * terminal_entries() is what the sidebar lists, in its order: this
+	 * window's, then this process's other windows', then other processes'
+	 * that they would give (connected ones; bssh_handoff_point::terminals).
+	 * open_terminal_entry() is what picking one does.
+	 */
+	void set_terminals_panel_shown(bool shown);
+	bool terminals_panel_shown() const;
+	bssh_terminals_panel *terminals_panel() const { return m_terminals_panel; }
+	QList<bssh_terminal_entry_t> terminal_entries() const;
+	void open_terminal_entry(const bssh_terminal_entry_t &entry);
+	void refresh_terminals_panel();
+
+	/*
 	 * Takes a tab out into a window of its own (sec 8.3's drag, sec 8.4's
 	 * multiple windows). Returns the new window, or null when there is
 	 * nothing to tear out -- a window will not empty itself, because a
@@ -1201,6 +1221,10 @@ private:
 	/* A pairing over fuzznet answered: a host beside `asked` that reaches it so (sec 5.6). */
 	void add_fuzznet_twin(bssh_session *asked, const QString &image, const QString &why);
 	QAction *m_menu_bar_action = nullptr;
+	QAction *m_terminals_action = nullptr;
+	bssh_terminals_panel *m_terminals_panel = nullptr;
+	/* Other processes are asked, not told: the list is re-read while shown. */
+	QTimer *m_terminals_timer = nullptr;
 
 	/*
 	 * The tab bar's handle dragged (sec 8.7a): the side of the bar's own

@@ -503,6 +503,14 @@ int main(int argc, char *argv[]) {
 			}
 			return ids;
 		});
+		handoff->set_cataloguer([registry] {
+			QList<bssh_handoff_point::listed_t> entries;
+			for (bssh_session *session : registry->sessions()) {
+				if (session->state() == bssh_ssh_session::CONNECTED)
+					entries.append({ session->handoff_id(), session->title() });
+			}
+			return entries;
+		});
 		QString why;
 		if (!handoff->listen(&why)) qWarning("handoff: %s", qPrintable(why));
 		QObject::connect(handoff, &bssh_handoff_point::session_given,

@@ -20,9 +20,9 @@ questions* at the end of this file.** In short: BeerSSH's Android floor is API 2
 long-press menu; beersshd's APK no longer aborts at start with its helpers
 (sec 19.1); both apps were seen working end to end on an API 36 emulator, not yet
 on the Fold. Since (2026-11-20): no multi-line paste question under bracketed
-paste. Open and the holder's: a Terminals sidebar with the tray process holding
-background terminals (the fold's entry), and whether a package's version
-should name its commit.
+paste; a Terminals sidebar (View > Terminals) that opens any terminal, from any
+BeerSSH window, here -- closing a window still closes its terminals. Open and
+the holder's: whether a package's version should name its commit.
 
 ## 0.1 Name and identity — **[DECIDED]**
 
@@ -21424,42 +21424,40 @@ device shows; the only other `ANDROID_EXTRA_LIBS` use, FFmpeg's libraries in
   is the cheap way to find a field. Under host load the emulator's own
   System UI raises "isn't responding"; Wait dismisses it.
 
-**Open, the holder's: list terminals and open one from a sidebar; let the
-tray process hold background terminals (2026-11-19, redirected 2026-11-20).**
-The first ask: "one terminal can be replaced by another terminal running on
-the same machine ... hide the current terminal into the same global list and
-replace it with another." A *Swap With* in the Pane menu was built and tested
-on 2026-11-20 (the pick takes this pane's place, the current one goes behind
-it as a tab) and **not committed**: the holder, the same day, "The feature
-should be something like list terminals, then open the terminal from a
-sidebar, swap is a bit confusing for this feature. What can the tray process
-do? Maybe it should be about holding and opening background terminals as
-they'd be killed/lose their parent otherwise."
+**Built 2026-11-20, first version: the Terminals sidebar (the holder,
+2026-11-19 and 20).** The ask went from "replace one terminal with another"
+to "list terminals, then open the terminal from a sidebar"; a tray process
+holding terminals was considered and declined -- **"closing should be
+closing, but we need a way to hand them off easily."** The holder expects
+the shape to change "as we figure out a good workflow", so it is kept small
+and in one place.
 
-What exists, measured 2026-11-20, for whoever builds it:
-- **Every desktop window is its own process** (New Window, a torn-out tab, a
-  restored layout; sec 8.4), and a session moves between processes over the
-  handoff socket with its descriptors, the SSH connection surviving
-  (`bssh_handoff_point`, `export_handoff`/`import_handoff`). Only CONNECTED
-  sessions can be listed or taken, and `list` returns ids without titles.
-- **The tray is per process** and offers only Show and Quit. "Keep running"
-  (only with `window/keep_sessions_on_close`, off on desktop) hides the
-  whole window; otherwise closing a window CLOSES its sessions -- that is
-  the "killed" the holder means.
-- **Nothing lists sessions across processes.** The host list's Sessions
-  section is per window and touch only; the desktop has no sidebar (no dock
-  scaffolding, by choice) -- the file panel is the only side panel.
-
-The shape this suggests, unbuilt: one resident **keeper** process owning the
-single tray icon; a window closing with live sessions hands them to it
-instead of closing them (the existing handoff); and a **Terminals** sidebar
-in every window listing every session -- this window's, other windows', the
-keeper's -- from `list` extended with title and state, a click taking it
-here. Decisions it needs: whether closing a window hands off by default or
-asks; whether the keeper is windowless; whether the extended `list` must
-stay readable by an older BeerSSH (Restart, Keeping Sessions hands between
-versions); and on a phone, one process, the sidebar is the host list's
-Sessions section made process-wide.
+- **View > Terminals** (desktop menu bar) shows a list on the left of the
+  window: *This window*, *Other windows* (this process's), *Other BeerSSH
+  windows* (other processes). A click, or Return, opens that terminal HERE:
+  in this window it is shown; from another window or process it MOVES here,
+  by `adopt_session()` or by the handoff socket's `take` (sec 8.4), and a
+  window left with nothing closes as after a drag. Closing a window still
+  closes its terminals; the sidebar is how one is moved out first.
+- **Other processes are asked with a new request, `terminals`**, answered
+  `id<TAB>title` a line each (`bssh_handoff_point::terminals()`, 500 ms
+  bound; `peers()` lists the other sockets). A new word rather than a wider
+  `list`, so a BeerSSH from before it ignores the word and reads as empty,
+  and Restart, Keeping Sessions still asks the old `list`. Only CONNECTED
+  terminals are listed there, since only those can be taken.
+- **Re-read every 3 s while shown**, since another process says nothing when
+  its terminals change; this process's changes refresh it at once.
+- Code: `src/ui/terminals_panel.{h,cpp}` is only the list; what an entry is
+  and what opening it does are `bssh_main_window::terminal_entries()` and
+  `open_terminal_entry()`. Tests: `another_process_lists_its_terminals_by_title`
+  (across a real process boundary), `the_terminals_sidebar_opens_another_windows_terminal_here`
+  (by clicking the row). Sabotages in `tool/sabotage/terminals-sidebar.toml`.
+- **Not yet:** whether it stays open across a restart (not remembered); a
+  way to open it without the menu bar (no chord, no corner entry); a phone,
+  which is one process and has the host list's Sessions section. Each waits
+  on how the holder ends up using it.
+- **Swap With** (a Pane-menu verb built to the first reading, set-aside as a
+  tab behind) was tested and not committed: "swap is a bit confusing".
 
 **Open, the holder's: a package's version does not say which build it is.**
 The holder could not find maximise (`504b559`, 2026-11-18 13:48) and asked

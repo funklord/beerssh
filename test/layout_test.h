@@ -358,6 +358,7 @@ private slots:
 	 * into that pane, and Show as Tab moves a pane into its neighbour.
 	 */
 	void each_pane_keeps_its_own_tabs();
+	void the_terminals_sidebar_opens_another_windows_terminal_here();
 
 	/*
 	 * A tab NOT in front can be dragged out of its bar: pressing it does

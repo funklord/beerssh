@@ -524,6 +524,8 @@ int main(int argc, char *argv[]) {
 		 */
 #ifndef _WIN32
 		if (qstrcmp(argv[i], "--handoff-give") == 0) return bssh_handoff_give_mode();
+		if (qstrcmp(argv[i], "--handoff-terminals") == 0 && i + 1 < argc)
+			return bssh_handoff_terminals_mode(QString::fromLocal8Bit(argv[i + 1]));
 		if (qstrcmp(argv[i], "--handoff-take") == 0 && i + 2 < argc) {
 			return bssh_handoff_take_mode(QString::fromLocal8Bit(argv[i + 1]),
 			                              QString::fromLocal8Bit(argv[i + 2]));

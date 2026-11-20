@@ -1,0 +1,63 @@
+#ifndef BSSH_TERMINALS_PANEL_H
+#define BSSH_TERMINALS_PANEL_H
+
+#include <QList>
+#include <QPointer>
+#include <QString>
+#include <QWidget>
+
+class QListWidget;
+class bssh_session;
+
+/*
+ * One terminal the Terminals sidebar lists: in this window, in another
+ * window of this process, or in another BeerSSH -- every desktop window
+ * is its own process (sec 8.4), reached by its handoff socket.
+ */
+struct bssh_terminal_entry_t {
+	enum place_t { HERE, OTHER_WINDOW, OTHER_PROCESS };
+	place_t place = HERE;
+	QString title;
+	/* HERE and OTHER_WINDOW: the session itself. */
+	QPointer<bssh_session> session;
+	/* OTHER_PROCESS: where to ask, and what for. */
+	QString path;
+	QString id;
+	/* The one this window has focused. */
+	bool current = false;
+};
+
+/*
+ * bssh_terminals_panel -- a list of every terminal this user has open, to
+ * open one here from (the holder, 2026-11-20: "list terminals, then open
+ * the terminal from a sidebar"; closing a window still closes its
+ * terminals, so this is how one is handed off before that).
+ *
+ * Only the list: what an entry is and what opening it does are the
+ * window's, so the panel can be reshaped -- the holder expects to, as a
+ * workflow settles -- without touching how a terminal moves.
+ */
+class bssh_terminals_panel : public QWidget {
+	Q_OBJECT
+
+public:
+	explicit bssh_terminals_panel(QWidget *parent = nullptr);
+
+	void set_entries(const QList<bssh_terminal_entry_t> &entries);
+	const QList<bssh_terminal_entry_t> &entries() const { return m_entries; }
+
+	/* The list, for a test to find a row by. */
+	QListWidget *list() const { return m_list; }
+
+signals:
+	/* An entry chosen: clicked, or Return on it. */
+	void picked(const bssh_terminal_entry_t &entry);
+
+private:
+	QListWidget *m_list;
+	QList<bssh_terminal_entry_t> m_entries;
+	/* One pick at a time: a click can also be an activation. */
+	bool m_pick_queued = false;
+};
+
+#endif

@@ -1,0 +1,29 @@
+# Sabotages for the Terminals sidebar (the holder, 2026-11-20): every
+# terminal listed, and one picked opens here -- from another window, or
+# another BeerSSH over the handoff socket (project.md, the fold of
+# 2026-11-19 and its 2026-11-20 entry).
+
+# Another process's terminals come back unnamed: the sidebar would list
+# rows nobody could tell apart.
+[[sabotage]]
+name = "another process lists its terminals without titles"
+file = "src/model/handoff_point.cpp"
+find = "\t\tout.append({ line.left(tab), line.mid(tab + 1) });"
+replace = "\t\tout.append({ line.left(tab), QString() });"
+expect = "another_process_lists_its_terminals_by_title"
+
+# Another window's terminal left out of the list.
+[[sabotage]]
+name = "the sidebar lists only this window"
+file = "src/ui/main_window.cpp"
+find = "\t\tentry.place = bssh_terminal_entry_t::OTHER_WINDOW;"
+replace = "\t\tcontinue;"
+expect = "the_terminals_sidebar_opens_another_windows_terminal_here"
+
+# Picking another window's terminal does nothing.
+[[sabotage]]
+name = "a picked terminal from another window stays there"
+file = "src/ui/main_window.cpp"
+find = "\t\tif (entry.session && m_registry->index_of(entry.session) >= 0) adopt_session(entry.session);"
+replace = "\t\tbreak;"
+expect = "the_terminals_sidebar_opens_another_windows_terminal_here"

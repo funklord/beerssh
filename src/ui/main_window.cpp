@@ -2723,6 +2723,125 @@ void bssh_main_window::take_session(bssh_session *session) {
 	on_registry_changed();
 }
 
+bool bssh_main_window::terminals_panel_shown() const {
+	return m_terminals_panel && !m_terminals_panel->isHidden();
+}
+
+void bssh_main_window::set_terminals_panel_shown(bool shown) {
+	if (shown == terminals_panel_shown()) return;
+
+	if (shown && !m_terminals_panel) {
+		/*
+		 * Beside the panes, on the left, in the row a side tab bar uses
+		 * (sec 8.7): a list of names, so narrow, and the panes keep the
+		 * rest.
+		 */
+		m_terminals_panel = new bssh_terminals_panel(m_terminal_page);
+		m_terminals_panel->setMinimumWidth(140);
+		m_terminals_panel->setMaximumWidth(260);
+		m_body->insertWidget(0, m_terminals_panel, 0);
+		connect(m_terminals_panel, &bssh_terminals_panel::picked, this,
+		        [this](const bssh_terminal_entry_t &entry) { open_terminal_entry(entry); });
+
+		/*
+		 * Another process says nothing when its terminals change, so the
+		 * list is asked again every few seconds while it is on screen.
+		 * This process's own changes refresh it at once
+		 * (on_registry_changed).
+		 */
+		m_terminals_timer = new QTimer(this);
+		m_terminals_timer->setInterval(3000);
+		connect(m_terminals_timer, &QTimer::timeout, this, [this] { refresh_terminals_panel(); });
+	}
+	if (!m_terminals_panel) return;
+
+	m_terminals_panel->setVisible(shown);
+	if (shown) {
+		refresh_terminals_panel();
+		m_terminals_timer->start();
+	} else {
+		m_terminals_timer->stop();
+	}
+	if (m_terminals_action && m_terminals_action->isChecked() != shown)
+		m_terminals_action->setChecked(shown);
+}
+
+QList<bssh_terminal_entry_t> bssh_main_window::terminal_entries() const {
+	QList<bssh_terminal_entry_t> out;
+
+	for (bssh_session *session : m_shown) {
+		bssh_terminal_entry_t entry;
+		entry.place = bssh_terminal_entry_t::HERE;
+		entry.title = session->title();
+		entry.session = session;
+		entry.current = session == m_current;
+		out.append(entry);
+	}
+
+	/* This process's other windows -- and any session no window shows. */
+	for (bssh_session *session : m_registry->sessions()) {
+		if (m_shown.contains(session)) continue;
+		bssh_terminal_entry_t entry;
+		entry.place = bssh_terminal_entry_t::OTHER_WINDOW;
+		entry.title = session->title();
+		entry.session = session;
+		out.append(entry);
+	}
+
+	/*
+	 * Other processes, each asked briefly: a stale socket refuses at
+	 * once, and a live BeerSSH answers from its event loop. Only what it
+	 * would give is listed -- a connected session -- since a row that
+	 * then refused to come would be a row that lies.
+	 */
+	for (const QString &path : bssh_handoff_point::peers()) {
+		for (const bssh_handoff_point::listed_t &listed : bssh_handoff_point::terminals(path)) {
+			bssh_terminal_entry_t entry;
+			entry.place = bssh_terminal_entry_t::OTHER_PROCESS;
+			entry.title = listed.title;
+			entry.path = path;
+			entry.id = listed.id;
+			out.append(entry);
+		}
+	}
+	return out;
+}
+
+void bssh_main_window::refresh_terminals_panel() {
+	if (!terminals_panel_shown()) return;
+	m_terminals_panel->set_entries(terminal_entries());
+}
+
+void bssh_main_window::open_terminal_entry(const bssh_terminal_entry_t &entry) {
+	switch (entry.place) {
+	case bssh_terminal_entry_t::HERE:
+		if (entry.session && m_shown.contains(entry.session)) show_session(entry.session);
+		break;
+	case bssh_terminal_entry_t::OTHER_WINDOW:
+		/* A move, as a drag between windows is: the other window lets go. */
+		if (entry.session && m_registry->index_of(entry.session) >= 0) adopt_session(entry.session);
+		break;
+	case bssh_terminal_entry_t::OTHER_PROCESS: {
+		/*
+		 * The handoff a drag between processes makes (sec 8.4): the
+		 * connection comes here with its descriptors and the other
+		 * process lets go -- and closes, if that was its last terminal.
+		 */
+		QString why;
+		bssh_session *session = bssh_handoff_point::take(entry.path, entry.id, m_registry, &why);
+		if (!session) {
+			QMessageBox::warning(this, QStringLiteral("Terminal not moved"),
+			                     QStringLiteral("It stays where it was: %1").arg(why));
+			break;
+		}
+		m_registry->adopt(session);
+		adopt_session(session);
+		break;
+	}
+	}
+	refresh_terminals_panel();
+}
+
 void bssh_main_window::handle_shortcut(bssh_input_router::shortcut_t shortcut) {
 	if (!m_terminal_view) return;
 
@@ -5325,6 +5444,7 @@ void bssh_main_window::on_registry_changed() {
 
 	/* The host list's way back to them, counted from the same list. */
 	if (m_host_list) m_host_list->set_open_sessions(m_shown);
+	refresh_terminals_panel();
 
 	/* Detach needs more than one tab, and this is where that changed. */
 	refresh_menu_bar();
@@ -5950,6 +6070,15 @@ void bssh_main_window::build_menu_bar() {
 	connect(m_menu_bar_action, &QAction::toggled, this, [this](bool shown) {
 		bssh_app_settings().set_menu_bar_shown(shown);
 		apply_menu_bar();
+	});
+
+	/* The Terminals sidebar: every terminal, to open one here. */
+	m_terminals_action = view->addAction(QStringLiteral("&Terminals"));
+	m_terminals_action->setObjectName(QStringLiteral("show_terminals"));
+	m_terminals_action->setCheckable(true);
+	m_terminals_action->setChecked(terminals_panel_shown());
+	connect(m_terminals_action, &QAction::toggled, this, [this](bool shown) {
+		set_terminals_panel_shown(shown);
 	});
 	view->addSeparator();
 

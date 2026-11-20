@@ -30,6 +30,9 @@
 #include <QTreeWidget>
 #include <QSignalSpy>
 #include <QWheelEvent>
+#include <QListWidget>
+#include <QTemporaryDir>
+#include <QScopeGuard>
 #include <QScrollBar>
 #include <QScreen>
 #include <QMimeData>
@@ -8275,6 +8278,84 @@ void layout_test::a_pane_of_tabs_survives_being_written_down() {
 	QCOMPARE(bssh_layout_manager::shape_text(
 	                 bssh_layout_manager::parse_shape(QStringLiteral("H(b|*gone,c)"), find), name),
 	         QStringLiteral("H(b,c)"));
+}
+
+/*
+ * The Terminals sidebar (the holder, 2026-11-20): it lists this window's
+ * terminals and another window's, and a row clicked opens that terminal
+ * HERE -- the other window letting go, and closing, as after a drag.
+ * Driven by clicking the list, since the list is what was asked for.
+ *
+ * Other processes are asked through the handoff directory, so it is
+ * pointed somewhere empty: a BeerSSH the person running the suite has
+ * open must neither be listed nor be asked.
+ */
+void layout_test::the_terminals_sidebar_opens_another_windows_terminal_here() {
+	QTemporaryDir runtime;
+	QFile::setPermissions(runtime.path(), QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+	const QByteArray before = qgetenv("XDG_RUNTIME_DIR");
+	qputenv("XDG_RUNTIME_DIR", runtime.path().toUtf8());
+	const auto restore = qScopeGuard([before] {
+		if (before.isEmpty()) qunsetenv("XDG_RUNTIME_DIR");
+		else qputenv("XDG_RUNTIME_DIR", before);
+	});
+
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+	const registry_left_as_found_t tidy(shared);
+
+	bssh_main_window window;
+	window.resize(1200, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	bssh_session *mine = shared->create(named(QStringLiteral("mine")));
+	window.adopt_session(mine);
+
+	QPointer<bssh_main_window> other = new bssh_main_window;
+	other->setAttribute(Qt::WA_DeleteOnClose);
+	other->resize(900, 600);
+	other->show();
+	QVERIFY(QTest::qWaitForWindowExposed(other));
+	bssh_session *theirs = shared->create(named(QStringLiteral("theirs")));
+	other->adopt_session(theirs);
+	QCoreApplication::processEvents();
+
+	QVERIFY(!window.terminals_panel_shown());
+	window.set_terminals_panel_shown(true);
+	QVERIFY(window.terminals_panel_shown());
+	QCoreApplication::processEvents();
+
+	const QList<bssh_terminal_entry_t> entries = window.terminals_panel()->entries();
+	QCOMPARE(entries.size(), 2);
+	QCOMPARE(entries.at(0).place, bssh_terminal_entry_t::HERE);
+	QCOMPARE(entries.at(0).session.data(), mine);
+	QVERIFY(entries.at(0).current);
+	QCOMPARE(entries.at(1).place, bssh_terminal_entry_t::OTHER_WINDOW);
+	QCOMPARE(entries.at(1).session.data(), theirs);
+
+	/* Two headings and two terminals; the click lands on "theirs". */
+	QListWidget *list = window.terminals_panel()->list();
+	QCOMPARE(list->count(), 4);
+	QListWidgetItem *row = list->item(3);
+	QCOMPARE(row->text(), theirs->title());
+	list->scrollToItem(row);
+	QTest::mouseClick(list->viewport(), Qt::LeftButton, {}, list->visualItemRect(row).center());
+	QCoreApplication::processEvents();
+	QTest::qWait(50);
+	QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+
+	QVERIFY2(window.shown_sessions().contains(theirs), "the picked terminal did not come here");
+	QVERIFY2(other.isNull() || !other->isVisible(),
+	          "the window that gave up its last terminal is still on screen");
+
+	/* And the list says so: both here now. */
+	const QList<bssh_terminal_entry_t> after = window.terminals_panel()->entries();
+	QCOMPARE(after.size(), 2);
+	QCOMPARE(after.at(0).place, bssh_terminal_entry_t::HERE);
+	QCOMPARE(after.at(1).place, bssh_terminal_entry_t::HERE);
+
+	window.set_terminals_panel_shown(false);
+	QVERIFY(!window.terminals_panel_shown());
 }
 
 void layout_test::each_pane_keeps_its_own_tabs() {

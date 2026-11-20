@@ -106,6 +106,16 @@ struct taker_t {
 
 }  // namespace
 
+int bssh_handoff_terminals_mode(const QString &path) {
+	QString why;
+	const QList<bssh_handoff_point::listed_t> found = bssh_handoff_point::terminals(path, &why, 5000);
+	for (const bssh_handoff_point::listed_t &entry : found)
+		printf("%s|%s\n", qPrintable(entry.id), qPrintable(entry.title));
+	printf("peers: %d\n", int(bssh_handoff_point::peers().size()));
+	fflush(stdout);
+	return 0;
+}
+
 int bssh_handoff_take_mode(const QString &path, const QString &handoff_id) {
 	if (qEnvironmentVariableIsSet("BSSH_TEST_OFFER_MULTIPLEXERS"))
 		bssh_app_settings().set_offer_multiplexer_sessions(true);
@@ -519,6 +529,47 @@ void handoff_test::a_new_version_takes_every_session() {
 
 	app.kill();
 	app.waitForFinished(10000);
+}
+
+/*
+ * The Terminals sidebar's question to another process (the holder,
+ * 2026-11-20): what it would give, by title. Asked from a child process,
+ * as the sidebar asks from another window's, while this one serves. A
+ * title carrying the framing's own characters arrives as one line.
+ */
+void handoff_test::another_process_lists_its_terminals_by_title() {
+	runtime_dir_t runtime;
+	bssh_handoff_point point([](const QString &) -> bssh_session * { return nullptr; });
+	point.set_cataloguer([] {
+		QList<bssh_handoff_point::listed_t> entries;
+		entries.append({ QStringLiteral("aaa"), QStringLiteral("build host") });
+		entries.append({ QStringLiteral("bbb"), QStringLiteral("tab\there\nnewline") });
+		return entries;
+	});
+	QString why;
+	QVERIFY2(point.listen(&why), qPrintable(why));
+
+	QProcess asker;
+	asker.setProcessChannelMode(QProcess::MergedChannels);
+	asker.start(QCoreApplication::applicationFilePath(),
+	            { QStringLiteral("--handoff-terminals"), point.path() });
+	QElapsedTimer timer;
+	timer.start();
+	while (timer.elapsed() < 20000 && asker.state() != QProcess::NotRunning) {
+		QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
+		asker.waitForFinished(0);
+	}
+	if (asker.state() != QProcess::NotRunning) {
+		asker.kill();
+		asker.waitForFinished(5000);
+		QFAIL("the asking process did not finish");
+	}
+	const QString output = QString::fromLocal8Bit(asker.readAll());
+	QVERIFY2(output.contains(QStringLiteral("aaa|build host\n")), qPrintable(output));
+	QVERIFY2(output.contains(QStringLiteral("bbb|tab here newline\n")), qPrintable(output));
+
+	/* This process is the asker's one peer: its own socket is not counted. */
+	QVERIFY2(output.contains(QStringLiteral("peers: 1\n")), qPrintable(output));
 }
 
 void handoff_test::a_torn_out_tab_and_a_new_window_start_processes_of_their_own() {
