@@ -1,0 +1,9 @@
+# LeakSanitizer suppressions for `make SANITIZE=1 test`: leaks inside Qt,
+# never in BeerSSH's own code. Each entry names the frame and why.
+#
+# QScroller::grabGesture registers a QFlickGestureRecognizer per scroller;
+# QScroller's destructor unregisters it and leaves deleting it to the
+# gesture manager, which never does. 16 bytes a host editor, measured
+# 2026-11-20 (Qt 6.8.2); it turned a child process's exit code to 1 and
+# failed handoff_test with nothing of ours wrong.
+leak:QScroller::grabGesture

@@ -1123,6 +1123,7 @@ test: check-build-tree $(TARGET) $(TEST_BIN) $(TEST_SESSION_BIN) $(TEST_FUZZNET)
 	@# the fix when /tmp is a tmpfs somebody else is filling.
 	@tmp=$${TMPDIR:-/tmp}; 	free=$$(df -Pm "$$tmp" 2>/dev/null | awk 'NR==2 {print $$4}'); 	if [ -n "$$free" ] && [ "$$free" -lt 64 ]; then 		echo "test: only $${free}MB free on $$tmp -- refusing to run." >&2; 		echo "test:   The suite sandboxes into a temporary directory, so a full" >&2; 		echo "test:   filesystem surfaces as failing assertions rather than as a" >&2; 		echo "test:   disk error, and looks like a regression that is not there." >&2; 		echo "test:   Free some space, or point TMPDIR somewhere with room." >&2; 		exit 1; 	fi
 	QT_QPA_PLATFORM=offscreen $(BSSH_TEST_CRASH_ENV) \
+	  $(if $(SANITIZE),LSAN_OPTIONS=suppressions=$(CURDIR)/tool/lsan-qt.supp) \
 	  $(if $(TEST_SESSION_BIN),BSSH_TEST_SESSION_BIN=$(TEST_SESSION_BIN)) \
 	  $(if $(TEST_FUZZNET),BSSH_TEST_SSHD_BIN=$(SSHD_TARGET)) ./$(TEST_BIN)
 
