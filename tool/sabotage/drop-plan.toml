@@ -54,9 +54,11 @@ name = "the exchange detaches before it places"
 file = "src/ui/main_window.cpp"
 find = '''
 	wire_session(in);
+	one_refresh_t once(m_panes);
 	if (m_layout->intent().contains(out))'''
 replace = '''
 	wire_session(in);
+	one_refresh_t once(m_panes);
 	if (m_current == out) detach_session();
 	if (m_layout->intent().contains(out))'''
 expect = "the_zone_drawn_is_what_the_drop_does"

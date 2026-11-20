@@ -35,6 +35,7 @@
 #include "model/session_registry.h"
 #include "ui/layout_manager.h"
 #include "ui/main_window.h"
+#include "ui/pane_bar.h"
 #include "ui/pane_container.h"
 #include "ui/terminal_view.h"
 #include "term/emulator.h"
@@ -830,6 +831,125 @@ void handoff_test::a_move_rebuilds_each_window_once() {
 	move("to another window", [&] { other.adopt_session(made.value("c")); });
 	move("and back", [&] { window.drop_session_on(made.value("c"), made.value("b"), bssh_layout_manager::EDGE_RIGHT); });
 	QCOMPARE(window.shown_sessions().size(), 5);
+}
+
+void handoff_test::closing_a_tab_behind_rebuilds_once() {
+	bssh_session_registry *registry = bssh_session_registry::shared();
+	const auto tidy = qScopeGuard([registry] {
+		while (registry->count() > 0) registry->close(registry->at(0));
+	});
+	QHash<QString, bssh_session *> made;
+	for (const QString &letter : { QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c"),
+	                               QStringLiteral("d"), QStringLiteral("e") }) {
+		bssh_session *session = registry->create(local_shell_profile());
+		session->connect_to_host();
+		made.insert(letter, session);
+	}
+	for (bssh_session *session : made) QTRY_COMPARE(session->state(), bssh_ssh_session::CONNECTED);
+
+	bssh_main_window window;
+	window.resize(1400, 700);
+	window.show();
+	for (const QString &letter : { QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c"),
+	                               QStringLiteral("d"), QStringLiteral("e") })
+		window.adopt_session(made.value(letter));
+	window.layout_manager()->set_tree(bssh_layout_manager::parse_shape(
+	        QStringLiteral("H(*a|d|e,V(b,c))"), [&made](const QString &name) { return made.value(name); }));
+	window.panes()->focus_session(made.value(QStringLiteral("b")));
+	QTest::qWait(300);
+
+	int built = 0;
+	connect(window.panes(), &bssh_pane_container::panes_rebuilt, this, [&built] { ++built; });
+	QHash<bssh_session *, int> resized;
+	for (bssh_session *session : made) {
+		const QSize was(session->emulator()->screen().cols(), session->emulator()->screen().rows());
+		connect(session->emulator(), &bssh_emulator::damaged, this, [session, was, &resized] {
+			if (QSize(session->emulator()->screen().cols(), session->emulator()->screen().rows()) != was)
+				++resized[session];
+		});
+	}
+
+	/* The tab behind a, closed as its bar's x closes it. */
+	registry->close(made.value(QStringLiteral("d")));
+	QTest::qWait(400);
+	QVERIFY2(built <= 1, qPrintable(QStringLiteral("the panes were built %1 times").arg(built)));
+	QVERIFY2(resized.isEmpty(), "a terminal on screen changed size for a tab behind another");
+	QCOMPARE(bssh_layout_manager::shape_text(window.layout_manager()->tree(),
+	                                         [&made](bssh_session *session) { return made.key(session); }),
+	         QStringLiteral("H(*a|e,V(b,c))"));
+}
+
+void handoff_test::each_pane_gesture_rebuilds_once() {
+	bssh_session_registry *registry = bssh_session_registry::shared();
+	const auto tidy = qScopeGuard([registry] {
+		while (registry->count() > 0) registry->close(registry->at(0));
+	});
+	QList<bssh_session *> made;
+	for (int i = 0; i < 4; ++i) {
+		bssh_session *session = registry->create(local_shell_profile());
+		session->connect_to_host();
+		made.append(session);
+	}
+	for (bssh_session *session : made) QTRY_COMPARE(session->state(), bssh_ssh_session::CONNECTED);
+
+	bssh_main_window window;
+	window.resize(1600, 700);
+	window.show();
+	for (bssh_session *session : made) window.adopt_session(session);
+	QTest::qWait(300);
+
+	int built = 0;
+	connect(window.panes(), &bssh_pane_container::panes_rebuilt, this, [&built] { ++built; });
+	const auto once = [&](const char *what, const std::function<void()> &act) {
+		built = 0;
+		act();
+		QTest::qWait(300);
+		QVERIFY2(built <= 1, qPrintable(QStringLiteral("%1: the panes were built %2 times").arg(what).arg(built)));
+		QVERIFY2(built == 1, qPrintable(QStringLiteral("%1: the panes were not built").arg(what)));
+	};
+	once("a new tab", [&] {
+		const QList<bssh_pane_bar *> bars = window.findChildren<bssh_pane_bar *>();
+		QVERIFY(!bars.isEmpty());
+		emit bars.first()->new_tab_requested();
+	});
+	once("split with a tab", [&] { window.split_with(made.at(1)); });
+	once("move a pane", [&] { window.move_pane(made.at(1), -1); });
+	once("a grid", [&] { window.open_grid(2, 2); });
+	once("split beside", [&] { window.split_beside_current(); });
+
+	/* A swap with a pane of another window: each window builds once. */
+	bssh_main_window other;
+	other.resize(800, 500);
+	other.show();
+	bssh_session *theirs = registry->create(local_shell_profile());
+	theirs->connect_to_host();
+	QTRY_COMPARE(theirs->state(), bssh_ssh_session::CONNECTED);
+	other.adopt_session(theirs);
+	QTest::qWait(300);
+	int built_there = 0;
+	connect(other.panes(), &bssh_pane_container::panes_rebuilt, this, [&built_there] { ++built_there; });
+	once("a swap with another window", [&] {
+		window.drop_session_on(theirs, made.at(0), bssh_layout_manager::EDGE_MIDDLE);
+	});
+	QVERIFY2(built_there <= 1, qPrintable(QStringLiteral("the other window was built %1 times").arg(built_there)));
+	QCOMPARE(other.shown_sessions(), QList<bssh_session *>{ made.at(0) });
+
+	/* And with a tab behind the other window's pane. */
+	bssh_session *behind = registry->create(local_shell_profile());
+	behind->connect_to_host();
+	QTRY_COMPARE(behind->state(), bssh_ssh_session::CONNECTED);
+	other.adopt_session(behind);
+	other.layout_manager()->bring_to_front(made.at(0));
+	QTest::qWait(300);
+	QVERIFY(other.layout_manager()->tabs(made.at(0)).contains(behind));
+	built_there = 0;
+	once("a swap with a tab behind", [&] {
+		window.drop_session_on(behind, window.layout_manager()->visible_panes().first(),
+		                       bssh_layout_manager::EDGE_MIDDLE);
+	});
+	QVERIFY2(built_there <= 1,
+	         qPrintable(QStringLiteral("a tab behind: the other window was built %1 times").arg(built_there)));
+	QVERIFY(window.shown_sessions().contains(behind));
 }
 
 void handoff_test::a_torn_out_tab_and_a_new_window_start_processes_of_their_own() {

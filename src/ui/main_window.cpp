@@ -411,6 +411,29 @@ private:
 	int m_mark = -1;
 };
 
+namespace {
+
+/*
+ * A move as one change to the panes (bssh_pane_container::defer_refresh):
+ * taking a terminal in and placing it are several layout changes, and
+ * each built panes of its own.
+ */
+struct one_refresh_t {
+	bssh_pane_container *panes;
+	explicit one_refresh_t(bssh_pane_container *container) : panes(container) {
+		if (panes) panes->defer_refresh(true);
+	}
+	~one_refresh_t() { end(); }
+	void end() {
+		if (panes) panes->defer_refresh(false);
+		panes = nullptr;
+	}
+	one_refresh_t(const one_refresh_t &) = delete;
+	one_refresh_t &operator=(const one_refresh_t &) = delete;
+};
+
+}  // namespace
+
 bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent)
     : QWidget(parent),
       m_keyboard_hidden_by_user(false),
@@ -846,11 +869,18 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		 * split to reach and therefore rarer, which is exactly the
 		 * shape that survives testing.
 		 */
+		/*
+		 * Forgetting it rebuilds the panes, through the layout's signal; a
+		 * second rebuild after it built every pane again for nothing, and
+		 * a tab behind another, closed, was two rebuilds of the window --
+		 * the flicker the holder saw before a crash, 2026-11-20. Rebuilt
+		 * here only if a view still shows a session the layout dropped.
+		 */
 		if (m_layout) m_layout->forget(session);
 
 		if (m_current == session) {
 			detach_session();
-		} else if (m_panes) {
+		} else if (m_panes && m_panes->view_for(session)) {
 			m_panes->rebuild();
 		}
 
@@ -1633,8 +1663,12 @@ void bssh_main_window::show_session(bssh_session *session) {
 	 * narrow window could not show trades places with one it can. In a
 	 * column as on the desktop: a stack per pane in both.
 	 */
-	sync_tree_with_shown();
-	m_layout->bring_to_front(session);
+	{
+		/* Added and brought to the front: one build, not one each. */
+		const one_refresh_t once(m_panes);
+		sync_tree_with_shown();
+		m_layout->bring_to_front(session);
+	}
 
 	/* One pane's terminal changing rebuilds that pane alone. */
 	m_panes->refresh();
@@ -1683,6 +1717,8 @@ void bssh_main_window::split_beside_current() {
 	const QList<bssh_session *> before = m_layout->intent();
 	bssh_session *front_before = m_layout->front_of(m_current);
 
+	/* Opening it shows it too: one build for the two. */
+	one_refresh_t once(m_panes);
 	bssh_session *session = prepare_profile(bssh_profile_t::local_shell());
 	if (!session) return;
 
@@ -1697,11 +1733,9 @@ void bssh_main_window::split_beside_current() {
 	QList<bssh_session *> beside = before;
 	if (!beside.contains(session)) beside.append(session);
 	m_layout->set_intent(beside);
+	once.end();
 
-	if (m_panes) {
-		m_panes->rebuild();
-		m_panes->focus_session(session);
-	}
+	if (m_panes) m_panes->focus_session(session);
 
 	session->connect_to_host();
 	update_status();
@@ -1751,15 +1785,15 @@ void bssh_main_window::split_with(bssh_session *session) {
 	if (intent.contains(session)) return;
 
 	intent.append(session);
-	m_layout->set_intent(intent);
 
 	/*
 	 * The layout decides how many of those actually fit: asking for a
 	 * fourth pane in a phone-width window is not refused, it is
 	 * REMEMBERED and shown when there is room (sec 8.2). What the user
-	 * gets now is whatever the current size class allows.
+	 * gets now is whatever the current size class allows. Built by the
+	 * layout's own signal, once.
 	 */
-	m_panes->rebuild();
+	m_layout->set_intent(intent);
 	m_panes->focus_session(session);
 
 	update_status();
@@ -3623,6 +3657,7 @@ void bssh_main_window::exchange_session(bssh_session *out, bssh_session *in) {
 	 * whole point of a swap.
 	 */
 	wire_session(in);
+	one_refresh_t once(m_panes);
 	if (m_layout->intent().contains(out)) {
 		m_layout->place(in, out, bssh_layout_manager::EDGE_MIDDLE);
 	} else if (bssh_session *front = m_layout->front_of(out)) {
@@ -3646,35 +3681,12 @@ void bssh_main_window::exchange_session(bssh_session *out, bssh_session *in) {
 	 * the forget finds nothing.
 	 */
 	if (m_current == out) detach_session();
+	once.end();
 
-	m_panes->rebuild();
 	if (m_layout->intent().contains(in)) m_panes->focus_session(in);
 	refresh_tab_bar();
 	update_status();
 }
-
-namespace {
-
-/*
- * A move as one change to the panes (bssh_pane_container::defer_refresh):
- * taking a terminal in and placing it are several layout changes, and
- * each built panes of its own.
- */
-struct one_refresh_t {
-	bssh_pane_container *panes;
-	explicit one_refresh_t(bssh_pane_container *container) : panes(container) {
-		if (panes) panes->defer_refresh(true);
-	}
-	~one_refresh_t() { end(); }
-	void end() {
-		if (panes) panes->defer_refresh(false);
-		panes = nullptr;
-	}
-	one_refresh_t(const one_refresh_t &) = delete;
-	one_refresh_t &operator=(const one_refresh_t &) = delete;
-};
-
-}  // namespace
 
 void bssh_main_window::swap_sessions(bssh_session *session, bssh_session *target) {
 	bssh_main_window *source = window_showing(session);
@@ -4650,6 +4662,8 @@ void bssh_main_window::dropEvent(QDropEvent *event) {
 void bssh_main_window::open_grid(int cols, int rows) {
 	if (!m_layout || !m_panes || m_shown.isEmpty() || cols < 1 || rows < 1) return;
 
+	/* One build of the grid, not one per terminal opened into it. */
+	one_refresh_t once(m_panes);
 	const bssh_profile_t profile = m_shown.first()->profile();
 	QList<bssh_session *> sessions{ m_shown.first() };
 	while (sessions.size() < cols * rows) {
@@ -4673,7 +4687,7 @@ void bssh_main_window::open_grid(int cols, int rows) {
 		tree.children.push_back(line);
 	}
 	m_layout->set_tree(tree);
-	m_panes->rebuild();
+	once.end();
 	m_panes->focus_session(sessions.first());
 	update_status();
 }
@@ -4843,9 +4857,6 @@ void bssh_main_window::move_pane(bssh_session *session, int direction) {
 
 	intent.move(from, to);
 	m_layout->set_intent(intent);
-
-
-	m_panes->rebuild();
 
 	/*
 	 * Focus follows the pane rather than the position. A user who moved

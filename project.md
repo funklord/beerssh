@@ -21531,6 +21531,25 @@ second window (`handoff_test` `a_move_rebuilds_each_window_once`):
 Each move is now one rebuild per window and one resize per terminal. No
 loop was found: no rebuild set off another (the fold sweep above).
 
+**The same shape, everywhere else (later the same day).** A layout change
+rebuilds the panes through its own signal, so a rebuild by hand after
+one, or several changes in a row, builds them again. Measured, and now
+once each (`handoff_test` `closing_a_tab_behind_rebuilds_once`,
+`each_pane_gesture_rebuilds_once`):
+
+- **A tab behind another, closed: twice** -- the holder's crash case,
+  where the window "started flickering". The registry's closing handler
+  rebuilt after forgetting the terminal had already rebuilt.
+- **A new tab: three times**, `show_session()` adding it, bringing it to
+  the front, then refreshing. **A grid of four: ten times**, and **split
+  beside: eleven**, once per terminal opened into them.
+- **Split with a tab and moving a pane: twice**, a rebuild by hand after
+  `set_intent()`. **A swap with a tab behind another window's pane:
+  three times** in the window it left.
+
+Each is grouped with `bssh_pane_container::defer_refresh` (the
+`one_refresh_t` guard in `main_window.cpp`) or loses its extra rebuild.
+
 **Open 2026-11-20: "terminal swapping doesn't work anymore, it puts them in
 tabs" (the holder).** No change to the drop path was found:
 `bssh_layout_manager::place()` with `EDGE_MIDDLE` swaps two panes, except

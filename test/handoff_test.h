@@ -30,6 +30,17 @@ private slots:
 	 * party when moving terminals around" (2026-11-20).
 	 */
 	void a_move_rebuilds_each_window_once();
+
+	/*
+	 * A tab behind another closed rebuilds the panes once and resizes no
+	 * terminal: the holder's crash came closing one, as the window
+	 * "started flickering and reorganizing the other terminals"
+	 * (2026-11-20).
+	 */
+	void closing_a_tab_behind_rebuilds_once();
+
+	/* And the pane gestures: split, split beside, move a pane, a grid. */
+	void each_pane_gesture_rebuilds_once();
 	void a_torn_out_tab_and_a_new_window_start_processes_of_their_own();
 	void a_start_brings_back_every_window_not_open_elsewhere();
 	void a_torn_out_tab_arrives_in_a_process_of_its_own();

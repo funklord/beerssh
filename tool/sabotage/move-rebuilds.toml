@@ -33,3 +33,53 @@ file = "src/ui/main_window.cpp"
 find = "\tif (m_panes->refresh_deferred()) return;\n\tbool stale = false;"
 replace = "\tbool stale = false;"
 expect = "a_move_rebuilds_each_window_once"
+
+# A tab behind another, closed: rebuilt by hand after forgetting it had
+# already rebuilt -- the flicker before the holder's crash.
+[[sabotage]]
+name = "closing a tab behind another builds the panes twice"
+file = "src/ui/main_window.cpp"
+find = "\t\t} else if (m_panes && m_panes->view_for(session)) {\n\t\t\tm_panes->rebuild();"
+replace = "\t\t} else if (m_panes) {\n\t\t\tm_panes->rebuild();"
+expect = "closing_a_tab_behind_rebuilds_once"
+
+# Showing a terminal adds it and brings it to the front, a build each.
+[[sabotage]]
+name = "a new tab builds its pane at every step"
+file = "src/ui/main_window.cpp"
+find = "\t\tconst one_refresh_t once(m_panes);\n\t\tsync_tree_with_shown();"
+replace = "\t\tsync_tree_with_shown();"
+expect = "each_pane_gesture_rebuilds_once"
+
+# A grid builds the panes once per terminal opened into it.
+[[sabotage]]
+name = "a grid is built once per terminal"
+file = "src/ui/main_window.cpp"
+find = "\t/* One build of the grid, not one per terminal opened into it. */\n\tone_refresh_t once(m_panes);\n"
+replace = "\tone_refresh_t once(nullptr);\n"
+expect = "each_pane_gesture_rebuilds_once"
+
+# Split beside: the terminal opened, then the split, each built.
+[[sabotage]]
+name = "split beside builds the panes twice"
+file = "src/ui/main_window.cpp"
+find = "\t/* Opening it shows it too: one build for the two. */\n\tone_refresh_t once(m_panes);\n"
+replace = "\tone_refresh_t once(nullptr);\n"
+expect = "each_pane_gesture_rebuilds_once"
+
+# Moving a pane rebuilds by hand after the layout already did.
+[[sabotage]]
+name = "moving a pane builds the panes twice"
+file = "src/ui/main_window.cpp"
+find = "\tintent.move(from, to);\n\tm_layout->set_intent(intent);\n"
+replace = "\tintent.move(from, to);\n\tm_layout->set_intent(intent);\n\tm_panes->rebuild();\n"
+expect = "each_pane_gesture_rebuilds_once"
+
+# A swap with a tab behind another window's pane: the window it leaves
+# is built at every step of the exchange -- added, brought back, forgotten.
+[[sabotage]]
+name = "a swap between windows builds the giving window at every step"
+file = "src/ui/main_window.cpp"
+find = "\twire_session(in);\n\tone_refresh_t once(m_panes);\n"
+replace = "\twire_session(in);\n\tone_refresh_t once(nullptr);\n"
+expect = "each_pane_gesture_rebuilds_once"
