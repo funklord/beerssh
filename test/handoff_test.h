@@ -22,6 +22,14 @@ private slots:
 	void another_process_lists_its_terminals_by_title();
 	void an_arrangement_reads_back_what_it_wrote();
 	void a_new_version_takes_the_windows_as_they_were();
+
+	/*
+	 * A terminal moved -- within a window, as a tab, to another window and
+	 * back -- rebuilds each window's panes once, and each terminal goes
+	 * from its old size straight to its new one: the holder's "huge update
+	 * party when moving terminals around" (2026-11-20).
+	 */
+	void a_move_rebuilds_each_window_once();
 	void a_torn_out_tab_and_a_new_window_start_processes_of_their_own();
 	void a_start_brings_back_every_window_not_open_elsewhere();
 	void a_torn_out_tab_arrives_in_a_process_of_its_own();

@@ -764,7 +764,18 @@ void bssh_pane_container::release_sizes() {
 
 void bssh_pane_container::refresh() {
 	if (!m_layout) return;
+	if (m_refresh_deferred) {
+		m_refresh_owed = true;
+		return;
+	}
 	if (!swap_one_pane(m_layout->visible_panes())) rebuild();
+}
+
+void bssh_pane_container::defer_refresh(bool deferring) {
+	m_refresh_deferred = qMax(0, m_refresh_deferred + (deferring ? 1 : -1));
+	if (m_refresh_deferred || !m_refresh_owed) return;
+	m_refresh_owed = false;
+	refresh();
 }
 
 /* Every pane but `except` holds the tabs the layout gives it now. */
@@ -814,6 +825,8 @@ bool bssh_pane_container::swap_one_pane(const QList<bssh_session *> &panes) {
 	bssh_session *now = panes.at(at);
 
 	m_rebuilding = true;
+	/* The neighbours too: the slot is empty for a moment. */
+	hold_sizes(m_sessions);
 	hold_sizes({ now });
 	const QList<int> sizes = parent->sizes();
 	add_pane_view(now, parent, old_frame);
@@ -840,6 +853,26 @@ bool bssh_pane_container::swap_one_pane(const QList<bssh_session *> &panes) {
 
 void bssh_pane_container::rebuild() {
 	if (!m_layout) return;
+
+	/*
+	 * Never inside itself: a rebuild reached from something the one
+	 * under way set off -- a resize, a focus change, a layout signal --
+	 * would delete the frames that one is still building and returning
+	 * into. Done once it has finished, instead. Nothing known reaches
+	 * this, so no test can make it happen; it is here because a crash
+	 * the holder met while the window rebuilt over and over (2026-11-20)
+	 * is not explained, and this is the shape it would have.
+	 */
+	if (m_rebuilding) {
+		if (!m_rebuild_queued) {
+			m_rebuild_queued = true;
+			QMetaObject::invokeMethod(this, [this] {
+				m_rebuild_queued = false;
+				rebuild();
+			}, Qt::QueuedConnection);
+		}
+		return;
+	}
 
 	const QList<bssh_session *> panes = m_layout->visible_panes();
 
@@ -905,7 +938,16 @@ void bssh_pane_container::rebuild() {
 	m_splitter_paths.clear();
 	m_frame_tabs.clear();
 
-	/* The frames, which take their bars and views with them. */
+	/*
+	 * The frames, which take their bars and views with them -- one at a
+	 * time, and the splitter gives each one's room to the panes still
+	 * standing, so every pane widened as its neighbours went: a move
+	 * between four panes told each terminal three passing widths before
+	 * the one it settled at, each a resize of its screen and a redraw
+	 * (measured 2026-11-20; the holder: "a huge update party when moving
+	 * terminals around"). Held from before the first goes.
+	 */
+	hold_sizes(m_sessions);
 	m_rebuilding = true;
 	qDeleteAll(m_frames);
 	m_frames.clear();

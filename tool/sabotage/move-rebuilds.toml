@@ -1,0 +1,35 @@
+# Sabotages for a move's one rebuild per window (the holder, 2026-11-20:
+# "a huge update party when moving terminals around").
+
+# Held only for the new panes: as the old frames are deleted one by one,
+# the panes still standing widen, and each width reaches the terminal.
+[[sabotage]]
+name = "a rebuild tells each terminal every width its pane passes"
+file = "src/ui/pane_container.cpp"
+find = "\thold_sizes(m_sessions);\n\tm_rebuilding = true;\n\tqDeleteAll(m_frames);"
+replace = "\tm_rebuilding = true;\n\tqDeleteAll(m_frames);"
+expect = "a_move_rebuilds_each_window_once"
+
+# Letting go of a terminal rebuilds by hand after forgetting it rebuilt.
+[[sabotage]]
+name = "a window a terminal leaves is built again for nothing"
+file = "src/ui/main_window.cpp"
+find = "\telse if (m_panes && going && m_panes->view_for(going)) m_panes->rebuild();\n"
+replace = "\tif (m_panes) m_panes->rebuild();\n"
+expect = "a_move_rebuilds_each_window_once"
+
+# Each layout change of a move builds panes of its own.
+[[sabotage]]
+name = "a move builds the panes at every step"
+file = "src/ui/pane_container.cpp"
+find = "\tif (m_refresh_deferred) {\n\t\tm_refresh_owed = true;"
+replace = "\tif (false) {\n\t\tm_refresh_owed = true;"
+expect = "a_move_rebuilds_each_window_once"
+
+# The tab bars, stale while a move defers its rebuild, rebuild it early.
+[[sabotage]]
+name = "the tab bars rebuild a deferred move early"
+file = "src/ui/main_window.cpp"
+find = "\tif (m_panes->refresh_deferred()) return;\n\tbool stale = false;"
+replace = "\tbool stale = false;"
+expect = "a_move_rebuilds_each_window_once"

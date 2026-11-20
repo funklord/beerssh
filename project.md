@@ -21505,6 +21505,32 @@ for the program's own. Rejected: turning cores on for the holder
 backtrace by gdb (what QtTest's handler did, sec 12.3's incident).
 Android writes a tombstone of its own and keeps it.
 
+**And the update party, measured (the holder: "a huge update party
+starts when moving terminals around... not completely safe from becoming
+a recursive loop").** Counted per move in a window of four panes and a
+second window (`handoff_test` `a_move_rebuilds_each_window_once`):
+
+- **Every terminal went through three or four widths before its own.**
+  A rebuild deletes the old frames one at a time, the splitter hands
+  each one's room to those still standing, and each widening reached the
+  screen (56, 86, 176 columns, then 33) -- a resize and a redraw apiece.
+  The size hold was taken only for the new panes, after the deletion; it
+  is now taken for the old ones before it.
+- **A terminal dragged back from another window rebuilt the window it
+  joined three times** -- added as a tab, brought to the front, placed --
+  and the tab bars, finding themselves stale mid-move, rebuilt once more.
+  `bssh_pane_container::defer_refresh` now makes a move one change, and
+  the bars leave a deferred move alone.
+- **The window it left rebuilt three times too**: `detach_session()`
+  rebuilt by hand after forgetting the terminal had already rebuilt
+  through the layout's signal, and was called twice. Now once.
+- **A rebuild inside a rebuild is queued instead of run.** Nothing known
+  reaches it, so it has no test; it is the shape the unexplained crash
+  would have, and costs one flag.
+
+Each move is now one rebuild per window and one resize per terminal. No
+loop was found: no rebuild set off another (the fold sweep above).
+
 **Asked 2026-11-20, to build once the open bugs are fixed (the holder):**
 
 - **Put the Terminals sidebar away and bring it back quickly.** The

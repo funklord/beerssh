@@ -72,6 +72,16 @@ public:
 	 */
 	void refresh();
 
+	/*
+	 * Several layout changes as one: while deferred, refresh() only notes
+	 * it is owed, and the last end of a deferral pays it once. A terminal
+	 * dropped in from another window changed the layout three times --
+	 * added as a tab, brought to the front, placed -- and each built panes
+	 * of its own. Nested deferrals count.
+	 */
+	void defer_refresh(bool deferring);
+	bool refresh_deferred() const { return m_refresh_deferred > 0; }
+
 	bssh_session *focused_session() const { return m_focused; }
 	bssh_terminal_view *focused_view() const;
 
@@ -403,6 +413,9 @@ private:
 	std::function<QWidget *(bssh_session *, QWidget *)> m_bar_factory;
 	Qt::Edge m_bar_edge = Qt::TopEdge;
 	bool m_rebuilding = false;
+	int m_refresh_deferred = 0;
+	bool m_refresh_owed = false;
+	bool m_rebuild_queued = false;
 	/* What the last rebuild built, as structure alone: refresh() swaps
 	 * one pane only while the tree still has this shape. */
 	QString m_built_shape;

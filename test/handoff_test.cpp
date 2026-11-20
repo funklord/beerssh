@@ -21,6 +21,7 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <functional>
 #include <cstring>
 #include <thread>
 
@@ -768,6 +769,67 @@ void handoff_test::a_new_version_takes_the_windows_as_they_were() {
 	}
 	QCOMPARE(old_version.state(), QProcess::NotRunning);
 	QCOMPARE(old_version.exitCode(), 0);
+}
+
+void handoff_test::a_move_rebuilds_each_window_once() {
+	bssh_session_registry *registry = bssh_session_registry::shared();
+	const auto tidy = qScopeGuard([registry] {
+		while (registry->count() > 0) registry->close(registry->at(0));
+	});
+	QHash<QString, bssh_session *> made;
+	for (const QString &letter : { QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c"),
+	                               QStringLiteral("d"), QStringLiteral("e") }) {
+		bssh_session *session = registry->create(local_shell_profile());
+		session->connect_to_host();
+		made.insert(letter, session);
+	}
+	for (bssh_session *session : made) QTRY_COMPARE(session->state(), bssh_ssh_session::CONNECTED);
+
+	bssh_main_window window;
+	window.resize(1600, 700);
+	window.show();
+	bssh_main_window other;
+	other.resize(800, 500);
+	other.show();
+	for (const QString &letter : { QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c"),
+	                               QStringLiteral("d"), QStringLiteral("e") })
+		window.adopt_session(made.value(letter));
+	window.layout_manager()->set_tree(bssh_layout_manager::parse_shape(
+	        QStringLiteral("H(a,b,c,*d|e)"), [&made](const QString &name) { return made.value(name); }));
+	QTest::qWait(300);
+
+	int built_here = 0, built_there = 0;
+	connect(window.panes(), &bssh_pane_container::panes_rebuilt, this, [&built_here] { ++built_here; });
+	connect(other.panes(), &bssh_pane_container::panes_rebuilt, this, [&built_there] { ++built_there; });
+	/* Every size each screen takes, as it is redrawn. */
+	QHash<bssh_session *, QList<QSize>> sizes;
+	for (bssh_session *session : made) {
+		connect(session->emulator(), &bssh_emulator::damaged, this, [session, &sizes] {
+			const QSize now(session->emulator()->screen().cols(), session->emulator()->screen().rows());
+			if (sizes.value(session).value(sizes.value(session).size() - 1) != now) sizes[session].append(now);
+		});
+	}
+	const auto move = [&](const char *what, const std::function<void()> &act) {
+		built_here = built_there = 0;
+		sizes.clear();
+		for (bssh_session *session : made)
+			sizes[session] = { QSize(session->emulator()->screen().cols(), session->emulator()->screen().rows()) };
+		act();
+		QTest::qWait(400);
+		QVERIFY2(built_here <= 1, qPrintable(QStringLiteral("%1: this window built %2 times").arg(what).arg(built_here)));
+		QVERIFY2(built_there <= 1, qPrintable(QStringLiteral("%1: the other built %2 times").arg(what).arg(built_there)));
+		for (auto it = sizes.cbegin(); it != sizes.cend(); ++it) {
+			QString seen;
+			for (const QSize &size : it.value()) seen += QStringLiteral(" %1x%2").arg(size.width()).arg(size.height());
+			QVERIFY2(it.value().size() <= 2, qPrintable(QStringLiteral("%1: a terminal went through%2").arg(what, seen)));
+		}
+	};
+	move("a split", [&] { window.drop_session_on(made.value("d"), made.value("a"), bssh_layout_manager::EDGE_LEFT); });
+	move("a swap", [&] { window.drop_session_on(made.value("b"), made.value("c"), bssh_layout_manager::EDGE_MIDDLE); });
+	move("a tab", [&] { window.drop_session_as_tab(made.value("a"), made.value("c"), 0); });
+	move("to another window", [&] { other.adopt_session(made.value("c")); });
+	move("and back", [&] { window.drop_session_on(made.value("c"), made.value("b"), bssh_layout_manager::EDGE_RIGHT); });
+	QCOMPARE(window.shown_sessions().size(), 5);
 }
 
 void handoff_test::a_torn_out_tab_and_a_new_window_start_processes_of_their_own() {

@@ -2685,8 +2685,17 @@ void bssh_main_window::detach_session() {
 	bssh_session *going = m_current;
 	m_current = nullptr;
 
-	if (m_layout) m_layout->forget(going);
-	if (m_panes) m_panes->rebuild();
+	/*
+	 * Forgetting it rebuilds the panes, through the layout's own signal;
+	 * a second rebuild here built every pane again for nothing, and a
+	 * terminal moved to another window went through this twice -- three
+	 * rebuilds of the window it left (measured 2026-11-20, the holder's
+	 * "huge update party when moving terminals around"). Rebuilt by hand
+	 * only when a view still shows a session the layout no longer holds.
+	 */
+	const bool laid_out = m_layout && going && m_layout->sessions().contains(going);
+	if (laid_out) m_layout->forget(going);
+	else if (m_panes && going && m_panes->view_for(going)) m_panes->rebuild();
 
 	m_terminal_view = m_panes ? m_panes->focused_view() : nullptr;
 	if (m_key_row) m_key_row->set_target(nullptr);
@@ -3634,6 +3643,29 @@ void bssh_main_window::exchange_session(bssh_session *out, bssh_session *in) {
 	update_status();
 }
 
+namespace {
+
+/*
+ * A move as one change to the panes (bssh_pane_container::defer_refresh):
+ * taking a terminal in and placing it are several layout changes, and
+ * each built panes of its own.
+ */
+struct one_refresh_t {
+	bssh_pane_container *panes;
+	explicit one_refresh_t(bssh_pane_container *container) : panes(container) {
+		if (panes) panes->defer_refresh(true);
+	}
+	~one_refresh_t() { end(); }
+	void end() {
+		if (panes) panes->defer_refresh(false);
+		panes = nullptr;
+	}
+	one_refresh_t(const one_refresh_t &) = delete;
+	one_refresh_t &operator=(const one_refresh_t &) = delete;
+};
+
+}  // namespace
+
 void bssh_main_window::swap_sessions(bssh_session *session, bssh_session *target) {
 	bssh_main_window *source = window_showing(session);
 
@@ -3671,8 +3703,10 @@ void bssh_main_window::swap_sessions(bssh_session *session, bssh_session *target
 	 * target's place, and the target, with nowhere to go back to, stays
 	 * here as a tab: leaving the panes is never closing (sec 8.2).
 	 */
+	one_refresh_t once(m_panes);
 	take_session(session);
 	m_layout->place(session, target, bssh_layout_manager::EDGE_MIDDLE);
+	once.end();
 	m_panes->focus_session(session);
 	refresh_tab_bar();
 	update_status();
@@ -3729,6 +3763,7 @@ void bssh_main_window::drop_session_on(bssh_session *session, bssh_session *targ
 		return;
 	}
 
+	one_refresh_t once(m_panes);
 	if (!m_layout->intent().contains(session)) take_session(session);
 
 	/* Off its own pane: the tab beside it fronts the pane, and is the target. */
@@ -3741,7 +3776,9 @@ void bssh_main_window::drop_session_on(bssh_session *session, bssh_session *targ
 		target = other;
 	}
 
-	if (!m_layout->place(session, target, where)) return;
+	const bool placed = m_layout->place(session, target, where);
+	once.end();
+	if (!placed) return;
 
 	/*
 	 * In a column m_shown is the order of record (see move_pane), so the
@@ -3771,15 +3808,18 @@ void bssh_main_window::drop_session_as_tab(bssh_session *session, bssh_session *
 	if (!session || !m_layout || !m_panes) return;
 
 	/* From another window: this one takes it first, then places it. */
+	one_refresh_t once(m_panes);
 	if (!m_shown.contains(session)) take_session(session);
 
 	/* A window showing nothing, or a pane no longer here: simply shown. */
 	if (!front || !m_layout->sessions().contains(front) || front == session) {
+		once.end();
 		show_session(session);
 		return;
 	}
 
 	m_layout->add_tab(session, front, slot < 0 ? INT_MAX : slot);
+	once.end();
 	m_panes->focus_session(session);
 	refresh_tab_bar();
 	update_status();
@@ -5141,6 +5181,8 @@ void bssh_main_window::refresh_tab_bar() {
 	 * asked would rebuild for ever once the two disagreed -- found by
 	 * breaking the decision on purpose, when the suite hung.
 	 */
+	/* Stale by design while a move defers its one rebuild, which builds them. */
+	if (m_panes->refresh_deferred()) return;
 	bool stale = false;
 	for (bssh_session *front : m_layout->visible_panes()) {
 		const QList<bssh_session *> tabs = m_layout->bar_tabs(front);
