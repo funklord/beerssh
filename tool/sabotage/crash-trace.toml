@@ -1,0 +1,28 @@
+# Sabotages for the desktop's crash trace (src/crash_trace.h): the holder's
+# first crash, 2026-11-20, left nothing to read, and a trace that is not
+# written looks exactly like a crash that did not happen.
+
+# The handler on the crashing stack: a stack overflow -- a layout that
+# recurses -- has no room left to run it, and writes nothing.
+[[sabotage]]
+name = "a stack overflow leaves no trace"
+file = "src/crash_trace.cpp"
+find = "\taction.sa_flags = SA_SIGINFO | SA_ONSTACK | SA_RESETHAND;\n"
+replace = "\taction.sa_flags = SA_SIGINFO | SA_RESETHAND;\n"
+expect = "a_crash_leaves_a_trace"
+
+# The addresses without the mappings: nothing to turn them into functions.
+[[sabotage]]
+name = "a trace without the maps"
+file = "src/crash_trace.cpp"
+find = "::open(\"/proc/self/maps\", O_RDONLY | O_CLOEXEC)"
+replace = "-1"
+expect = "a_crash_leaves_a_trace"
+
+# Readable by everybody: the trace names files and libraries in use.
+[[sabotage]]
+name = "a trace anybody can read"
+file = "src/crash_trace.cpp"
+find = "O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600)"
+replace = "O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644)"
+expect = "a_crash_leaves_a_trace"

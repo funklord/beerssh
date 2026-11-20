@@ -4,7 +4,12 @@
 #include <QtTest>
 #include <QSignalSpy>
 
+#include "crash_trace.h"
 #include "hang_watchdog.h"
+#include <QDir>
+#include <QFileInfo>
+#include <QProcess>
+#include <csignal>
 #include "platform/platform.h"
 #include "media/media_bytes.h"
 #include "model/piece_map.h"
@@ -68,6 +73,69 @@ void platform_test::going_out_of_sight_is_the_platforms_to_answer_for() {
 
 	/* And asking twice does not start meaning something else. */
 	QVERIFY(!platform->send_to_background());
+}
+
+namespace {
+
+/* Never reached, which the compiler cannot know: the descent has an end. */
+volatile int bottom = -1;
+
+/* Deep enough to overflow any stack; volatile, so it is not folded away. */
+int descend(int depth) {
+	if (depth == bottom) return 0;
+	volatile char room[1024];
+	room[0] = char(depth);
+	return descend(depth + 1) + room[0];
+}
+
+}  // namespace
+
+int bssh_crash_trace_mode(const char *directory, const char *how) {
+	bssh_install_crash_trace(QByteArray(directory));
+	if (qstrcmp(how, "overflow") == 0) return descend(0);
+	::raise(SIGSEGV);
+	return 0;
+}
+
+void platform_test::a_crash_leaves_a_trace() {
+#if !defined(Q_OS_LINUX) || defined(Q_OS_ANDROID)
+	QSKIP("the trace is written on Linux only");
+#else
+	/* Under a sanitizer the overflow is the sanitizer's to report. */
+	if (qEnvironmentVariableIsSet("ASAN_OPTIONS")) QSKIP("a sanitizer catches the fault first");
+	for (const char *how : { "fault", "overflow" }) {
+		QTemporaryDir dir;
+		const QString traces = dir.path() + QStringLiteral("/crash");
+		QProcess child;
+		child.setProcessChannelMode(QProcess::MergedChannels);
+		QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+		/* The test's own crash handler would attach a debugger first. */
+		environment.insert(QStringLiteral("QTEST_DISABLE_STACK_DUMP"), QStringLiteral("1"));
+		child.setProcessEnvironment(environment);
+		child.start(QCoreApplication::applicationFilePath(),
+		            { QStringLiteral("--crash-trace"), traces, QString::fromLatin1(how) });
+		QVERIFY(child.waitForFinished(20000));
+		QCOMPARE(child.exitStatus(), QProcess::CrashExit);
+
+		const QStringList found = QDir(traces).entryList({ QStringLiteral("crash-*.txt") });
+		QCOMPARE(found.size(), 1);
+		QFile file(traces + QLatin1Char('/') + found.first());
+		QVERIFY(file.open(QIODevice::ReadOnly));
+		const QByteArray text = file.readAll();
+		QVERIFY2(text.startsWith("BeerSSH "), text.left(200).constData());
+		QVERIFY2(text.contains("SIGSEGV (signal 11)"), text.left(200).constData());
+		QVERIFY2(text.contains("\nbacktrace:\n"), text.left(400).constData());
+		/* The maps, after the stack, name this binary, so its addresses can
+		 * be placed in it -- the stack names it too, so only what follows. */
+		const QByteArray self = QFile::encodeName(QFileInfo(QCoreApplication::applicationFilePath()).canonicalFilePath());
+		const qsizetype maps = text.indexOf("\nmaps:\n");
+		QVERIFY2(maps > 0 && text.indexOf(self, maps) > maps, how);
+		QVERIFY2(text.indexOf(" r-xp ", maps) > maps, how);
+		QVERIFY(child.readAll().contains("what it was doing is in"));
+		/* Only the owner reads it. */
+		QCOMPARE(file.permissions() & (QFile::ReadGroup | QFile::ReadOther), QFile::Permissions());
+	}
+#endif
 }
 
 void platform_test::the_hang_gate_fires_past_the_threshold() {

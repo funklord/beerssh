@@ -522,6 +522,8 @@ int main(int argc, char *argv[]) {
 		 * really crosses a process boundary. Answered here, before the
 		 * suite, and nothing else runs.
 		 */
+		if (qstrcmp(argv[i], "--crash-trace") == 0 && i + 2 < argc)
+			return bssh_crash_trace_mode(argv[i + 1], argv[i + 2]);
 #ifndef _WIN32
 		if (qstrcmp(argv[i], "--handoff-give") == 0) return bssh_handoff_give_mode();
 		if (qstrcmp(argv[i], "--handoff-arranged") == 0) return bssh_handoff_arranged_mode();

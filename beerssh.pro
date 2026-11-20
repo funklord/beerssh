@@ -76,6 +76,7 @@ CONFIG += no_include_pwd
 
 SOURCES += \
     src/main.cpp \
+    src/crash_trace.cpp \
     src/hang_watchdog.cpp \
     src/model/app_settings.cpp \
     src/model/conn_manager.cpp \
@@ -165,6 +166,7 @@ SOURCES += \
 
 HEADERS += \
     src/input/input_router.h \
+    src/crash_trace.h \
     src/hang_watchdog.h \
     src/model/profile.h \
     src/model/app_settings.h \

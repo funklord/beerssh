@@ -21476,6 +21476,35 @@ taken from a real second process whose own windows then quit; a tab
 closed while it was a tab behind another; closing during a drag. The
 next crash wants a core: `ulimit -c unlimited` before starting it.
 
+**More from the holder, the same day:** the tab closed was one behind
+another, and on closing it "the window started flickering and
+reorganizing the other terminals", some of which came from a different
+version. Tried since, none of it crashing: six terminals each running
+`screen` and `top`, moved by `export_handoff`/`import_handoff`, laid out
+as `H(*a|d|e,V(b,*c|f))` with the sidebar shown, the tabs behind closed
+one by one through the registry, the window resized twenty times after
+each -- clean under ASan. And the flicker as a loop: the fold decides
+what fits from `least_pane()`, the largest minimum of the panes BUILT,
+so a set of panes whose minimum depends on which are shown could fold
+and unfold forever. Swept from 1600 to 300 pixels in 7-pixel steps,
+with and without the sidebar and with one pane zoomed: every width
+settles, at most one rebuild each. Not yet tried: the X11 window
+manager's own resizes (offscreen has none), and a real second process.
+
+**So a crash now leaves its own trace** (`src/crash_trace.h`): on
+SIGSEGV, SIGBUS, SIGILL, SIGFPE or SIGABRT the desktop writes
+`~/.local/share/beerssh/crash-<pid>.txt` -- the signal, the stack as
+`library(+offset)` per frame, and `/proc/self/maps` -- then dies of the
+same signal, so a core still comes where one is enabled. On a stack of
+its own, so a layout that recursed into an overflow is written down too.
+Addresses and file names only, never memory, so nothing typed or shown
+reaches it (sec 11's no secrets in logs); mode 0600. `addr2line -f -C
+-e <library> <offset>` names each frame, with beerssh-dbgsym installed
+for the program's own. Rejected: turning cores on for the holder
+(`ulimit` is a shell's, and a desktop launcher's is not), and a
+backtrace by gdb (what QtTest's handler did, sec 12.3's incident).
+Android writes a tombstone of its own and keeps it.
+
 **Asked 2026-11-20, to build once the open bugs are fixed (the holder):**
 
 - **Put the Terminals sidebar away and bring it back quickly.** The

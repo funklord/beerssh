@@ -1,5 +1,7 @@
 #include <QApplication>
+#include <QFile>
 #include <QIcon>
+#include <QStandardPaths>
 #include <QString>
 #include <QStringList>
 #include <QTextStream>
@@ -20,6 +22,7 @@
 #include "term/font_catalog.h"
 #include "model/custom_font.h"
 #include "term/picture_spill.h"
+#include "crash_trace.h"
 #include "hang_watchdog.h"
 #include "ui/main_window.h"
 #include "ui/store_view.h"
@@ -190,6 +193,14 @@ int main(int argc, char *argv[]) {
 	QCoreApplication::setApplicationVersion(QStringLiteral(BSSH_VERSION_STRING));
 	/* Freedesktop app ID, so the window matches its .desktop entry (sec 0.1). */
 	QGuiApplication::setDesktopFileName(QStringLiteral("se.vibes.beerssh"));
+
+	/*
+	 * A crash leaves a trace in the data directory (crash_trace.h): the
+	 * holder's first one left nothing at all. Once the name is set, which
+	 * the directory is found by.
+	 */
+	bssh_install_crash_trace(QFile::encodeName(
+	        QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)));
 
 	if (line.store_view.isEmpty()) {
 		if (bssh_platform *platform = bssh_platform::instance())

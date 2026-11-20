@@ -29,6 +29,13 @@ private slots:
 	void the_hang_gate_fires_past_the_threshold();
 
 	/*
+	 * A crash leaves its trace: the signal, the stack and the maps, from a
+	 * plain fault and from a stack overflow, which needs the handler's own
+	 * stack (crash_trace.h).
+	 */
+	void a_crash_leaves_a_trace();
+
+	/*
 	 * The loop runs in the background (sec 5.6), so silence there is a wedge,
 	 * and "foreground" is the platform's lifecycle, written straight into the
 	 * state, not Qt's state sampled by the heartbeat, which never hears a
@@ -121,5 +128,8 @@ private slots:
 	 */
 	void a_file_filled_out_of_order_fetches_what_its_reader_wants();
 };
+
+/* The crashing side of a_crash_leaves_a_trace, run as a child. */
+int bssh_crash_trace_mode(const char *directory, const char *how);
 
 #endif /* BSSH_PLATFORM_TEST_H */
