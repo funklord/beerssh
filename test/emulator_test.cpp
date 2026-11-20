@@ -363,12 +363,20 @@ void emulator_test::a_reconnect_keeps_the_history_and_drops_the_modes() {
 	emulator.feed(QByteArrayLiteral("\x1b[?2004h"));
 	QVERIFY(emulator.mouse_reporting());
 	QVERIFY(emulator.alternate_screen());
+	QVERIFY(emulator.bracketed_paste());
 	emulator.take_output();
 
 	emulator.reset_modes();
 
 	QVERIFY(!emulator.mouse_reporting());
 	QVERIFY(!emulator.alternate_screen());
+
+	/*
+	 * Bracketed paste too, and it matters beyond the bytes: the paste
+	 * warning is skipped while the mode is on (sec 6.4), so a new shell
+	 * that never asked for it must not inherit the old one's word.
+	 */
+	QVERIFY(!emulator.bracketed_paste());
 
 	/*
 	 * And the history survived, which is the whole reason the emulator is
@@ -1953,6 +1961,10 @@ void emulator_test::decrqm_says_nothing_it_cannot_stand_behind() {
 
 	emulator.feed(QByteArrayLiteral("\x1b[?2004h\x1b[?2004$p"));
 	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?2004;1$y"));
+	QVERIFY(emulator.bracketed_paste());
+	emulator.feed(QByteArrayLiteral("\x1b[?2004l"));
+	QVERIFY(!emulator.bracketed_paste());
+	emulator.feed(QByteArrayLiteral("\x1b[?2004h"));
 
 	emulator.feed(QByteArrayLiteral("\x1b[?25$p"));
 	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?25;1$y"));
@@ -2619,6 +2631,9 @@ void emulator_test::a_mode_libvterm_models_can_still_be_declined() {
 
 		emulator.feed(QByteArrayLiteral("\x1b[?2004h\x1b[?2004$p"));
 		QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?2004;0$y"));
+
+		/* Declined, so no paste is bracketed and the warning stands. */
+		QVERIFY(!emulator.bracketed_paste());
 	}
 
 	{

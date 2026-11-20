@@ -7217,8 +7217,9 @@ void bssh_main_window::show_tab_menu(bssh_session *session, const QPoint &global
 	if (chosen == close) m_registry->close(held);
 }
 
-bool bssh_main_window::paste_needs_confirming(const QString &text, bool warn_enabled) {
-	if (!warn_enabled) return false;
+bool bssh_main_window::paste_needs_confirming(const QString &text, bool warn_enabled,
+                                              bool bracketed) {
+	if (!warn_enabled || bracketed) return false;
 
 	/*
 	 * More than one line of CONTENT. A single trailing newline is how a
@@ -7235,7 +7236,8 @@ bool bssh_main_window::paste_needs_confirming(const QString &text, bool warn_ena
 void bssh_main_window::paste_into_current(const QString &text) {
 	if (!m_current || text.isEmpty()) return;
 
-	if (paste_needs_confirming(text, bssh_app_settings().warn_multiline_paste())) {
+	const bool bracketed = m_current->emulator() && m_current->emulator()->bracketed_paste();
+	if (paste_needs_confirming(text, bssh_app_settings().warn_multiline_paste(), bracketed)) {
 		/*
 		 * sec 6.4: "a paste containing newlines executes commands".
 		 * The count is in the question because it is the fact that

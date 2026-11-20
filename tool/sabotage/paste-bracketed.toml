@@ -1,0 +1,21 @@
+# Sabotages for the multi-line paste question under bracketed paste
+# (project.md sec 6.4): the holder met it on 2026-11-20 where Konsole
+# just pastes, because the shell holds bracketed lines for Enter.
+
+# The question comes back under bracketed paste -- the state reported.
+[[sabotage]]
+name = "a bracketed paste is questioned again"
+file = "src/ui/main_window.cpp"
+find = "\tif (!warn_enabled || bracketed) return false;"
+replace = "\tif (!warn_enabled) return false;"
+expect = "a_paste_is_questioned_only_when_it_carries_more_than_a_line"
+
+# The emulator claims the mode whatever the remote said -- which would
+# drop the question for a shell that never asked for bracketing, the one
+# case the warning is for.
+[[sabotage]]
+name = "bracketed paste reads as on whatever the remote asked"
+file = "src/term/emulator_vterm.cpp"
+find = "\treturn bssh_vterm_bracketed_paste(m_private->vt) != 0;"
+replace = "\treturn true;"
+expect = "decrqm_says_nothing_it_cannot_stand_behind"

@@ -905,19 +905,23 @@ void platform_test::a_paste_is_questioned_only_when_it_carries_more_than_a_line(
 	/* One line, however it ends, is the ordinary case and is not asked
 	 * about -- a warning that fires on every paste is one people turn
 	 * off, after which it protects nobody. */
-	QVERIFY(!bssh_main_window::paste_needs_confirming(QStringLiteral("ls -l"), true));
-	QVERIFY(!bssh_main_window::paste_needs_confirming(QStringLiteral("ls -l\n"), true));
-	QVERIFY(!bssh_main_window::paste_needs_confirming(QString(), true));
+	QVERIFY(!bssh_main_window::paste_needs_confirming(QStringLiteral("ls -l"), true, false));
+	QVERIFY(!bssh_main_window::paste_needs_confirming(QStringLiteral("ls -l\n"), true, false));
+	QVERIFY(!bssh_main_window::paste_needs_confirming(QString(), true, false));
 
 	/* Two lines of content is the case that runs something unread. */
-	QVERIFY(bssh_main_window::paste_needs_confirming(QStringLiteral("ls\nrm -rf /"), true));
-	QVERIFY(bssh_main_window::paste_needs_confirming(QStringLiteral("ls\nrm -rf /\n"), true));
+	QVERIFY(bssh_main_window::paste_needs_confirming(QStringLiteral("ls\nrm -rf /"), true, false));
+	QVERIFY(bssh_main_window::paste_needs_confirming(QStringLiteral("ls\nrm -rf /\n"), true, false));
 
 	/* A bare carriage return is Enter to a terminal too. */
-	QVERIFY(bssh_main_window::paste_needs_confirming(QStringLiteral("ls\rwhoami"), true));
+	QVERIFY(bssh_main_window::paste_needs_confirming(QStringLiteral("ls\rwhoami"), true, false));
 
 	/* And the setting really is what turns it off. */
-	QVERIFY(!bssh_main_window::paste_needs_confirming(QStringLiteral("ls\nrm -rf /"), false));
+	QVERIFY(!bssh_main_window::paste_needs_confirming(QStringLiteral("ls\nrm -rf /"), false, false));
+
+	/* Nor while the remote brackets pastes: the shell holds the lines
+	 * for Enter, so nothing runs unread (the holder, 2026-11-20). */
+	QVERIFY(!bssh_main_window::paste_needs_confirming(QStringLiteral("ls\nrm -rf /"), true, true));
 }
 
 /*

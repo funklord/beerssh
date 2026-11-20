@@ -126,6 +126,7 @@ SOURCES += \
     ../src/sshd/sshd_window.cpp \
     ../src/sshd/fuzznet_pair.cpp \
     ../src/term/emulator_vterm.cpp \
+    ../src/term/vterm_modes.c \
     ../src/term/colour_scheme.cpp \
     ../src/term/font_catalog.cpp \
     ../src/term/graphics.cpp \

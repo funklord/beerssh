@@ -6101,12 +6101,17 @@ model on a finger.
   dialog rather than running whatever was on the clipboard, and the dialog
   carries "Do not ask again" so the setting is discoverable where it is
   relevant rather than only on a settings page.
-  **It does not know whether bracketed paste is on**, and that would be the
-  better rule: with bracketing the newlines do not execute, so the question is
-  unnecessary. libvterm handles the mode internally and exposes no way to ask —
-  checked against the vendored headers, which have no getter — so the warning
-  is unconditional and the setting is how somebody who lives inside bracketed
-  paste turns it off.
+  **Not asked while the remote has bracketed paste on** (2026-11-20). The
+  holder pasted a two-line pipeline into a shell, met the question, and noted
+  that Konsole just pastes -- because bash 5.1+ turns DEC 2004 on, and the
+  shell then holds every line for Enter, so nothing runs unread. This was
+  written here as "the better rule" and left unbuilt for want of a getter:
+  libvterm keeps the mode in its internal state and no API reads it.
+  `src/term/vterm_modes.c` reads it as `screen_model.c` already did, from the
+  same vendored header, and `bssh_emulator::bracketed_paste()` is libvterm's
+  own record -- so a reconnect's mode reset and a `-bracketed-paste` feature
+  switch both read as off, and the warning stands there. Tested in
+  `emulator_test` (set, cleared, reset, declined) and in the pure decision.
 
 **OSC 52 had never once run, and neither had the settings handler beside it.**
 Both were wired with `Qt::UniqueConnection` and a lambda — a combination Qt

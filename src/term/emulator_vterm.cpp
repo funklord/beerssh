@@ -11,6 +11,7 @@
 
 #include "term/graphics_internal.h"
 #include "session/screen_model.h"
+#include "term/vterm_modes.h"
 
 namespace {
 
@@ -3180,6 +3181,10 @@ void bssh_emulator::send_paste(const QString &text) {
 	}
 
 	vterm_keyboard_end_paste(m_private->vt);
+}
+
+bool bssh_emulator::bracketed_paste() const {
+	return bssh_vterm_bracketed_paste(m_private->vt) != 0;
 }
 
 QByteArray bssh_emulator::take_output() {

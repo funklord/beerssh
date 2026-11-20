@@ -749,7 +749,9 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 
 	QLabel *paste_note = bssh_wrapped_note(
 	        QStringLiteral("A newline in a paste is Enter to the shell, so every line "
-	                        "but the last runs before you can read it."),
+	                        "but the last runs before you can read it. Not asked where "
+	                        "the shell has bracketed paste on, which holds the lines "
+	                        "until you press Enter."),
 	        this);
 	if (on_this_page(SECTION_TERMINAL, paste_note)) form->addRow(paste_note);
 

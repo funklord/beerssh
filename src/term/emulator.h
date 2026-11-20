@@ -284,6 +284,15 @@ public:
 	void send_paste(const QString &text);
 
 	/*
+	 * Whether the remote has asked for bracketed paste (DEC 2004) and
+	 * this terminal let it -- libvterm's own record, so a reset or a
+	 * switched-off feature reads as off. While it is on, a newline in a
+	 * paste is text the shell holds until Enter rather than Enter itself
+	 * (sec 6.4).
+	 */
+	bool bracketed_paste() const;
+
+	/*
 	 * Mouse, forwarded to the remote when it has asked for it (sec 7.1,
 	 * tier 1). The encoding -- X10, SGR 1006, which buttons, whether
 	 * motion counts -- is libvterm's, and it tracks which modes the

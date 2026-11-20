@@ -223,8 +223,14 @@ public:
 	 * that fires on it is a warning people turn off -- after which it
 	 * protects nobody from the case that matters, which is several
 	 * commands arriving at once.
+	 *
+	 * And not while the remote has bracketed paste on: the shell then
+	 * holds every line for Enter, so nothing runs unread and the
+	 * question only stands between the user and an ordinary paste --
+	 * which is what Konsole does, and what the holder met (2026-11-20).
 	 */
-	static bool paste_needs_confirming(const QString &text, bool warn_enabled);
+	static bool paste_needs_confirming(const QString &text, bool warn_enabled,
+	                                   bool bracketed);
 
 	/*
 	 * Whether the front door is what is on screen. Exists because its
