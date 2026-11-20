@@ -1803,6 +1803,8 @@ void bssh_terminal_view::set_pane_handle(bool handle) {
 		         this, &bssh_terminal_view::corner_menu_requested);
 		connect(m_corner, &bssh_pane_corner::maximise_clicked,
 		         this, &bssh_terminal_view::corner_maximise_requested);
+		connect(m_corner, &bssh_pane_corner::grip_right_clicked,
+		         this, &bssh_terminal_view::corner_grip_right_clicked);
 	} else if (!handle && m_corner) {
 		m_corner->deleteLater();
 		m_corner = nullptr;

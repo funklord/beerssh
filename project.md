@@ -21533,15 +21533,19 @@ loop was found: no rebuild set off another (the fold sweep above).
 
 **Asked 2026-11-20, to build once the open bugs are fixed (the holder):**
 
-- **Put the Terminals sidebar away and bring it back quickly.** The
-  holder's idea: right-click the pane corner's grip (the drag button) to
-  hide it, right-click again to show it. View > Terminals already toggles
-  it, but only through a menu. To weigh against the grip: a chord (Konsole
-  and Kate toggle their side panels with one), and a narrow strip left at
-  the window's edge when hidden that a click reopens -- the grip's right
-  button is otherwise unused, but it is not discoverable and a phone has
-  no right button. Whether the shown or hidden state is remembered across
-  a restart is the same open item as above.
+- **Put the Terminals sidebar away and bring it back quickly** -- **done
+  2026-11-20, the holder's way:** the right button on any pane's grip
+  (the drag button in its corner) hides the list, and again shows it.
+  View > Terminals still does the same. The grip keeps the right click,
+  so the terminal's own menu does not open over it as well; its tooltip
+  says so. Weighed and not built: a chord (Konsole and Kate toggle their
+  side panels with one) -- cheap to add if the grip is not found; and a
+  strip left at the edge when hidden -- room taken from the terminals
+  for a list that is hidden on purpose. No phone question: the list is
+  the desktop's, and a phone has no grip. Whether shown or hidden is
+  remembered across a restart is still the open item above.
+  `layout_test` `the_grips_right_button_toggles_the_terminals_list`,
+  sabotages in `tool/sabotage/grip-toggle.toml`.
 - **The screen/tmux picker shows stale state** -- **done 2026-11-20.**
   Its "(attached)" and "(detached)" marks and names were "almost always"
   wrong, since the list was read only on connecting, 800 ms after

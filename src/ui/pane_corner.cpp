@@ -1,5 +1,6 @@
 #include "ui/pane_corner.h"
 
+#include <QContextMenuEvent>
 #include <QCursor>
 
 #include <QApplication>
@@ -35,7 +36,7 @@ public:
 	explicit corner_grip(bssh_pane_corner *corner) : QWidget(corner), m_corner(corner) {
 		setObjectName(QStringLiteral("pane_grip"));
 		setAccessibleName(QStringLiteral("Drag to move this pane"));
-		setToolTip(QStringLiteral("Drag to move this pane"));
+		setToolTip(QStringLiteral("Drag to move this pane\nRight-click to show or hide the Terminals list"));
 		setCursor(Qt::OpenHandCursor);
 	}
 
@@ -58,6 +59,11 @@ protected:
 	}
 
 	void mousePressEvent(QMouseEvent *event) override {
+		if (event->button() == Qt::RightButton) {
+			emit m_corner->grip_right_clicked();
+			event->accept();
+			return;
+		}
 		if (event->button() != Qt::LeftButton) return;
 		m_from = event->position().toPoint();
 		m_armed = true;
@@ -78,6 +84,9 @@ protected:
 		m_armed = false;
 		event->accept();
 	}
+
+	/* The right button is the grip's own: not the terminal's menu as well. */
+	void contextMenuEvent(QContextMenuEvent *event) override { event->accept(); }
 
 private:
 	bssh_pane_corner *m_corner;

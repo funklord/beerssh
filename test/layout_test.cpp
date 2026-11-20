@@ -43,6 +43,7 @@
 #include <QDropEvent>
 
 #include <memory>
+#include <QContextMenuEvent>
 #include <QtTest>
 
 #include <QAccessible>
@@ -17502,4 +17503,60 @@ void layout_test::equal_shares_are_within_a_cell_of_each_other() {
 	QVERIFY2(wrong.isEmpty(), qPrintable(wrong.mid(0, 5).join(QStringLiteral("; "))));
 	int out[3] = {};
 	QVERIFY2(!bssh_equal_pane_extents(20, 3, 9, out), "a share under one cell is left to the caller");
+}
+
+void layout_test::the_grips_right_button_toggles_the_terminals_list() {
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+	const registry_left_as_found_t tidy(shared);
+
+	bssh_main_window window;
+	window.resize(1200, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	window.adopt_session(shared->create(named(QStringLiteral("one"))));
+	QCoreApplication::processEvents();
+	QVERIFY(!window.terminals_panel_shown());
+
+	const auto grip = [&window] {
+		for (QWidget *widget : window.findChildren<QWidget *>(QStringLiteral("pane_grip")))
+			if (widget->isVisible()) return widget;
+		return static_cast<QWidget *>(nullptr);
+	};
+	QVERIFY2(grip(), "no grip on the pane");
+	QTest::mouseClick(grip(), Qt::RightButton);
+	QTRY_VERIFY(window.terminals_panel_shown());
+
+	/*
+	 * And the context-menu event a real right click brings after it, which
+	 * a test's click does not: the grip keeps it, so the terminal's menu
+	 * does not open over the list. A menu that did open is closed again,
+	 * so a failure here fails rather than waits.
+	 */
+	bool menu_opened = false;
+	QTimer closer;
+	closer.setInterval(50);
+	connect(&closer, &QTimer::timeout, this, [&menu_opened] {
+		if (QWidget *popup = QApplication::activePopupWidget()) {
+			menu_opened = true;
+			popup->close();
+		}
+	});
+	closer.start();
+	QContextMenuEvent context(QContextMenuEvent::Mouse, grip()->rect().center(),
+	                          grip()->mapToGlobal(grip()->rect().center()));
+	QApplication::sendEvent(grip(), &context);
+	QCoreApplication::processEvents();
+	closer.stop();
+	QVERIFY2(!menu_opened, "the right button opened the terminal's menu as well");
+
+	/* The panes were laid out again; the grip is found afresh. */
+	QVERIFY(grip());
+	QTest::mouseClick(grip(), Qt::RightButton);
+	QTRY_VERIFY(!window.terminals_panel_shown());
+
+	/* The left button is still a drag's, and toggles nothing. */
+	QTest::mouseClick(grip(), Qt::LeftButton);
+	QCoreApplication::processEvents();
+	QVERIFY(!window.terminals_panel_shown());
 }

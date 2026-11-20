@@ -786,6 +786,7 @@ signals:
 	void corner_tabs_requested(const QPoint &global);
 	void corner_menu_requested(const QPoint &global);
 	void corner_maximise_requested();
+	void corner_grip_right_clicked();
 
 	/*
 	 * A body drag in Move mode (sec 8.7): reorder this pane within the

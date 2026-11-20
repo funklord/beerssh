@@ -82,6 +82,12 @@ signals:
 	void menu_clicked(const QPoint &global);
 	void maximise_clicked();
 
+	/*
+	 * The grip clicked with the right button: the window's Terminals list
+	 * put away, or brought back (the holder, 2026-11-20).
+	 */
+	void grip_right_clicked();
+
 protected:
 	void paintEvent(QPaintEvent *event) override;
 	void resizeEvent(QResizeEvent *event) override;

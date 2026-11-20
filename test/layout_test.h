@@ -361,6 +361,12 @@ private slots:
 	void the_terminals_sidebar_opens_another_windows_terminal_here();
 
 	/*
+	 * A pane grip's right button puts the Terminals list away and brings
+	 * it back (the holder, 2026-11-20), and opens no menu as well.
+	 */
+	void the_grips_right_button_toggles_the_terminals_list();
+
+	/*
 	 * A tab NOT in front can be dragged out of its bar: pressing it does
 	 * not pick it -- picking rebuilds the bar, which killed the drag the
 	 * press was starting -- and a click still picks, on release.

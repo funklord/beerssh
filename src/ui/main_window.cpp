@@ -626,6 +626,16 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	         this, &bssh_main_window::show_corner_tabs);
 	connect(m_panes, &bssh_pane_container::corner_menu_requested,
 	         this, &bssh_main_window::show_corner_menu);
+	/*
+	 * The Terminals list put away and brought back from any pane's grip,
+	 * with its right button (the holder, 2026-11-20): quicker than View >
+	 * Terminals, and there with the menu bar hidden. Queued, since the
+	 * panes are laid out again around it, the grip's own among them.
+	 */
+	connect(m_panes, &bssh_pane_container::terminals_panel_toggle_requested, this, [this] {
+		QMetaObject::invokeMethod(this, [this] { set_terminals_panel_shown(!terminals_panel_shown()); },
+		                          Qt::QueuedConnection);
+	});
 	/* Queued: it rebuilds the panes, the button's own among them. */
 	connect(m_panes, &bssh_pane_container::maximise_requested, this, [this](bssh_session *front) {
 		QPointer<bssh_session> held = front;
