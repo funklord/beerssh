@@ -13,6 +13,7 @@
 
 #include "ssh/working_directory.h"
 #include "model/app_settings.h"
+#include "model/arrangement.h"
 #include "ui/input_mode.h"
 #include "ui/long_press.h"
 #include "ui/terminals_panel.h"
@@ -607,6 +608,14 @@ private:
 	QTimer *m_layout_timer = nullptr;
 	bool m_closing = false;
 
+	/* Which window this is, in the order they were made: the order an
+	 * arrangement lists them in, which the toolkit's own list is not. */
+	quint64 m_made_as = next_made_as();
+	static quint64 next_made_as() {
+		static quint64 made = 0;
+		return ++made;
+	}
+
 	/*
 	 * How many of the sessions THIS window shows are live. Closing a
 	 * window is a question about the window, not about the process
@@ -785,6 +794,38 @@ public:
 	 * them, or keeps running for any it could not give (sec 8.4).
 	 */
 	static bool restart_keeping_sessions(QString *why = nullptr);
+
+	/*
+	 * Every window of this process as an arrangement, its terminals named
+	 * by hand-off id: what a new version asks for, to build the same
+	 * windows from the sessions it takes. Only connected terminals, the
+	 * ones that can be given.
+	 */
+	static bssh_arrangement_t describe_arrangement();
+	bssh_arrangement_t::window_t describe_window() const;
+
+	/*
+	 * Shows the sessions taken for one window of an arrangement as it
+	 * was: in its order, its panes' shape, its geometry and state, the
+	 * same terminal current. `taken` maps the arrangement's names to the
+	 * sessions; one it lacks closes up, as a deleted host does in a
+	 * restored layout.
+	 */
+	void arrange(const bssh_arrangement_t::window_t &window,
+	             const QHash<QString, bssh_session *> &taken);
+
+	/*
+	 * Be a window of the arrangement of the BeerSSH listening at path --
+	 * the one holding the terminal `holding` names, or with it empty the
+	 * first -- taking its sessions and arrange()-ing them here. The first
+	 * also starts a program for each of the others, named by a terminal
+	 * of theirs -- a window is a process (sec 8.4) -- and takes any it
+	 * cannot start as tabs. Named by a terminal, not a number, because the
+	 * other program's list shrinks as its windows are taken. How many were
+	 * taken, or -1 when that BeerSSH has no arrangement to give (one from
+	 * before it) or no such window.
+	 */
+	int take_arranged_from(const QString &path, const QString &holding = QString());
 
 	/*
 	 * A session dropped on the pane showing `target`, at `edge` (a

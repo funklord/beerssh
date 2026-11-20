@@ -11,6 +11,7 @@
 #include <QFileInfo>
 #include <QMimeData>
 #include <QProcess>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -25,12 +26,15 @@
 
 #include "input/input_router.h"
 #include "model/app_settings.h"
+#include "model/arrangement.h"
 #include "model/handoff_point.h"
 #include "model/profile.h"
 #include "model/profile_store.h"
 #include "model/session.h"
 #include "model/session_registry.h"
+#include "ui/layout_manager.h"
 #include "ui/main_window.h"
+#include "ui/pane_container.h"
 #include "ui/terminal_view.h"
 #include "term/emulator.h"
 
@@ -570,6 +574,200 @@ void handoff_test::another_process_lists_its_terminals_by_title() {
 
 	/* This process is the asker's one peer: its own socket is not counted. */
 	QVERIFY2(output.contains(QStringLiteral("peers: 1\n")), qPrintable(output));
+}
+
+void handoff_test::an_arrangement_reads_back_what_it_wrote() {
+	bssh_arrangement_t written;
+	bssh_arrangement_t::window_t first;
+	first.geometry = QRect(10, 20, 800, 600);
+	first.maximized = true;
+	first.terminals_panel = true;
+	first.shape = QStringLiteral("H(a,V(b,c))");
+	first.terminals = { QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c") };
+	first.current = QStringLiteral("c");
+	bssh_arrangement_t::window_t second;
+	second.terminals = { QStringLiteral("d") };
+	written.windows = { first, second };
+
+	QString why;
+	const bssh_arrangement_t read = bssh_arrangement_t::from_text(written.to_text(), &why);
+	QVERIFY2(why.isEmpty(), qPrintable(why));
+	QCOMPARE(read.windows.size(), 2);
+	QCOMPARE(read.windows.at(0).geometry, first.geometry);
+	QVERIFY(read.windows.at(0).maximized);
+	QVERIFY(!read.windows.at(0).full_screen);
+	QVERIFY(read.windows.at(0).terminals_panel);
+	QCOMPARE(read.windows.at(0).shape, first.shape);
+	QCOMPARE(read.windows.at(0).terminals, first.terminals);
+	QCOMPARE(read.windows.at(0).current, first.current);
+	QCOMPARE(read.windows.at(1).terminals, second.terminals);
+	QVERIFY(!read.windows.at(1).geometry.isValid());
+
+	/* Not one, another version's, or a window of nothing: refused or left out. */
+	QVERIFY(bssh_arrangement_t::from_text(QStringLiteral("ids\nabc")).is_empty());
+	QVERIFY(bssh_arrangement_t::from_text(QStringLiteral("{\"format\":\"beerssh-arrangement\",\"version\":2,"
+	                                                     "\"windows\":[{\"terminals\":[\"a\"]}]}"), &why)
+	                .is_empty());
+	QVERIFY(why.contains(QStringLiteral("version")));
+	QVERIFY(bssh_arrangement_t::from_text(QStringLiteral("{\"format\":\"beerssh-arrangement\",\"version\":1,"
+	                                                     "\"windows\":[{\"terminals\":[]}]}"))
+	                .is_empty());
+}
+
+int bssh_handoff_arranged_mode() {
+	bssh_session_registry *registry = bssh_session_registry::shared();
+	QHash<QString, bssh_session *> shell;
+	for (const QString &letter : { QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c"),
+	                               QStringLiteral("d") }) {
+		bssh_session *session = registry->create(local_shell_profile());
+		session->resize(60, 12);
+		session->connect_to_host();
+		QElapsedTimer up;
+		up.start();
+		while (session->state() != bssh_ssh_session::CONNECTED && up.elapsed() < 10000)
+			QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
+		session->input_router()->send_text(QStringLiteral("echo pane-$(echo %1)\n").arg(letter));
+		if (!screen_shows(session, QStringLiteral("pane-") + letter)) {
+			printf("shell %s did not start\n", qPrintable(letter));
+			return 2;
+		}
+		shell.insert(letter, session);
+	}
+
+	bssh_main_window first;
+	first.resize(1200, 700);
+	first.show();
+	for (const QString &letter : { QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c") })
+		first.adopt_session(shell.value(letter));
+	first.layout_manager()->set_tree(bssh_layout_manager::parse_shape(
+	        QStringLiteral("H(a,V(b,c))"), [&shell](const QString &name) { return shell.value(name); }));
+	QCoreApplication::processEvents();
+	first.panes()->focus_session(shell.value(QStringLiteral("c")));
+	first.set_terminals_panel_shown(true);
+
+	bssh_main_window second;
+	second.resize(700, 500);
+	second.show();
+	second.adopt_session(shell.value(QStringLiteral("d")));
+	QCoreApplication::processEvents();
+
+	bssh_handoff_point point([registry](const QString &id) -> bssh_session * {
+		for (bssh_session *session : registry->sessions()) {
+			if (session->handoff_id() == id && session->state() == bssh_ssh_session::CONNECTED)
+				return session;
+		}
+		return nullptr;
+	});
+	point.set_arranger([] { return bssh_main_window::describe_arrangement().to_text(); });
+	QObject::connect(&point, &bssh_handoff_point::session_given, registry,
+	                 &bssh_session_registry::give_away);
+	QString why;
+	if (!point.listen(&why)) {
+		printf("cannot listen: %s\n", qPrintable(why));
+		return 2;
+	}
+	printf("%s\n", qPrintable(point.path()));
+	fflush(stdout);
+
+	QElapsedTimer serving;
+	serving.start();
+	while (registry->count() > 0 && serving.elapsed() < 60000)
+		QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
+	return registry->count() == 0 ? 0 : 1;
+}
+
+/*
+ * An upgrade keeps the windows, not only the terminals (the holder,
+ * 2026-11-20): the old version, another process, describes its two
+ * windows; this one takes the first -- the panes' shape, the current
+ * terminal, the sidebar -- and would start a program for the second,
+ * which it then plays itself, as that program would.
+ */
+void handoff_test::a_new_version_takes_the_windows_as_they_were() {
+	runtime_dir_t runtime;
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	const auto tidy = qScopeGuard([shared] {
+		while (shared->count() > 0) shared->close(shared->at(0));
+	});
+
+	QProcess old_version;
+	old_version.setProcessChannelMode(QProcess::SeparateChannels);
+	old_version.start(QCoreApplication::applicationFilePath(), { QStringLiteral("--handoff-arranged") });
+	const auto stop = qScopeGuard([&old_version] {
+		if (old_version.state() == QProcess::NotRunning) return;
+		old_version.kill();
+		old_version.waitForFinished(5000);
+	});
+	QVERIFY(old_version.waitForStarted(10000));
+	QElapsedTimer timer;
+	timer.start();
+	while (!old_version.canReadLine() && timer.elapsed() < 30000 && old_version.state() != QProcess::NotRunning)
+		old_version.waitForReadyRead(100);
+	const QString path = QString::fromLocal8Bit(old_version.readLine()).trimmed();
+	QVERIFY2(path.endsWith(QStringLiteral(".sock")), qPrintable(path + old_version.readAllStandardError()));
+
+	QList<QStringList> started;
+	bssh_main_window::set_process_starter([&started](const QString &, const QStringList &arguments) {
+		started.append(arguments);
+		return true;
+	});
+	const auto unset = qScopeGuard([] { bssh_main_window::set_process_starter(nullptr); });
+
+	const auto marker = [](bssh_session *session) {
+		const QString text = session ? session->emulator()->screen().to_text() : QString();
+		for (const QString &letter : { QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c"),
+		                               QStringLiteral("d") }) {
+			if (text.contains(QStringLiteral("pane-") + letter)) return letter;
+		}
+		return QString();
+	};
+
+	bssh_main_window first;
+	first.resize(900, 600);
+	first.show();
+	QCOMPARE(first.take_arranged_from(path), 3);
+	QCOMPARE(started.size(), 1);
+	QCOMPARE(started.first().size(), 4);
+	QCOMPARE(started.first().mid(0, 3), (QStringList{ QStringLiteral("--adopt-from"), path,
+	                                                  QStringLiteral("--adopt-window") }));
+	QCoreApplication::processEvents();
+	QCOMPARE(bssh_layout_manager::shape_text(first.layout_manager()->tree(), marker),
+	         QStringLiteral("H(a,V(b,c))"));
+	const auto focused = [&first, &marker] {
+		const QString current = first.describe_window().current;
+		for (bssh_session *session : first.shown_sessions())
+			if (session->handoff_id() == current) return marker(session);
+		return QString();
+	};
+	QTest::qWait(100);
+	QCOMPARE(focused(), QStringLiteral("c"));
+	QVERIFY(first.terminals_panel_shown());
+
+	/* The window the program started for it would be. */
+	bssh_main_window second;
+	second.resize(900, 600);
+	second.show();
+	/* A terminal it does not have names no window to take; one it has, its window. */
+	QCOMPARE(second.take_arranged_from(path, QStringLiteral("no-such-terminal")), -1);
+	QCOMPARE(second.take_arranged_from(path, started.first().last()), 1);
+	QCOMPARE(started.size(), 1);
+	QCOMPARE(second.shown_sessions().size(), 1);
+	QCOMPARE(marker(second.shown_sessions().first()), QStringLiteral("d"));
+	QVERIFY(!second.terminals_panel_shown());
+
+	/* The shells came with them, and answer here. */
+	bssh_session *moved = second.shown_sessions().first();
+	moved->input_router()->send_text(QStringLiteral("echo after-$((6*7))\n"));
+	QVERIFY(screen_shows(moved, QStringLiteral("after-42")));
+
+	/* Nothing left in the old version, so it ends of its own accord. */
+	timer.restart();
+	while (old_version.state() != QProcess::NotRunning && timer.elapsed() < 20000) {
+		QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+		old_version.waitForFinished(50);
+	}
+	QCOMPARE(old_version.state(), QProcess::NotRunning);
+	QCOMPARE(old_version.exitCode(), 0);
 }
 
 void handoff_test::a_torn_out_tab_and_a_new_window_start_processes_of_their_own() {

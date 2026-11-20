@@ -44,6 +44,8 @@
 #include <QShowEvent>
 #include <QProcess>
 #include <QTimer>
+
+#include <algorithm>
 #include <QWindow>
 #include <QScreen>
 #include <QLayout>
@@ -5571,6 +5573,129 @@ void bssh_main_window::save_layout() {
 	if (bssh_handoff_point::instance()) layout.geometry = QRect(pos(), size());
 
 	m_profile_store->save_layout(layout);
+}
+
+bssh_arrangement_t bssh_main_window::describe_arrangement() {
+	QList<const bssh_main_window *> windows;
+	for (QWidget *top : QApplication::topLevelWidgets()) {
+		const bssh_main_window *window = qobject_cast<bssh_main_window *>(top);
+		if (window && !window->m_closing) windows.append(window);
+	}
+	std::sort(windows.begin(), windows.end(), [](const bssh_main_window *a, const bssh_main_window *b) {
+		return a->m_made_as < b->m_made_as;
+	});
+
+	bssh_arrangement_t arrangement;
+	for (const bssh_main_window *window : windows) {
+		const bssh_arrangement_t::window_t described = window->describe_window();
+		if (!described.terminals.isEmpty()) arrangement.windows.append(described);
+	}
+	return arrangement;
+}
+
+bssh_arrangement_t::window_t bssh_main_window::describe_window() const {
+	bssh_arrangement_t::window_t out;
+	const auto name = [](bssh_session *session) {
+		return session && session->state() == bssh_ssh_session::CONNECTED ? session->handoff_id()
+		                                                                   : QString();
+	};
+	for (bssh_session *session : m_shown) {
+		const QString id = name(session);
+		if (!id.isEmpty()) out.terminals.append(id);
+	}
+	out.current = name(m_current);
+	if (m_layout && m_layout->intent().size() > 1) out.shape = bssh_layout_manager::shape_text(m_layout->tree(), name);
+	out.geometry = normalGeometry();
+	out.maximized = isMaximized();
+	out.full_screen = isFullScreen();
+	out.terminals_panel = terminals_panel_shown();
+	return out;
+}
+
+void bssh_main_window::arrange(const bssh_arrangement_t::window_t &window,
+                               const QHash<QString, bssh_session *> &taken) {
+	for (const QString &name : window.terminals) {
+		bssh_session *session = taken.value(name);
+		if (session) adopt_session(session);
+	}
+	if (m_shown.isEmpty()) return;
+
+	/* As restore_layout() does it, the names being hand-off ids here. */
+	QList<bssh_session *> placed;
+	const bssh_pane_node shape = bssh_layout_manager::parse_shape(window.shape,
+	        [this, &taken, &placed](const QString &name) -> bssh_session * {
+		bssh_session *session = taken.value(name);
+		if (!session || !m_shown.contains(session) || placed.contains(session)) return nullptr;
+		placed.append(session);
+		return session;
+	});
+	if (!shape.is_empty() && !shape.is_leaf()) {
+		m_layout->set_tree(shape);
+		sync_tree_with_shown();
+	}
+
+	/* Not onto a monitor that has since been unplugged. */
+	if (window.geometry.isValid()) {
+		resize(window.geometry.size());
+		if (QGuiApplication::screenAt(window.geometry.center())) move(window.geometry.topLeft());
+	}
+	if (window.full_screen) setWindowState(windowState() | Qt::WindowFullScreen);
+	else if (window.maximized) setWindowState(windowState() | Qt::WindowMaximized);
+	set_terminals_panel_shown(window.terminals_panel);
+
+	bssh_session *current = taken.value(window.current);
+	if (!current || !m_shown.contains(current)) return;
+	if (m_panes && m_layout->intent().size() > 1 && m_layout->intent().contains(current))
+		m_panes->focus_session(current);
+	else
+		show_session(current);
+
+	/*
+	 * And its view holds the keyboard focus, which is what the window
+	 * gives back when it is activated. focus_session() moves it only when
+	 * the pane was not already the focused one -- it was, here, being the
+	 * last shown -- so the first view in the window took the focus as it
+	 * came up, and the current terminal with it.
+	 */
+	if (m_panes && m_panes->focused_session() == current && m_panes->focused_view())
+		m_panes->focused_view()->setFocus();
+}
+
+int bssh_main_window::take_arranged_from(const QString &path, const QString &holding) {
+	QString why;
+	const bssh_arrangement_t arrangement =
+	        bssh_arrangement_t::from_text(bssh_handoff_point::arrangement(path, &why), &why);
+	int index = holding.isEmpty() && !arrangement.is_empty() ? 0 : -1;
+	for (int i = 0; index < 0 && i < arrangement.windows.size(); ++i) {
+		if (arrangement.windows.at(i).terminals.contains(holding)) index = i;
+	}
+	if (index < 0) return -1;
+
+	bssh_arrangement_t::window_t mine = arrangement.windows.at(index);
+	if (holding.isEmpty()) {
+		for (int other = 1; other < arrangement.windows.size(); ++other) {
+			const QString first = arrangement.windows.at(other).terminals.first();
+			if (start_this_program({ QStringLiteral("--adopt-from"), path, QStringLiteral("--adopt-window"),
+			                         first }, &why))
+				continue;
+			/* No process for it: its terminals as tabs here, not left behind. */
+			qWarning("handoff: %s, so window %d comes here", qPrintable(why), other);
+			mine.terminals += arrangement.windows.at(other).terminals;
+		}
+	}
+
+	QHash<QString, bssh_session *> taken;
+	for (const QString &id : mine.terminals) {
+		bssh_session *session = bssh_handoff_point::take(path, id, m_registry, &why);
+		if (!session) {
+			qWarning("handoff: could not take a session: %s", qPrintable(why));
+			continue;
+		}
+		m_registry->adopt(session);
+		taken.insert(id, session);
+	}
+	arrange(mine, taken);
+	return taken.size();
 }
 
 /*

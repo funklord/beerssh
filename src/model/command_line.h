@@ -143,6 +143,11 @@ struct bssh_command_line_t {
 	/* With adopt_from: take only this session, and leave the other running. */
 	QString adopt_session;
 
+	/* With adopt_from: be the window of the other's arrangement holding
+	 * the terminal with this hand-off id; empty for the first, which also
+	 * starts a program for each of the others. */
+	QString adopt_window;
+
 	/* Printing one of these is all the program does. */
 	bool help;
 	bool version;

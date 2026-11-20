@@ -37,6 +37,8 @@ const char BSSH_HANDOFF_HOVER[] = "hover";
 const char BSSH_HANDOFF_OK[] = "ok";
 const char BSSH_HANDOFF_TERMINALS[] = "terminals";
 const char BSSH_HANDOFF_ENTRIES[] = "entries";
+const char BSSH_HANDOFF_ARRANGE[] = "arrange";
+const char BSSH_HANDOFF_ARRANGEMENT[] = "arrangement";
 
 bssh_handoff_point *g_instance = nullptr;
 
@@ -237,6 +239,11 @@ void bssh_handoff_point::serve(int socket) {
 		                        BSSH_HANDOFF_STEP_MS);
 		return;
 	}
+	if (verb == BSSH_HANDOFF_ARRANGE) {
+		const QString text = m_arranger ? m_arranger() : QString();
+		bssh_handoff_wire::send(socket, word(BSSH_HANDOFF_ARRANGEMENT, text), {}, BSSH_HANDOFF_STEP_MS);
+		return;
+	}
 	if (verb == BSSH_HANDOFF_QUIT) {
 		bssh_handoff_wire::send(socket, word(BSSH_HANDOFF_OK), {}, BSSH_HANDOFF_STEP_MS);
 		QMetaObject::invokeMethod(this, [this] { emit quit_requested(); }, Qt::QueuedConnection);
@@ -428,6 +435,14 @@ QList<bssh_handoff_point::listed_t> bssh_handoff_point::terminals(const QString 
 	return out;
 }
 
+QString bssh_handoff_point::arrangement(const QString &path, QString *why) {
+	QByteArray verb;
+	QString text;
+	if (!ask(path, word(BSSH_HANDOFF_ARRANGE), verb, text, why) || verb != BSSH_HANDOFF_ARRANGEMENT)
+		return QString();
+	return text;
+}
+
 QStringList bssh_handoff_point::peers() {
 	const QString own = g_instance ? g_instance->path() : QString();
 	const QDir dir(directory());
@@ -547,6 +562,12 @@ QList<bssh_handoff_point::listed_t> bssh_handoff_point::terminals(const QString 
 	Q_UNUSED(timeout_ms);
 	if (why) *why = not_here;
 	return {};
+}
+
+QString bssh_handoff_point::arrangement(const QString &path, QString *why) {
+	Q_UNUSED(path);
+	if (why) *why = not_here;
+	return QString();
 }
 
 QStringList bssh_handoff_point::peers() {

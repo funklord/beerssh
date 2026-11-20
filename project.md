@@ -9503,9 +9503,10 @@ covered shape's divisions changed nothing measurable, so it went.
      `bssh_session_registry::release()`, which disconnects nothing and
      writes no kept scrollback -- the history went with the session.
      **Upgrades:** File > Restart, Keeping Sessions starts this program
-     again with `--adopt-from <socket>`; the new one lists the old one's
-     connected sessions, takes each, shows them as tabs, and asks it to
-     quit. The old one quits only once no session is left that quitting
+     again with `--adopt-from <socket>`; the new one asks the old one for
+     its **arrangement** (below) and builds the same windows, or, from a
+     BeerSSH that predates it, lists the old one's connected sessions,
+     takes each, shows them as tabs, and asks it to quit. The old one quits only once no session is left that quitting
      would lose, so one it could not give -- one reconnecting, between
      two attempts included, or too busy to stop in time -- keeps it
      running. The program is restarted from its path on disk with a
@@ -21458,6 +21459,53 @@ and in one place.
   on how the holder ends up using it.
 - **Swap With** (a Pane-menu verb built to the first reading, set-aside as a
   tab behind) was tested and not committed: "swap is a bit confusing".
+
+**Built 2026-11-20: an upgrade keeps the windows, not only the terminals
+(the holder: "hand over all terminals from an older version into a new
+version and set up the layout in the same way ... this also builds us the
+skeleton we need to specify full structure ... so it could be saved/loaded
+later"; running two versions side by side was the alternative offered, and
+set aside for this).**
+
+- **The arrangement** (`src/model/arrangement.{h,cpp}`) is a JSON document,
+  `{"format":"beerssh-arrangement","version":1,"windows":[...]}`: per
+  window its normal geometry, maximised, full screen, the Terminals sidebar,
+  the panes' shape (`shape_text()`), its terminals in order, and the current
+  one. Terminals are named by whoever writes it -- hand-off ids for an
+  upgrade -- so the same document can carry profile ids or kept names when
+  saving and loading an arrangement is built. A reader refuses another
+  version rather than guessing, and drops a window with nothing in it.
+- **The hand-off socket's `arrange` request** answers it
+  (`bssh_handoff_point::arrangement()`); a BeerSSH from before ignores the
+  word, and the new version falls back to tabs as before. The menu bar is an
+  app setting and is not per window, so it is not in the document.
+- **`--adopt-from` builds window 0 itself and starts one program per further
+  window with `--adopt-window <hand-off id>`**, naming a terminal in that
+  window rather than its number, because the old program's list shrinks as
+  its windows are taken (a number was tried, and the second window was gone
+  from the list by the time it asked). A window is a process (sec 8.4); one
+  that cannot be started has its terminals taken as tabs into window 0 rather
+  than left behind. Each taker asks the old one to quit when done, and the
+  old one goes only once nothing connected is left in it, so the last taker
+  ends it. Windows are listed in the order they were made, not
+  `QApplication::topLevelWidgets()`'s, which put the second first. The
+  current terminal's view is given the keyboard focus: `focus_session()`
+  moves it only when the pane changes, and the window, once activated,
+  handed it to its first view, and the current terminal with it.
+  Code: `bssh_main_window::describe_arrangement()`,
+  `describe_window()`, `arrange()`, `take_arranged_from()`.
+- Tests: `an_arrangement_reads_back_what_it_wrote`;
+  `a_new_version_takes_the_windows_as_they_were` -- an old version in a
+  second process (`--handoff-arranged`) with H(a,V(b,c)), c current, the
+  sidebar open, and a second window holding d; this process takes window 0
+  (shape, focus, sidebar), sees window 1 asked of a program, plays it, and
+  the old process exits on its own. Sabotages in
+  `tool/sabotage/window-takeover.toml`.
+- **The first upgrade cannot use it**: the giver has to speak `arrange`, so
+  a BeerSSH older than this hands its terminals over as tabs once more.
+- **Next:** saving an arrangement to a file and opening one, which needs
+  names that outlive a process (profile ids and kept names) in place of
+  hand-off ids.
 
 **Fixed 2026-11-20: closing a tab over fuzznet left its shell on the host.**
 `disconnect_from_host()` queues the `hangup` frame and then stops the

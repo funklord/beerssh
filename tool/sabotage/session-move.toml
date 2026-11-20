@@ -66,8 +66,8 @@ expect = "a_drag_payload_names_where_to_ask"
 [[sabotage]]
 name = "the new version never asks the old one to quit"
 file = "src/main.cpp"
-find = "\t\t\tbssh_handoff_point::request_quit(line.adopt_from);\n"
-replace = ""
+find = "\t\t\t\tif (taken == 0) window.open_default_session();\n\t\t\t\tbssh_handoff_point::request_quit(line.adopt_from);\n"
+replace = "\t\t\t\tif (taken == 0) window.open_default_session();\n"
 expect = "a_new_version_takes_every_session"
 
 # A session taken from another process arrives with no tmux and screen

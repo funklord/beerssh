@@ -1,0 +1,52 @@
+# Sabotages for taking an old version's windows over as they were (the
+# holder, 2026-11-20; project.md sec 8.4).
+
+# The panes' shape not applied: the terminals arrive, as tabs.
+[[sabotage]]
+name = "a taken window loses its panes"
+file = "src/ui/main_window.cpp"
+find = "\tif (!shape.is_empty() && !shape.is_leaf()) {\n\t\tm_layout->set_tree(shape);\n\t\tsync_tree_with_shown();\n\t}\n\n\t/* Not onto a monitor"
+replace = "\tif (false) {\n\t\tm_layout->set_tree(shape);\n\t\tsync_tree_with_shown();\n\t}\n\n\t/* Not onto a monitor"
+expect = "a_new_version_takes_the_windows_as_they_were"
+
+# The focus not given back: the first terminal current, not the one that was.
+[[sabotage]]
+name = "a taken window forgets its current terminal"
+file = "src/ui/main_window.cpp"
+find = "\tbssh_session *current = taken.value(window.current);"
+replace = "\tbssh_session *current = nullptr;"
+expect = "a_new_version_takes_the_windows_as_they_were"
+
+# The current pane named, but its view left without the keyboard: the
+# window's first view takes the focus as it comes up, and the terminal.
+[[sabotage]]
+name = "a taken window's current pane loses the keyboard to the first"
+file = "src/ui/main_window.cpp"
+find = "\t\tm_panes->focused_view()->setFocus();\n}"
+replace = "\t\t;\n}"
+expect = "a_new_version_takes_the_windows_as_they_were"
+
+# Windows listed in the toolkit's order: the old version's second window
+# taken first.
+[[sabotage]]
+name = "an arrangement lists windows in the toolkit's order"
+file = "src/ui/main_window.cpp"
+find = "\t\treturn a->m_made_as < b->m_made_as;"
+replace = "\t\treturn false;"
+expect = "a_new_version_takes_the_windows_as_they_were"
+
+# The further windows not started: their terminals stay in the old version.
+[[sabotage]]
+name = "the first window starts no program for the others"
+file = "src/ui/main_window.cpp"
+find = "\tif (holding.isEmpty()) {\n\t\tfor (int other = 1;"
+replace = "\tif (false) {\n\t\tfor (int other = 1;"
+expect = "a_new_version_takes_the_windows_as_they_were"
+
+# The sidebar's state left out of the document.
+[[sabotage]]
+name = "an arrangement drops the sidebar"
+file = "src/model/arrangement.cpp"
+find = "\t\twindow.terminals_panel = object.value(QStringLiteral(\"terminals_panel\")).toBool();"
+replace = "\t\twindow.terminals_panel = false;"
+expect = "an_arrangement_reads_back_what_it_wrote"

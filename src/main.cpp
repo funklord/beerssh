@@ -511,6 +511,7 @@ int main(int argc, char *argv[]) {
 			}
 			return entries;
 		});
+		handoff->set_arranger([] { return bssh_main_window::describe_arrangement().to_text(); });
 		QString why;
 		if (!handoff->listen(&why)) qWarning("handoff: %s", qPrintable(why));
 		QObject::connect(handoff, &bssh_handoff_point::session_given,
@@ -561,22 +562,42 @@ int main(int argc, char *argv[]) {
 			registry->adopt(session);
 			window.adopt_session(session);
 		} else if (!line.adopt_from.isEmpty()) {
-			int taken = 0;
-			QString reason;
-			const QStringList ids = bssh_handoff_point::list(line.adopt_from, &reason);
-			for (const QString &id : ids) {
-				bssh_session *session =
-				        bssh_handoff_point::take(line.adopt_from, id, registry, &reason);
-				if (!session) {
-					qWarning("handoff: could not take a session: %s", qPrintable(reason));
-					continue;
+			/*
+			 * The windows as they were, where the other program can say
+			 * (the holder, 2026-11-20): this process is the window it is
+			 * told to be, by a terminal in it, the first unless told, and
+			 * the first starts a program for each of the others -- a
+			 * window is a process (sec 8.4). Each takes its own window's sessions, and asks
+			 * the other to quit after; that one goes only once nothing
+			 * connected is left in it, so the last to finish ends it.
+			 */
+			const bool first = line.adopt_window.isEmpty();
+			const int arranged = window.take_arranged_from(line.adopt_from, line.adopt_window);
+			if (arranged >= 0) {
+				bssh_handoff_point::request_quit(line.adopt_from);
+				if (arranged == 0 && !first) return 0;
+				if (arranged == 0) window.open_default_session();
+			} else if (!first) {
+				return 0;
+			} else {
+				/* A BeerSSH from before arrangements: every session, as tabs. */
+				QString reason;
+				int taken = 0;
+				const QStringList ids = bssh_handoff_point::list(line.adopt_from, &reason);
+				for (const QString &id : ids) {
+					bssh_session *session =
+					        bssh_handoff_point::take(line.adopt_from, id, registry, &reason);
+					if (!session) {
+						qWarning("handoff: could not take a session: %s", qPrintable(reason));
+						continue;
+					}
+					registry->adopt(session);
+					window.adopt_session(session);
+					++taken;
 				}
-				registry->adopt(session);
-				window.adopt_session(session);
-				++taken;
+				if (taken == 0) window.open_default_session();
+				bssh_handoff_point::request_quit(line.adopt_from);
 			}
-			if (taken == 0) window.open_default_session();
-			bssh_handoff_point::request_quit(line.adopt_from);
 		}
 	}
 #endif

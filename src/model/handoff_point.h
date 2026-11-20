@@ -56,11 +56,16 @@ public:
 	};
 	using cataloguer_t = std::function<QList<listed_t>()>;
 
+	/* How this process has its terminals laid out, as
+	 * bssh_arrangement_t::to_text() writes it, named by hand-off id. */
+	using arranger_t = std::function<QString()>;
+
 	explicit bssh_handoff_point(finder_t finder, QObject *parent = nullptr);
 	~bssh_handoff_point() override;
 
 	void set_lister(lister_t lister) { m_lister = std::move(lister); }
 	void set_cataloguer(cataloguer_t cataloguer) { m_cataloguer = std::move(cataloguer); }
+	void set_arranger(arranger_t arranger) { m_arranger = std::move(arranger); }
 
 	/* Starts listening. False, with why, when the socket cannot be made. */
 	bool listen(QString *why = nullptr);
@@ -124,6 +129,14 @@ public:
 	static QList<listed_t> terminals(const QString &path, QString *why = nullptr,
 	                                 int timeout_ms = 500);
 
+	/*
+	 * The arrangement of the process at path: its windows and the panes
+	 * in them, for a new version to build the same (the holder,
+	 * 2026-11-20). Empty from a BeerSSH from before it, which ignores the
+	 * word -- the new version then shows what it takes as tabs.
+	 */
+	static QString arrangement(const QString &path, QString *why = nullptr);
+
 	/* Where every OTHER BeerSSH of this user listens: directory()'s
 	 * sockets less this process's own. A stale one simply refuses. */
 	static QStringList peers();
@@ -161,6 +174,7 @@ private:
 	finder_t m_finder;
 	lister_t m_lister;
 	cataloguer_t m_cataloguer;
+	arranger_t m_arranger;
 	QString m_path;
 	int m_listener = -1;
 	QSocketNotifier *m_notifier = nullptr;

@@ -159,6 +159,12 @@ const QList<bssh_option_t> &bssh_command_line_options() {
 			"program running: how a tab torn out of a window becomes a "
 			"window in a process of its own, so that ending one window's "
 			"process ends no other window." },
+		{ "adopt-window", "", "id",
+			"With --adopt-from, be the window of the other program's "
+			"arrangement that holds the session with this hand-off id: "
+			"take that window's sessions and lay them out as they were. "
+			"What the new program passes to the one it starts for each "
+			"further window it takes over." },
 		{ "restore-window", "", "number",
 			"Be saved window number: what a start passes to the program it "
 			"starts for each further window it brings back. Exits at once "
@@ -602,6 +608,11 @@ bssh_command_line_t bssh_parse_command_line(const QStringList &arguments) {
 	line.store_view = parser.value(QStringLiteral("store-view"));
 	line.adopt_from = parser.value(QStringLiteral("adopt-from"));
 	line.adopt_session = parser.value(QStringLiteral("adopt-session"));
+	line.adopt_window = parser.value(QStringLiteral("adopt-window"));
+	if (parser.isSet(QStringLiteral("adopt-window")) && (line.adopt_window.isEmpty() || line.adopt_from.isEmpty())) {
+		line.error = QStringLiteral("--adopt-window wants --adopt-from and a hand-off id");
+		return line;
+	}
 	line.no_restore = parser.isSet(QStringLiteral("no-restore"));
 	if (parser.isSet(QStringLiteral("restore-window"))) {
 		bool ok = false;
