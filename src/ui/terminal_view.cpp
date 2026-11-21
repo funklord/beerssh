@@ -1795,7 +1795,18 @@ void bssh_terminal_view::set_pane_handle(bool handle) {
 			emit input_mode_chosen(mode);
 			setFocus();
 		});
+		/*
+		 * On the desktop the button opens the window's Terminals list,
+		 * which carries the same sessions under the terminals (the
+		 * holder, 2026-11-21: one list). A phone shows no list, so there
+		 * it is still the drawer.
+		 */
 		connect(m_corner, &bssh_pane_corner::multiplexer_clicked, this, [this] {
+			const bssh_platform *platform = bssh_platform::instance();
+			if (!(platform && platform->is_touch_primary())) {
+				emit multiplexer_list_requested();
+				return;
+			}
 			if (m_mux_drawer) m_mux_drawer->set_open(!m_mux_drawer->is_open());
 		});
 		connect(m_corner, &bssh_pane_corner::tabs_clicked,

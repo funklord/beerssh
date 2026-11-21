@@ -1,0 +1,39 @@
+# Sabotages for the ways to the Terminals list: Ctrl+Shift+L, and on the
+# desktop the corner's tmux/screen button (the holder, 2026-11-21).
+
+[[sabotage]]
+name = "the chord is not stolen"
+file = "src/input/input_router.cpp"
+find = "\t\t{ SHORTCUT_TERMINALS_LIST, Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_L,\n"
+replace = "\t\t{ SHORTCUT_TERMINALS_LIST, Qt::ControlModifier | Qt::ShiftModifier | Qt::AltModifier, Qt::Key_L,\n"
+expect = "the_corner_button_and_a_chord_open_the_terminals_list"
+
+[[sabotage]]
+name = "the chord only ever shows the list"
+file = "src/ui/main_window.cpp"
+find = "\t\tset_terminals_panel_shown(!terminals_panel_shown());\n}"
+replace = "\t\tset_terminals_panel_shown(true);\n}"
+expect = "the_corner_button_and_a_chord_open_the_terminals_list"
+
+# The desktop's button still opens the drawer: two lists of the same thing.
+[[sabotage]]
+name = "the desktop's corner button opens the drawer"
+file = "src/ui/terminal_view.cpp"
+find = "\t\t\tif (!(platform && platform->is_touch_primary())) {\n"
+replace = "\t\t\tif (false) {\n"
+expect = "the_corner_button_and_a_chord_open_the_terminals_list"
+
+[[sabotage]]
+name = "the window never hears the button"
+file = "src/ui/pane_container.cpp"
+find = "\tconnect(view, &bssh_terminal_view::multiplexer_list_requested, this,\n\t         [this, session] { emit multiplexer_list_requested(session); });\n"
+replace = ""
+expect = "the_corner_button_and_a_chord_open_the_terminals_list"
+
+# Opened at the top, with the sessions below the fold of a long list.
+[[sabotage]]
+name = "the list opens away from the screen and tmux rows"
+file = "src/ui/main_window.cpp"
+find = "\t\t\tm_terminals_panel->show_multiplexers();\n"
+replace = ""
+expect = "the_corner_button_and_a_chord_open_the_terminals_list"

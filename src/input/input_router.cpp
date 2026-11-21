@@ -295,6 +295,9 @@ const QList<bssh_input_router::chord_t> &bssh_input_router::default_chords() {
 		{ SHORTCUT_MAXIMISE_PANE, Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_X,
 			chord_label(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_X),
 			"maximise-pane", "One pane over the others, and back" },
+		{ SHORTCUT_TERMINALS_LIST, Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_L,
+			chord_label(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_L),
+			"terminals-list", "Show or hide the Terminals list" },
 	};
 	return chords;
 }

@@ -650,6 +650,23 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	         this, &bssh_main_window::show_corner_tabs);
 	connect(m_panes, &bssh_pane_container::corner_menu_requested,
 	         this, &bssh_main_window::show_corner_menu);
+	/*
+	 * A pane's tmux/screen button: the list, at its screen and tmux rows,
+	 * which are the focused terminal's -- so that pane is focused first.
+	 * Queued, since showing the list lays the panes out again, the
+	 * button's own among them.
+	 */
+	connect(m_panes, &bssh_pane_container::multiplexer_list_requested, this,
+	         [this](bssh_session *front) {
+		QPointer<bssh_session> held = front;
+		QMetaObject::invokeMethod(this, [this, held] {
+			if (!held || !m_shown.contains(held)) return;
+			show_session(held);
+			set_terminals_panel_shown(true);
+			show_terminal_entries();
+			m_terminals_panel->show_multiplexers();
+		}, Qt::QueuedConnection);
+	});
 	/* Queued: it rebuilds the panes, the button's own among them. */
 	connect(m_panes, &bssh_pane_container::maximise_requested, this, [this](bssh_session *front) {
 		QPointer<bssh_session> held = front;
@@ -3013,6 +3030,8 @@ void bssh_main_window::handle_shortcut(bssh_input_router::shortcut_t shortcut) {
 	if (shortcut == bssh_input_router::SHORTCUT_ZOOM_RESET) reset_zoom_current();
 
 	if (shortcut == bssh_input_router::SHORTCUT_MAXIMISE_PANE) toggle_maximised(m_current);
+	if (shortcut == bssh_input_router::SHORTCUT_TERMINALS_LIST)
+		set_terminals_panel_shown(!terminals_panel_shown());
 }
 
 void bssh_main_window::toggle_maximised(bssh_session *front) {
@@ -6339,6 +6358,7 @@ void bssh_main_window::build_menu_bar() {
 	/* The Terminals sidebar: every terminal, to open one here. */
 	m_terminals_action = view->addAction(QStringLiteral("&Terminals"));
 	m_terminals_action->setObjectName(QStringLiteral("show_terminals"));
+	m_terminals_action->setShortcut(chord("terminals-list"));
 	m_terminals_action->setCheckable(true);
 	m_terminals_action->setChecked(terminals_panel_shown());
 	connect(m_terminals_action, &QAction::toggled, this, [this](bool shown) {

@@ -304,7 +304,16 @@ public:
 		 * otherwise, or a CSI-u report where it asked for one, and plain
 		 * Ctrl+X -- emacs's prefix -- is untouched.
 		 */
-		SHORTCUT_MAXIMISE_PANE
+		SHORTCUT_MAXIMISE_PANE,
+
+		/*
+		 * The Terminals list shown and put away (the holder,
+		 * 2026-11-21). Ctrl+Shift+L, L for list; konsole spends it on
+		 * detaching a tab, which here is a drag. It costs the remote
+		 * what any Ctrl+Shift letter does, and plain Ctrl+L -- clear
+		 * the screen -- is untouched.
+		 */
+		SHORTCUT_TERMINALS_LIST
 	};
 
 	/*

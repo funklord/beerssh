@@ -758,6 +758,10 @@ signals:
 	/* The drawer's answer (sec 10.2a); see offer_multiplexers(). */
 	void multiplexer_chosen(const bssh_mux_session_t &chosen);
 
+	/* The corner's tmux/screen button on the desktop: show them in the
+	 * window's Terminals list. */
+	void multiplexer_list_requested();
+
 	/* The drawer is open and wants what is running now: on opening, and
 	 * every few seconds while it stays open. */
 	void multiplexers_wanted();

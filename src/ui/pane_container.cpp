@@ -548,6 +548,8 @@ bssh_terminal_view *bssh_pane_container::add_pane_view(bssh_session *session,
 	         view, &bssh_terminal_view::withdraw_multiplexers);
 	connect(view, &bssh_terminal_view::multiplexer_chosen,
 	         session, &bssh_session::choose_multiplexer);
+	connect(view, &bssh_terminal_view::multiplexer_list_requested, this,
+	         [this, session] { emit multiplexer_list_requested(session); });
 	connect(view, &bssh_terminal_view::multiplexers_wanted,
 	         session, &bssh_session::relist_multiplexers);
 	connect(session->emulator(), &bssh_emulator::images_changed,

@@ -21575,8 +21575,12 @@ into that bar.
 
 **Asked 2026-11-20, to build once the open bugs are fixed (the holder):**
 
-- **Put the Terminals sidebar away and bring it back quickly** -- View >
-  Terminals does it. **The grip's right button was built for this on
+- **Put the Terminals sidebar away and bring it back quickly** -- **done
+  2026-11-21: Ctrl+Shift+L**, also shown on View > Terminals (the holder
+  asked for a chord). L for list. Konsole spends it on detaching a tab,
+  which here is done by dragging. The remote loses Ctrl+Shift+L, as with
+  any stolen Ctrl+Shift letter; plain Ctrl+L, which clears the screen,
+  still reaches it. **The grip's right button was built for this on
   2026-11-20 by misreading the request, and changed on 2026-11-21:** what
   the holder meant was "temporarily switch it off so we can click through
   it". Now the right button on a pane's grip puts the whole corner aside
@@ -21599,8 +21603,14 @@ into that bar.
   attached to is bold. While the list is shown, each refresh (every 3 s)
   also lists what is running, one `tmux ls` / `screen -ls` beside the
   shell. The rows follow focus, since the sessions belong to one
-  terminal's host. The corner's drawer stays: it is the offer made on
-  connect, and a phone's only route, where the list is not shown.
+  terminal's host. **On the desktop the corner's tmux/screen button now
+  opens this list** (the holder chose it, 2026-11-21). It focuses that
+  pane, shows the list, and selects the first screen or tmux row, so a
+  long list of terminals does not hide them. The drawer stays only on a
+  phone, which does not show the list.
+  `session_registry_test`
+  `the_corner_button_and_a_chord_open_the_terminals_list`, sabotages in
+  `tool/sabotage/terminals-open.toml`.
   `session_registry_test` `the_terminals_list_offers_screens_then_tmux`,
   sabotages in `tool/sabotage/terminals-mux.toml`.
 - **The screen/tmux picker shows stale state** -- **done 2026-11-20.**

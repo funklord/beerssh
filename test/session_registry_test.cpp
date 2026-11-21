@@ -22,6 +22,8 @@
 #include "ui/multiplexer_drawer.h"
 #include "ui/pane_container.h"
 #include <QListWidget>
+#include <QToolButton>
+#include "ui/pane_corner.h"
 #include "ui/store_view.h"
 
 static bssh_profile_t profile_for(const QString &name, const QString &host) {
@@ -1571,4 +1573,76 @@ void session_registry_test::the_terminals_list_offers_screens_then_tmux() {
 	                  rows->visualItemRect(rows->item(tmuxes + 2)).center());
 	QTRY_COMPARE(fake->restarts().size(), 1);
 	QVERIFY2(fake->restarts().first().contains(QStringLiteral("build")), qPrintable(fake->restarts().first()));
+}
+
+/*
+ * On the desktop the corner's tmux/screen button opens the Terminals
+ * list at its screen and tmux rows rather than the drawer, and
+ * Ctrl+Shift+L shows and hides the list (the holder, 2026-11-21).
+ */
+void session_registry_test::the_corner_button_and_a_chord_open_the_terminals_list() {
+	const offer_multiplexers_t offer;
+	const bssh_factory_reset_t factory_reset;
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+	const auto unset = qScopeGuard([] { bssh_ssh_session::set_factory(nullptr); });
+
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	window.activateWindow();
+	bssh_session *session = window.registry()->create(profile_for(QStringLiteral("mux"),
+	                                                               QStringLiteral("m.example")));
+	window.adopt_session(session);
+	session->connect_to_host();
+	QVERIFY(fake);
+	fake->simulate_key_auth_success();
+	fake->simulate_side_output(sample_listing);
+	QTRY_VERIFY(window.panes()->view_for(session) && window.panes()->view_for(session)->multiplexer_drawer());
+	bssh_terminal_view *view = window.panes()->view_for(session);
+	QVERIFY(view->corner());
+	QToolButton *button = view->corner()->multiplexer_button();
+	QTRY_VERIFY(button->isVisible());
+	QVERIFY(!window.terminals_panel_shown());
+
+	QTest::mouseClick(button, Qt::LeftButton);
+	QTRY_VERIFY(window.terminals_panel_shown());
+	QVERIFY2(!view->multiplexer_drawer() || !view->multiplexer_drawer()->is_open(),
+	         "the drawer opened as well as the list");
+	QListWidget *rows = window.terminals_panel()->list();
+	QVERIFY(rows->currentItem());
+	QCOMPARE(rows->item(rows->currentRow() - 1)->text(), QStringLiteral("screen sessions"));
+
+	/* The chord, typed into the terminal: away, and back. */
+	view = window.panes()->view_for(session);
+	view->setFocus();
+	QTest::keyClick(view, Qt::Key_L, Qt::ControlModifier | Qt::ShiftModifier);
+	QTRY_VERIFY(!window.terminals_panel_shown());
+	view = window.panes()->view_for(session);
+	view->setFocus();
+	QTest::keyClick(view, Qt::Key_L, Qt::ControlModifier | Qt::ShiftModifier);
+	QTRY_VERIFY(window.terminals_panel_shown());
+
+	/*
+	 * And with the menu bar hidden, where the menu's own copy of the
+	 * chord is gone with it and only the terminal's is left. Put back
+	 * after, since the choice is saved.
+	 */
+	QAction *menu_bar = nullptr;
+	for (QAction *action : window.findChildren<QAction *>())
+		if (action->objectName() == QStringLiteral("show_menu_bar")) menu_bar = action;
+	QVERIFY(menu_bar && menu_bar->isChecked());
+	const auto restore = qScopeGuard([menu_bar] { menu_bar->setChecked(true); });
+	menu_bar->setChecked(false);
+	QCoreApplication::processEvents();
+	for (const bool shown : { false, true }) {
+		view = window.panes()->view_for(session);
+		view->setFocus();
+		QTest::keyClick(view, Qt::Key_L, Qt::ControlModifier | Qt::ShiftModifier);
+		QTRY_COMPARE(window.terminals_panel_shown(), shown);
+	}
 }

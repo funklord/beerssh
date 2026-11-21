@@ -5856,8 +5856,11 @@ void layout_test::the_tmux_drawer_switches_on_a_click() {
 		QCOMPARE(handle->text(), QStringLiteral("tmux 2"));
 		QCOMPARE(handle->toolTip(), drawer->handle_text());
 
-		/* The button opens it over the terminal, beside the corner. */
-		handle->click();
+		/*
+		 * Opened -- a phone's button, since a desktop's opens the
+		 * Terminals list -- it lies over the terminal, beside the corner.
+		 */
+		drawer->set_open(true);
 		QVERIFY(drawer->is_open());
 		QVERIFY(drawer->isVisible());
 		QVERIFY2(drawer->geometry().right() < pane->corner()->x(),
