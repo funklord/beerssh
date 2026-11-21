@@ -83,8 +83,9 @@ signals:
 	void maximise_clicked();
 
 	/*
-	 * The grip clicked with the right button: the window's Terminals list
-	 * put away, or brought back (the holder, 2026-11-20).
+	 * The grip clicked with the right button: the corner is to stand
+	 * aside, so the text under it can be clicked
+	 * (bssh_terminal_view::corner_aside).
 	 */
 	void grip_right_clicked();
 

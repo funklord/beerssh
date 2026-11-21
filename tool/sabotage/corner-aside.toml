@@ -1,0 +1,41 @@
+# Sabotages for the corner put aside from its grip's right button, so the
+# text under it can be clicked (the holder, 2026-11-21).
+
+[[sabotage]]
+name = "the grip's right button does nothing"
+file = "src/ui/pane_corner.cpp"
+find = "\t\t\temit m_corner->grip_right_clicked();\n"
+replace = ""
+expect = "the_grips_right_button_steps_the_corner_aside"
+
+# The grip lets the right click through, and the terminal's menu opens.
+[[sabotage]]
+name = "the grip's right click opens the terminal menu too"
+file = "src/ui/pane_corner.cpp"
+find = "\tvoid contextMenuEvent(QContextMenuEvent *event) override { event->accept(); }\n"
+replace = ""
+expect = "the_grips_right_button_steps_the_corner_aside"
+
+# Put aside, and shown all the same.
+[[sabotage]]
+name = "a corner put aside is still shown"
+file = "src/ui/terminal_view.cpp"
+find = "window_active && !m_corner_aside);"
+replace = "window_active);"
+expect = "the_grips_right_button_steps_the_corner_aside"
+
+# Back at once, with the pointer still where it was: no click gets through.
+[[sabotage]]
+name = "the corner comes back under the pointer"
+file = "src/ui/terminal_view.cpp"
+find = "\t\t\tif (m_corner_aside_from.contains(mapFromGlobal(QCursor::pos()))) return;\n"
+replace = ""
+expect = "the_grips_right_button_steps_the_corner_aside"
+
+# Never back.
+[[sabotage]]
+name = "the corner never comes back"
+file = "src/ui/terminal_view.cpp"
+find = "\t\t\tm_corner_aside_watch->stop();\n\t\t\tm_corner_aside = false;\n"
+replace = "\t\t\tm_corner_aside_watch->stop();\n"
+expect = "the_grips_right_button_steps_the_corner_aside"

@@ -36,7 +36,7 @@ public:
 	explicit corner_grip(bssh_pane_corner *corner) : QWidget(corner), m_corner(corner) {
 		setObjectName(QStringLiteral("pane_grip"));
 		setAccessibleName(QStringLiteral("Drag to move this pane"));
-		setToolTip(QStringLiteral("Drag to move this pane\nRight-click to show or hide the Terminals list"));
+		setToolTip(QStringLiteral("Drag to move this pane\nRight-click to click through to the text under it"));
 		setCursor(Qt::OpenHandCursor);
 	}
 

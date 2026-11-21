@@ -786,7 +786,6 @@ signals:
 	void corner_tabs_requested(const QPoint &global);
 	void corner_menu_requested(const QPoint &global);
 	void corner_maximise_requested();
-	void corner_grip_right_clicked();
 
 	/*
 	 * A body drag in Move mode (sec 8.7): reorder this pane within the
@@ -983,6 +982,14 @@ public:
 	 * context menu instead (sec 8.4), which nothing can intercept.
 	 */
 	bool grip_visible() const;
+
+	/*
+	 * The grip right-clicked: the corner stands aside, so the text under
+	 * it can be clicked, until the pointer has left where it was (the
+	 * holder, 2026-11-21: "temporarily switch it off so we can click
+	 * through it").
+	 */
+	bool corner_aside() const { return m_corner_aside; }
 
 	/*
 	 * Whether this view is a PANE, and so has a handle at all.
@@ -1394,6 +1401,12 @@ private:
 	QString m_corner_tabs;
 	bool m_corner_menu = false;
 	int m_corner_maximise = 0;
+	void set_corner_aside();
+	bool m_corner_aside = false;
+	/* Where it stood, in this view, and the timer that watches for the
+	 * pointer leaving it: nothing hovers a hidden widget to say so. */
+	QRect m_corner_aside_from;
+	class QTimer *m_corner_aside_watch = nullptr;
 
 	QString m_status_note;
 	QString m_notice;

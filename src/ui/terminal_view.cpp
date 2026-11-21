@@ -35,6 +35,7 @@
 #include <QPainterPath>
 
 #include <cmath>
+#include <QCursor>
 #include <QTimer>
 #include <QGuiApplication>
 #include <QInputMethod>
@@ -1803,8 +1804,9 @@ void bssh_terminal_view::set_pane_handle(bool handle) {
 		         this, &bssh_terminal_view::corner_menu_requested);
 		connect(m_corner, &bssh_pane_corner::maximise_clicked,
 		         this, &bssh_terminal_view::corner_maximise_requested);
+		/* Queued: the grip is still delivering its press. */
 		connect(m_corner, &bssh_pane_corner::grip_right_clicked,
-		         this, &bssh_terminal_view::corner_grip_right_clicked);
+		         this, &bssh_terminal_view::set_corner_aside, Qt::QueuedConnection);
 	} else if (!handle && m_corner) {
 		m_corner->deleteLater();
 		m_corner = nullptr;
@@ -1948,8 +1950,36 @@ void bssh_terminal_view::sync_corner() {
 	 * question its user is asking.
 	 */
 	const bool window_active = touch || (window() && window()->isActiveWindow());
-	m_corner->setVisible(m_corner_active && fits && window_active);
+	m_corner->setVisible(m_corner_active && fits && window_active && !m_corner_aside);
 	place_corner();
+}
+
+/* How often a corner standing aside looks for the pointer to have gone. */
+static const int BSSH_CORNER_ASIDE_POLL_MS = 100;
+
+void bssh_terminal_view::set_corner_aside() {
+	if (!m_corner || !m_corner->isVisible()) return;
+
+	/*
+	 * Back once the pointer is out of where the corner was, with a few
+	 * pixels to spare so a click on its very edge is not the moment it
+	 * returns -- not on a clock, which would bring it back under a click
+	 * still being aimed.
+	 */
+	m_corner_aside_from = m_corner->geometry().adjusted(-4, -4, 4, 4);
+	m_corner_aside = true;
+	if (!m_corner_aside_watch) {
+		m_corner_aside_watch = new QTimer(this);
+		m_corner_aside_watch->setInterval(BSSH_CORNER_ASIDE_POLL_MS);
+		connect(m_corner_aside_watch, &QTimer::timeout, this, [this] {
+			if (m_corner_aside_from.contains(mapFromGlobal(QCursor::pos()))) return;
+			m_corner_aside_watch->stop();
+			m_corner_aside = false;
+			sync_corner();
+		});
+	}
+	m_corner_aside_watch->start();
+	sync_corner();
 }
 
 void bssh_terminal_view::place_corner() {

@@ -492,8 +492,6 @@ bssh_terminal_view *bssh_pane_container::add_pane_view(bssh_session *session,
 	         this, &bssh_pane_container::corner_menu_requested);
 	connect(view, &bssh_terminal_view::corner_maximise_requested, this,
 	         [this, session] { emit maximise_requested(session); });
-	connect(view, &bssh_terminal_view::corner_grip_right_clicked,
-	         this, &bssh_pane_container::terminals_panel_toggle_requested);
 
 	connect(view, &bssh_terminal_view::pane_drag_requested, this,
 	         [this, alive = QPointer<bssh_session>(session)] {

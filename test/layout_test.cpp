@@ -17505,7 +17505,7 @@ void layout_test::equal_shares_are_within_a_cell_of_each_other() {
 	QVERIFY2(!bssh_equal_pane_extents(20, 3, 9, out), "a share under one cell is left to the caller");
 }
 
-void layout_test::the_grips_right_button_toggles_the_terminals_list() {
+void layout_test::the_grips_right_button_steps_the_corner_aside() {
 	bssh_session_registry *shared = bssh_session_registry::shared();
 	while (shared->count() > 0) shared->close(shared->at(0));
 	const registry_left_as_found_t tidy(shared);
@@ -17514,24 +17514,21 @@ void layout_test::the_grips_right_button_toggles_the_terminals_list() {
 	window.resize(1200, 600);
 	window.show();
 	QVERIFY(QTest::qWaitForWindowExposed(&window));
-	window.adopt_session(shared->create(named(QStringLiteral("one"))));
+	window.activateWindow();
+	bssh_session *session = shared->create(named(QStringLiteral("one")));
+	window.adopt_session(session);
 	QCoreApplication::processEvents();
-	QVERIFY(!window.terminals_panel_shown());
-
-	const auto grip = [&window] {
-		for (QWidget *widget : window.findChildren<QWidget *>(QStringLiteral("pane_grip")))
-			if (widget->isVisible()) return widget;
-		return static_cast<QWidget *>(nullptr);
-	};
-	QVERIFY2(grip(), "no grip on the pane");
-	QTest::mouseClick(grip(), Qt::RightButton);
-	QTRY_VERIFY(window.terminals_panel_shown());
+	bssh_terminal_view *view = window.panes()->view_for(session);
+	QVERIFY(view && view->corner());
+	QTRY_VERIFY(view->corner()->isVisible());
+	QWidget *grip = view->corner()->findChild<QWidget *>(QStringLiteral("pane_grip"));
+	QVERIFY2(grip && grip->isVisible(), "no grip on the pane");
 
 	/*
-	 * And the context-menu event a real right click brings after it, which
-	 * a test's click does not: the grip keeps it, so the terminal's menu
-	 * does not open over the list. A menu that did open is closed again,
-	 * so a failure here fails rather than waits.
+	 * The context-menu event a real right click brings, which a test's
+	 * click does not: the grip keeps it, so the terminal's menu does not
+	 * open as well. A menu that did open is closed again, so a failure
+	 * here fails rather than waits.
 	 */
 	bool menu_opened = false;
 	QTimer closer;
@@ -17543,20 +17540,34 @@ void layout_test::the_grips_right_button_toggles_the_terminals_list() {
 		}
 	});
 	closer.start();
-	QContextMenuEvent context(QContextMenuEvent::Mouse, grip()->rect().center(),
-	                          grip()->mapToGlobal(grip()->rect().center()));
-	QApplication::sendEvent(grip(), &context);
+	QContextMenuEvent context(QContextMenuEvent::Mouse, grip->rect().center(),
+	                          grip->mapToGlobal(grip->rect().center()));
+	QApplication::sendEvent(grip, &context);
 	QCoreApplication::processEvents();
 	closer.stop();
 	QVERIFY2(!menu_opened, "the right button opened the terminal's menu as well");
 
-	/* The panes were laid out again; the grip is found afresh. */
-	QVERIFY(grip());
-	QTest::mouseClick(grip(), Qt::RightButton);
-	QTRY_VERIFY(!window.terminals_panel_shown());
-
-	/* The left button is still a drag's, and toggles nothing. */
-	QTest::mouseClick(grip(), Qt::LeftButton);
-	QCoreApplication::processEvents();
+	/* Right-clicked with the pointer on it: gone, and the text under it is the view's. */
+	const QPoint on_grip = grip->mapToGlobal(grip->rect().center());
+	QCursor::setPos(on_grip);
+	QTest::mouseClick(grip, Qt::RightButton);
+	QTRY_VERIFY(view->corner_aside());
+	QVERIFY(!view->corner()->isVisible());
+	QWidget *under = view->childAt(view->mapFromGlobal(on_grip));
+	QVERIFY2(!under, qPrintable(under ? under->objectName() : QString()));
 	QVERIFY(!window.terminals_panel_shown());
+
+	/* Not back while the pointer stays where it was, however long. */
+	QTest::qWait(400);
+	QVERIFY(!view->corner()->isVisible());
+
+	/* Back once it has left. */
+	QCursor::setPos(view->mapToGlobal(QPoint(10, view->height() - 10)));
+	QTRY_VERIFY(!view->corner_aside());
+	QVERIFY(view->corner()->isVisible());
+
+	/* The left button is still a drag's, and puts nothing aside. */
+	QTest::mouseClick(grip, Qt::LeftButton);
+	QCoreApplication::processEvents();
+	QVERIFY(!view->corner_aside());
 }
