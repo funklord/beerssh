@@ -724,6 +724,8 @@ public:
 	QList<bssh_terminal_entry_t> terminal_entries() const;
 	void open_terminal_entry(const bssh_terminal_entry_t &entry);
 	void refresh_terminals_panel();
+	/* The list shown again from what is known, asking nobody. */
+	void show_terminal_entries();
 
 	/*
 	 * Takes a tab out into a window of its own (sec 8.3's drag, sec 8.4's

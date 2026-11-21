@@ -58,6 +58,7 @@ private slots:
 	 * it says (the holder, 2026-11-20: "almost always the wrong state").
 	 */
 	void an_open_drawer_lists_them_again();
+	void the_terminals_list_offers_screens_then_tmux();
 };
 
 #endif /* BSSH_SESSION_REGISTRY_TEST_H */

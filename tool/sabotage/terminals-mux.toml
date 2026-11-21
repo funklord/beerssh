@@ -1,0 +1,33 @@
+# Sabotages for the screen and tmux sessions listed under the terminals in
+# the Terminals list (the holder, 2026-11-21: "put screens below and then
+# tmuxes").
+
+[[sabotage]]
+name = "tmux listed before screen"
+file = "src/ui/main_window.cpp"
+find = "{ bssh_mux_session_t::SCREEN, bssh_mux_session_t::TMUX }"
+replace = "{ bssh_mux_session_t::TMUX, bssh_mux_session_t::SCREEN }"
+expect = "the_terminals_list_offers_screens_then_tmux"
+
+[[sabotage]]
+name = "the list carries no screen or tmux rows"
+file = "src/ui/main_window.cpp"
+find = "\t\tconst QList<bssh_mux_session_t> found = m_current->pending_multiplexers();\n"
+replace = "\t\tconst QList<bssh_mux_session_t> found;\n"
+expect = "the_terminals_list_offers_screens_then_tmux"
+
+[[sabotage]]
+name = "a screen or tmux row switches nothing"
+file = "src/ui/main_window.cpp"
+find = "\t\tif (entry.session && entry.session == m_current) entry.session->choose_multiplexer(entry.mux);\n"
+replace = ""
+expect = "the_terminals_list_offers_screens_then_tmux"
+
+# Listed once at connect and never again: the stale "(attached)" the
+# holder found in the drawer, now in the list.
+[[sabotage]]
+name = "an open list never asks what is running"
+file = "src/ui/main_window.cpp"
+find = "\tif (m_current) m_current->relist_multiplexers();\n"
+replace = ""
+expect = "the_terminals_list_offers_screens_then_tmux"

@@ -21564,30 +21564,45 @@ once each (`handoff_test` `closing_a_tab_behind_rebuilds_once`,
 Each is grouped with `bssh_pane_container::defer_refresh` (the
 `one_refresh_t` guard in `main_window.cpp`) or loses its extra rebuild.
 
-**Open 2026-11-20: "terminal swapping doesn't work anymore, it puts them in
-tabs" (the holder).** No change to the drop path was found:
-`bssh_layout_manager::place()` with `EDGE_MIDDLE` swaps two panes, except
-that a terminal dragged out of ANOTHER pane's tab bar trades places with
-the target's front, which then goes into that bar -- the documented
-trade, and the likeliest reading of the report. Asked, and unanswered:
-which window, a tab or a whole pane dragged, dropped where, and what
-happened instead. Blocks any change to the drop code.
+**Closed 2026-11-21: "terminal swapping doesn't work anymore, it puts them
+in tabs" (the holder, 2026-11-20).** No change to the drop path was found
+then, and none was made for it; on the 2026-11-21 build, with the
+once-per-gesture rebuild above, the holder reports "swapping works".
+Nothing narrower is known about what they saw: the likeliest reading
+remains the documented trade, where a terminal dragged out of another
+pane's tab bar trades places with the target's front, which then goes
+into that bar.
 
 **Asked 2026-11-20, to build once the open bugs are fixed (the holder):**
 
-- **Put the Terminals sidebar away and bring it back quickly** -- **done
-  2026-11-20, the holder's way:** the right button on any pane's grip
-  (the drag button in its corner) hides the list, and again shows it.
-  View > Terminals still does the same. The grip keeps the right click,
-  so the terminal's own menu does not open over it as well; its tooltip
-  says so. Weighed and not built: a chord (Konsole and Kate toggle their
-  side panels with one) -- cheap to add if the grip is not found; and a
-  strip left at the edge when hidden -- room taken from the terminals
-  for a list that is hidden on purpose. No phone question: the list is
-  the desktop's, and a phone has no grip. Whether shown or hidden is
-  remembered across a restart is still the open item above.
-  `layout_test` `the_grips_right_button_toggles_the_terminals_list`,
-  sabotages in `tool/sabotage/grip-toggle.toml`.
+- **Put the Terminals sidebar away and bring it back quickly** -- View >
+  Terminals does it. **The grip's right button was built for this on
+  2026-11-20 by misreading the request, and changed on 2026-11-21:** what
+  the holder meant was "temporarily switch it off so we can click through
+  it". Now the right button on a pane's grip puts the whole corner aside
+  (grip, mode drum and buttons), so the text under it takes clicks; it
+  comes back once the pointer has left where it stood, with 4 px to
+  spare. Pointer-leaving rather than a clock, because a clock would bring
+  it back under a click still being aimed. A 100 ms timer watches the
+  pointer, since a hidden widget gets no leave event. The grip keeps the
+  right click, so the terminal's own menu does not open as well.
+  `layout_test` `the_grips_right_button_steps_the_corner_aside`,
+  sabotages in `tool/sabotage/corner-aside.toml`. Whether the sidebar's
+  shown or hidden state is remembered across a restart is still the open
+  item above.
+- **One list for terminals and for screen and tmux sessions** -- **built
+  2026-11-21** (the holder: "list of terminals should be the same screen
+  as list of screens/tmux put screens below and then tmuxes"). Under the
+  terminals, the Terminals list shows the focused terminal's screen
+  sessions and then its tmux sessions, the same ones its drawer offers.
+  A row switches that terminal, as the drawer does, and the one it is
+  attached to is bold. While the list is shown, each refresh (every 3 s)
+  also lists what is running, one `tmux ls` / `screen -ls` beside the
+  shell. The rows follow focus, since the sessions belong to one
+  terminal's host. The corner's drawer stays: it is the offer made on
+  connect, and a phone's only route, where the list is not shown.
+  `session_registry_test` `the_terminals_list_offers_screens_then_tmux`,
+  sabotages in `tool/sabotage/terminals-mux.toml`.
 - **The screen/tmux picker shows stale state** -- **done 2026-11-20.**
   Its "(attached)" and "(detached)" marks and names were "almost always"
   wrong, since the list was read only on connecting, 800 ms after

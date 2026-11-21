@@ -2645,6 +2645,7 @@ void bssh_main_window::on_pane_focus_changed(bssh_session *session) {
 		 * with a split, the pane beside this one is on screen too.
 		 */
 		m_current = session;
+		show_terminal_entries();
 
 		if (m_keyboard) m_keyboard->set_target(session->input_router());
 		if (m_key_row) {
@@ -2836,13 +2837,44 @@ QList<bssh_terminal_entry_t> bssh_main_window::terminal_entries() const {
 
 	/* Other processes, as they last answered (ask_other_processes). */
 	out.append(m_other_processes);
+
+	/*
+	 * Then what the focused terminal can switch to, screens before tmux
+	 * (sec 10.2a): what its drawer offers, in the same list as the
+	 * terminals. Empty once declined, or where it offers nothing.
+	 */
+	if (m_current) {
+		const QList<bssh_mux_session_t> found = m_current->pending_multiplexers();
+		for (const bssh_mux_session_t::kind_t kind : { bssh_mux_session_t::SCREEN, bssh_mux_session_t::TMUX }) {
+			for (const bssh_mux_session_t &mux : found) {
+				if (mux.kind != kind) continue;
+				bssh_terminal_entry_t entry;
+				entry.place = kind == bssh_mux_session_t::SCREEN ? bssh_terminal_entry_t::SCREEN
+				                                                 : bssh_terminal_entry_t::TMUX;
+				entry.title = mux.detail.isEmpty() ? mux.name
+				            : QStringLiteral("%1  (%2)").arg(mux.name, mux.detail);
+				entry.session = m_current;
+				entry.mux = mux;
+				entry.current = mux.current;
+				out.append(entry);
+			}
+		}
+	}
 	return out;
+}
+
+void bssh_main_window::show_terminal_entries() {
+	if (terminals_panel_shown()) m_terminals_panel->set_entries(terminal_entries());
 }
 
 void bssh_main_window::refresh_terminals_panel() {
 	if (!terminals_panel_shown()) return;
 	m_terminals_panel->set_entries(terminal_entries());
 	ask_other_processes();
+	/* And what runs beside the focused terminal, which the far end says
+	 * nothing about either; its answer comes back through
+	 * multiplexers_found. */
+	if (m_current) m_current->relist_multiplexers();
 }
 
 /*
@@ -2884,7 +2916,7 @@ void bssh_main_window::ask_other_processes() {
 		QMetaObject::invokeMethod(this, [this, found] {
 			m_terminals_asking = false;
 			m_other_processes = found;
-			if (terminals_panel_shown()) m_terminals_panel->set_entries(terminal_entries());
+			show_terminal_entries();
 		}, Qt::QueuedConnection);
 	}, Qt::QueuedConnection);
 }
@@ -2915,6 +2947,11 @@ void bssh_main_window::open_terminal_entry(const bssh_terminal_entry_t &entry) {
 		adopt_session(session);
 		break;
 	}
+	case bssh_terminal_entry_t::SCREEN:
+	case bssh_terminal_entry_t::TMUX:
+		/* Only the terminal it was listed for: focus may have moved. */
+		if (entry.session && entry.session == m_current) entry.session->choose_multiplexer(entry.mux);
+		break;
 	}
 	refresh_terminals_panel();
 }
@@ -3579,6 +3616,14 @@ void bssh_main_window::wire_session(bssh_session *session) {
 	/* OSC title also drives the window title on desktop (sec 8.3). */
 	connect(session, &bssh_session::title_changed, this, [this, session] {
 		if (session == m_current) update_window_title();
+	});
+
+	/* The Terminals list's screen and tmux rows are the focused one's. */
+	connect(session, &bssh_session::multiplexers_found, this, [this, session] {
+		if (session == m_current) show_terminal_entries();
+	});
+	connect(session, &bssh_session::multiplexers_settled, this, [this, session] {
+		if (session == m_current) show_terminal_entries();
 	});
 
 	/*

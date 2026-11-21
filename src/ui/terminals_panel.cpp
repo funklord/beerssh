@@ -14,6 +14,8 @@ QString heading_for(bssh_terminal_entry_t::place_t place) {
 	switch (place) {
 	case bssh_terminal_entry_t::HERE:         return QStringLiteral("This window");
 	case bssh_terminal_entry_t::OTHER_WINDOW: return QStringLiteral("Other windows");
+	case bssh_terminal_entry_t::SCREEN:       return QStringLiteral("screen sessions");
+	case bssh_terminal_entry_t::TMUX:         return QStringLiteral("tmux sessions");
 	default:                                  break;
 	}
 	return QStringLiteral("Other BeerSSH windows");

@@ -6,6 +6,8 @@
 #include <QString>
 #include <QWidget>
 
+#include "model/multiplexer.h"
+
 class QListWidget;
 class bssh_session;
 
@@ -15,7 +17,12 @@ class bssh_session;
  * is its own process (sec 8.4), reached by its handoff socket.
  */
 struct bssh_terminal_entry_t {
-	enum place_t { HERE, OTHER_WINDOW, OTHER_PROCESS };
+	/*
+	 * In the order listed. The screen and tmux sessions running where the
+	 * focused terminal is come last, under the terminals (the holder,
+	 * 2026-11-21: one list, "screens below and then tmuxes").
+	 */
+	enum place_t { HERE, OTHER_WINDOW, OTHER_PROCESS, SCREEN, TMUX };
 	place_t place = HERE;
 	QString title;
 	/* HERE and OTHER_WINDOW: the session itself. */
@@ -23,7 +30,9 @@ struct bssh_terminal_entry_t {
 	/* OTHER_PROCESS: where to ask, and what for. */
 	QString path;
 	QString id;
-	/* The one this window has focused. */
+	/* SCREEN and TMUX: the one to switch the focused terminal to. */
+	bssh_mux_session_t mux;
+	/* The one this window has focused, or the one it is attached to. */
 	bool current = false;
 };
 

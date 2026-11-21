@@ -1519,3 +1519,56 @@ void session_registry_test::an_open_drawer_lists_them_again() {
 	QTest::qWait(3500);
 	QCOMPARE(fake->side_commands().size(), listed + 2);
 }
+
+/*
+ * The Terminals list carries what the focused terminal's drawer offers,
+ * under the terminals: screens, then tmux (the holder, 2026-11-21). A
+ * row switches that terminal, as the drawer's does, and an open list
+ * asks again for what is running.
+ */
+void session_registry_test::the_terminals_list_offers_screens_then_tmux() {
+	const offer_multiplexers_t offer;
+	const bssh_factory_reset_t factory_reset;
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+	const auto unset = qScopeGuard([] { bssh_ssh_session::set_factory(nullptr); });
+
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	bssh_session *session = window.registry()->create(profile_for(QStringLiteral("mux"),
+	                                                               QStringLiteral("m.example")));
+	window.adopt_session(session);
+	session->connect_to_host();
+	QVERIFY(fake);
+	fake->simulate_key_auth_success();
+	fake->simulate_side_output(sample_listing);
+	QTRY_COMPARE(session->pending_multiplexers().size(), 4);
+
+	const int listed = int(fake->side_commands().size());
+	window.set_terminals_panel_shown(true);
+	QCOMPARE(fake->side_commands().size(), listed + 1);
+	fake->simulate_side_output(sample_listing);
+
+	QListWidget *rows = window.terminals_panel()->list();
+	QStringList texts;
+	for (int i = 0; i < rows->count(); ++i) texts << rows->item(i)->text();
+	const int screens = int(texts.indexOf(QStringLiteral("screen sessions")));
+	const int tmuxes = int(texts.indexOf(QStringLiteral("tmux sessions")));
+	QVERIFY2(screens > 0 && tmuxes > screens, qPrintable(texts.join(QLatin1Char('|'))));
+	QVERIFY2(texts.at(screens + 1).startsWith(QStringLiteral("12345.pts-0.host"))
+	         && texts.at(screens + 2).startsWith(QStringLiteral("678.logs"))
+	         && texts.at(tmuxes + 1).startsWith(QStringLiteral("work"))
+	         && texts.at(tmuxes + 2).startsWith(QStringLiteral("build")),
+	         qPrintable(texts.join(QLatin1Char('|'))));
+	QCOMPARE(rows->count(), tmuxes + 3);
+
+	/* A row switches the focused terminal, as the drawer's would. */
+	QTest::mouseClick(rows->viewport(), Qt::LeftButton, {},
+	                  rows->visualItemRect(rows->item(tmuxes + 2)).center());
+	QTRY_COMPARE(fake->restarts().size(), 1);
+	QVERIFY2(fake->restarts().first().contains(QStringLiteral("build")), qPrintable(fake->restarts().first()));
+}
