@@ -10,6 +10,7 @@
 #include <QElapsedTimer>
 #include <QDir>
 #include <QFileInfo>
+#include <QMenu>
 #include <QMimeData>
 #include <QProcess>
 #include <QScopeGuard>
@@ -302,6 +303,37 @@ void handoff_test::a_hover_says_where_and_then_that_it_left() {
 	held.start();
 	QVERIFY(!bssh_handoff_point::hover(silent_path, QPoint(1, 1), true));
 	QVERIFY2(held.elapsed() < 1000, qPrintable(QStringLiteral("a hover held the drag %1 ms").arg(held.elapsed())));
+}
+
+/*
+ * File > Restart, Keeping Sessions, in a window built before the hand-off
+ * point listens -- main()'s order, so every window the program opened.
+ * Asked at build time, the entry was never there (holder, 2026-11-21:
+ * "Never seen that menu entry").
+ */
+void handoff_test::the_restart_is_offered_once_the_point_listens() {
+	runtime_dir_t runtime;
+	QVERIFY(!bssh_handoff_point::instance());
+	bssh_main_window window;
+	window.show();
+	QAction *restart = window.findChild<QAction *>(QStringLiteral("menu_restart_keeping_sessions"));
+	QVERIFY(restart);
+	QMenu *file = nullptr;
+	for (QMenu *menu : window.findChildren<QMenu *>())
+		if (menu->actions().contains(restart)) file = menu;
+	QVERIFY(file);
+	const auto offered = [&] {
+		file->popup(window.mapToGlobal(QPoint(10, 10)));
+		const bool shown = restart->isVisible();
+		file->hide();
+		return shown;
+	};
+	QVERIFY2(!offered(), "offered with nothing to hand sessions over through");
+
+	bssh_handoff_point point([](const QString &) { return nullptr; });
+	QString why;
+	QVERIFY2(point.listen(&why), qPrintable(why));
+	QVERIFY2(offered(), "not offered once this process can hand its sessions over");
 }
 
 /* Asked for a session it does not have, the giver says so, and the taker

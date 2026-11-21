@@ -22,6 +22,7 @@ private slots:
 	void another_process_lists_its_terminals_by_title();
 	void an_arrangement_reads_back_what_it_wrote();
 	void a_new_version_takes_the_windows_as_they_were();
+	void the_restart_is_offered_once_the_point_listens();
 
 	/*
 	 * A terminal moved -- within a window, as a tab, to another window and

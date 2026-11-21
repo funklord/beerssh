@@ -6277,13 +6277,16 @@ void bssh_main_window::build_menu_bar() {
 	 * A new BeerSSH, taking every live session from this one (sec 8.4):
 	 * what an upgrade needs, so that installing a new version does not
 	 * end every connection and every screen. Offered only where this
-	 * process can hand sessions over.
+	 * process can hand sessions over -- asked as the menu opens, because
+	 * main() starts the hand-off point after the first window is built:
+	 * asked here, no window the program opened ever had the entry.
 	 */
-	if (bssh_handoff_point::instance()) {
-		QAction *restart = file->addAction(QStringLiteral("&Restart, Keeping Sessions"));
-		restart->setObjectName(QStringLiteral("menu_restart_keeping_sessions"));
-		connect(restart, &QAction::triggered, this, [] { restart_keeping_sessions(); });
-	}
+	QAction *restart = file->addAction(QStringLiteral("&Restart, Keeping Sessions"));
+	restart->setObjectName(QStringLiteral("menu_restart_keeping_sessions"));
+	connect(restart, &QAction::triggered, this, [] { restart_keeping_sessions(); });
+	connect(file, &QMenu::aboutToShow, restart, [restart] {
+		restart->setVisible(bssh_handoff_point::instance() != nullptr);
+	});
 
 	QAction *quit = file->addAction(QStringLiteral("E&xit"));
 	connect(quit, &QAction::triggered, this, &QWidget::close);

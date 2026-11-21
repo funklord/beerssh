@@ -21630,6 +21630,18 @@ into that bar.
 
 
 
+**Fixed 2026-11-21: File > Restart, Keeping Sessions was never offered**
+(holder: "Never seen that menu entry"). The window added the entry only
+where `bssh_handoff_point::instance()` already existed, and `main()` starts
+the hand-off point after building the first window, so no window the
+program itself opened had it -- only the tests, which listen first. The
+entry is now always built and shown or hidden as the File menu opens, which
+also covers the corner's menu, since it reuses the same `QMenu`.
+`handoff_test::the_restart_is_offered_once_the_point_listens`, sabotages in
+`tool/sabotage/restart-entry.toml`. A program older than this fix can still
+be upgraded from outside: `beerssh --adopt-from
+$XDG_RUNTIME_DIR/beerssh/handoff-<pid>.sock`.
+
 **Built 2026-11-20: an upgrade keeps the windows, not only the terminals
 (the holder: "hand over all terminals from an older version into a new
 version and set up the layout in the same way ... this also builds us the

@@ -1,0 +1,19 @@
+# Sabotages for File > Restart, Keeping Sessions being offered
+# (2026-11-21): main() starts the hand-off point after the first window,
+# so the entry is decided as the menu opens, not as it is built.
+
+# Decided once, as the menu is built: no window main() opened has it.
+[[sabotage]]
+name = "the restart entry is decided only when the menu is built"
+file = "src/ui/main_window.cpp"
+find = "\tconnect(file, &QMenu::aboutToShow, restart, [restart] {\n\t\trestart->setVisible(bssh_handoff_point::instance() != nullptr);\n\t});\n"
+replace = ""
+expect = "the_restart_is_offered_once_the_point_listens"
+
+# Offered always, where there is nothing to hand sessions over through.
+[[sabotage]]
+name = "the restart entry is offered without a hand-off point"
+file = "src/ui/main_window.cpp"
+find = "\t\trestart->setVisible(bssh_handoff_point::instance() != nullptr);\n\t});\n"
+replace = "\t\trestart->setVisible(true);\n\t});\n"
+expect = "the_restart_is_offered_once_the_point_listens"
