@@ -21754,6 +21754,12 @@ found "30000\nfinished" on the host's screen. So the host had the tail, and
 the Serial client stopped on "caught up" before it. Whether "caught up" can
 be sent ahead of the last replayed bytes, or the test's read loop drops a
 chunk on macOS, is not yet known; not seen on Linux.
+Read 2026-11-22, both ends: the host sends `caught_up` only when
+`bssh_output_log_read` answers ABSENT, after every OK chunk, and an attach
+re-arms it with `sent` reset, so it cannot pass logged bytes; the client
+takes frames in order. No fault found. The check now prints how many bytes
+arrived, `client.next`, how many `caught_up`s and the last 60 bytes, so the
+next failure says whether the stream stopped short or arrived out of order.
 
 **Open, the holder's: a package's version does not say which build it is.**
 The holder could not find maximise (`504b559`, 2026-11-18 13:48) and asked

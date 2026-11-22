@@ -874,7 +874,13 @@ void session_host_test::a_live_client_far_behind_is_sent_the_screen_not_every_by
 	QVERIFY(come_back(BSSH_WIRE_MODE_SERIAL, 0, serial));
 	QVERIFY(serial.history.isEmpty());
 	QVERIFY(serial.text.startsWith("1\r\n2\r\n3\r\n"));
-	QVERIFY(serial.text.contains("29999\r\n30000\r\nfinished"));
+	/* Failed once on macOS (project.md, Open): say how far it got. */
+	QVERIFY2(serial.text.contains("29999\r\n30000\r\nfinished"),
+	         qPrintable(QStringLiteral("%1 bytes, next %2, caught up %3, ending %4")
+	                            .arg(serial.text.size())
+	                            .arg(qulonglong(serial.client.next))
+	                            .arg(serial.caught_up)
+	                            .arg(QString::fromLatin1(serial.text.right(60).toPercentEncoding()))));
 
 	/* Live, a few lines behind: those bytes, not a keyframe. */
 	received_t near;
