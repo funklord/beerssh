@@ -25,6 +25,7 @@ private slots:
 	void the_restart_is_offered_once_the_point_listens();
 	void an_installed_new_version_is_noticed();
 	void every_window_offers_the_restart_after_an_upgrade();
+	void a_restart_is_asked_of_the_other_windows_processes();
 
 	/*
 	 * A terminal moved -- within a window, as a tab, to another window and

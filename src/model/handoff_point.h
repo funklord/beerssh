@@ -118,6 +118,16 @@ public:
 	static bool request_quit(const QString &path, QString *why = nullptr);
 
 	/*
+	 * Asks the process at path to restart into the new version installed
+	 * over it, keeping its sessions -- as each window is a process, one
+	 * Restart in the update bar is passed to the rest (the holder,
+	 * 2026-11-21). A process whose program was not replaced does nothing;
+	 * one from before the word ignores it and closes. Short, as the window
+	 * asking waits on each.
+	 */
+	static bool request_restart(const QString &path, QString *why = nullptr, int timeout_ms = 250);
+
+	/*
 	 * The terminals the process at path would give, with their titles,
 	 * for a Terminals sidebar (the holder, 2026-11-20). Its own request
 	 * rather than a wider "list": a BeerSSH from before it ignores a word
@@ -171,6 +181,9 @@ signals:
 
 	/* A new version has taken everything it could, and asks this to go. */
 	void quit_requested();
+
+	/* Another window's Restart, for this process too; see request_restart(). */
+	void restart_requested();
 
 private:
 	void on_connection();

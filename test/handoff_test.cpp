@@ -20,6 +20,7 @@
 #include <QtTest>
 
 #include <fcntl.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -401,6 +402,84 @@ void handoff_test::every_window_offers_the_restart_after_an_upgrade() {
 	QTest::mouseClick(later, Qt::LeftButton);
 	QVERIFY(!after.update_bar()->isVisible());
 	QVERIFY(before.update_bar()->isVisible());
+}
+
+/*
+ * Every window is a process, so the bar's Restart asks the others to
+ * restart too: the request is answered and signalled, a process that
+ * never answers holds the window only a moment, and the bar sends it to
+ * every other process before restarting its own.
+ */
+void handoff_test::a_restart_is_asked_of_the_other_windows_processes() {
+	runtime_dir_t runtime;
+	bssh_handoff_point point([](const QString &) -> bssh_session * { return nullptr; });
+	QString why;
+	QVERIFY2(point.listen(&why), qPrintable(why));
+	QSignalSpy asked(&point, &bssh_handoff_point::restart_requested);
+
+	/* From a thread: the point answering is this process's own. */
+	std::atomic<int> result { -1 };
+	std::thread sender([&] { result = bssh_handoff_point::request_restart(point.path()) ? 1 : 0; });
+	QElapsedTimer waited;
+	waited.start();
+	while (result < 0 && waited.elapsed() < 5000) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+	sender.join();
+	QCOMPARE(int(result), 1);
+	QTRY_COMPARE(asked.count(), 1);
+
+	/* Another process, listening and never answering. */
+	const QString other = bssh_handoff_point::directory() + QStringLiteral("/handoff-999996.sock");
+	const int listener = ::socket(AF_UNIX, SOCK_STREAM, 0);
+	QVERIFY(listener >= 0);
+	const auto unlisten = qScopeGuard([listener, other] {
+		::close(listener);
+		QFile::remove(other);
+	});
+	sockaddr_un address;
+	std::memset(&address, 0, sizeof address);
+	address.sun_family = AF_UNIX;
+	std::strncpy(address.sun_path, QFile::encodeName(other).constData(), sizeof address.sun_path - 1);
+	QVERIFY(::bind(listener, reinterpret_cast<sockaddr *>(&address), sizeof address) == 0);
+	QVERIFY(::listen(listener, 8) == 0);
+	/* Asked whether anything came, an accept() must not wait for it. */
+	QVERIFY(::fcntl(listener, F_SETFL, ::fcntl(listener, F_GETFL) | O_NONBLOCK) == 0);
+	QElapsedTimer held;
+	held.start();
+	QVERIFY(!bssh_handoff_point::request_restart(other));
+	QVERIFY2(held.elapsed() < 1000, qPrintable(QStringLiteral("held %1 ms").arg(held.elapsed())));
+	const auto heard = [listener] {
+		QByteArray bytes;
+		for (;;) {
+			const int one = ::accept(listener, nullptr, nullptr);
+			if (one < 0) break;
+			char buffer[256];
+			const ssize_t got = ::recv(one, buffer, sizeof buffer, MSG_DONTWAIT);
+			if (got > 0) bytes.append(buffer, int(got));
+			::close(one);
+			pollfd more = { listener, POLLIN, 0 };
+			if (::poll(&more, 1, 0) <= 0) break;
+		}
+		return bytes;
+	};
+	QVERIFY(heard().contains("restart"));
+
+	/* The bar: the other process asked, and this one restarted. */
+	QList<QStringList> started;
+	bssh_main_window::set_process_starter([&started](const QString &, const QStringList &arguments) {
+		started.append(arguments);
+		return true;
+	});
+	const auto unset = qScopeGuard([] { bssh_main_window::set_process_starter(nullptr); });
+	const auto forget = qScopeGuard([] { bssh_main_window::offer_restart(false); });
+	bssh_main_window window;
+	window.show();
+	bssh_main_window::offer_restart();
+	QPushButton *restart = window.update_bar()->findChild<QPushButton *>(QStringLiteral("update_restart"));
+	QVERIFY(restart);
+	QTest::mouseClick(restart, Qt::LeftButton);
+	QVERIFY(heard().contains("restart"));
+	QCOMPARE(started.size(), 1);
+	QCOMPARE(started.first(), (QStringList{ QStringLiteral("--adopt-from"), point.path() }));
 }
 
 /* Asked for a session it does not have, the giver says so, and the taker

@@ -2344,7 +2344,7 @@ with any SFTP client.
 - *How the helper reaches a server*: **beersshd carries it, settled by the
   holder 2026-11-18.** A host running beersshd has the session helper:
   built for the desktop server as `--sessions` (sec 19.1), off by default
-  because it is a shell; the Android app is next. It is the same direction as the holder's 2026-11-06 "maybe we should put it in
+  because it is a shell; the Android app too (sec 19.1). It is the same direction as the holder's 2026-11-06 "maybe we should put it in
   beersshd if it links fuzznet" above. **Uploading it on first use, to a
   plain `sshd` host, stays open as a second route** (holder, 2026-11-18: not
   to be dismissed; an earlier edit of this entry wrongly recorded it as
@@ -21651,6 +21651,17 @@ again) and `every_window_offers_the_restart_after_an_upgrade`; sabotages in
 `tool/sabotage/update-notice.toml`. `main()`'s wiring has no test; it was
 seen working in the real program under Xvfb, a copy whose file was renamed
 over while it ran.
+**The bar's Restart moves every window, not one**: each window is a
+process (sec 8.4), and the File menu's entry restarts only its own. The bar
+first sends `restart` over the hand-off socket to every other process in
+the runtime directory (`bssh_handoff_point::request_restart`, 250 ms each,
+as the window waits); a process restarts if its own watch saw its program
+replaced, so one already on the new version does nothing, and one from
+before the word ignores it. Seen under Xvfb: two windows, the file renamed
+over, one click, both old processes gone and two new ones running from the
+new file, each having adopted its own. Test
+`a_restart_is_asked_of_the_other_windows_processes`; three more sabotages
+in the same file.
 
 **Fixed 2026-11-21: File > Restart, Keeping Sessions was never offered**
 (holder: "Never seen that menu entry"). The window added the entry only

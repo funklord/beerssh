@@ -40,3 +40,27 @@ file = "src/ui/main_window.cpp"
 find = "\tconnect(later, &QPushButton::clicked, m_update_bar, &QWidget::hide);\n"
 replace = ""
 expect = "every_window_offers_the_restart_after_an_upgrade"
+
+# The bar restarts only its own process: every other window stays old.
+[[sabotage]]
+name = "the bar's Restart is not passed to the other windows"
+file = "src/ui/main_window.cpp"
+find = "\t\tfor (const QString &peer : bssh_handoff_point::peers()) bssh_handoff_point::request_restart(peer);\n"
+replace = ""
+expect = "a_restart_is_asked_of_the_other_windows_processes"
+
+# Heard and never acted on.
+[[sabotage]]
+name = "a restart request is answered but not signalled"
+file = "src/model/handoff_point.cpp"
+find = "\t\tQMetaObject::invokeMethod(this, [this] { emit restart_requested(); }, Qt::QueuedConnection);\n"
+replace = ""
+expect = "a_restart_is_asked_of_the_other_windows_processes"
+
+# A process that never answers holds the window for the hand-off's ten seconds.
+[[sabotage]]
+name = "a restart request waits the hand-off's ten seconds"
+file = "src/model/handoff_point.h"
+find = "\tstatic bool request_restart(const QString &path, QString *why = nullptr, int timeout_ms = 250);"
+replace = "\tstatic bool request_restart(const QString &path, QString *why = nullptr, int timeout_ms = 10000);"
+expect = "a_restart_is_asked_of_the_other_windows_processes"

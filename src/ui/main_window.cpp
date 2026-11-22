@@ -8362,7 +8362,13 @@ void bssh_main_window::show_update_bar() {
 	auto *later = new QPushButton(QStringLiteral("Later"), m_update_bar);
 	later->setObjectName(QStringLiteral("update_later"));
 	row->addWidget(later);
+	/*
+	 * Every window is a process (sec 8.4), so the others are asked to
+	 * restart too: one click moves every window of the old version, where
+	 * the File menu's entry moves only this one.
+	 */
 	connect(restart, &QPushButton::clicked, m_update_bar, [text] {
+		for (const QString &peer : bssh_handoff_point::peers()) bssh_handoff_point::request_restart(peer);
 		QString why;
 		if (!restart_keeping_sessions(&why))
 			text->setText(QStringLiteral("Could not restart: %1").arg(why));

@@ -39,6 +39,7 @@ const char BSSH_HANDOFF_TERMINALS[] = "terminals";
 const char BSSH_HANDOFF_ENTRIES[] = "entries";
 const char BSSH_HANDOFF_ARRANGE[] = "arrange";
 const char BSSH_HANDOFF_ARRANGEMENT[] = "arrangement";
+const char BSSH_HANDOFF_RESTART[] = "restart";
 
 bssh_handoff_point *g_instance = nullptr;
 
@@ -271,6 +272,11 @@ void bssh_handoff_point::serve(int socket) {
 	if (verb == BSSH_HANDOFF_QUIT) {
 		bssh_handoff_wire::send(socket, word(BSSH_HANDOFF_OK), {}, BSSH_HANDOFF_STEP_MS);
 		QMetaObject::invokeMethod(this, [this] { emit quit_requested(); }, Qt::QueuedConnection);
+		return;
+	}
+	if (verb == BSSH_HANDOFF_RESTART) {
+		bssh_handoff_wire::send(socket, word(BSSH_HANDOFF_OK), {}, BSSH_HANDOFF_STEP_MS);
+		QMetaObject::invokeMethod(this, [this] { emit restart_requested(); }, Qt::QueuedConnection);
 		return;
 	}
 	if (verb != BSSH_HANDOFF_TAKE) return;
@@ -509,6 +515,12 @@ bool bssh_handoff_point::request_quit(const QString &path, QString *why) {
 	return ask(path, word(BSSH_HANDOFF_QUIT), verb, text, why) && verb == BSSH_HANDOFF_OK;
 }
 
+bool bssh_handoff_point::request_restart(const QString &path, QString *why, int timeout_ms) {
+	QByteArray verb;
+	QString text;
+	return ask(path, word(BSSH_HANDOFF_RESTART), verb, text, why, timeout_ms) && verb == BSSH_HANDOFF_OK;
+}
+
 #else
 
 #include <QCoreApplication>
@@ -598,6 +610,13 @@ QStringList bssh_handoff_point::peers() {
 
 bool bssh_handoff_point::request_quit(const QString &path, QString *why) {
 	Q_UNUSED(path);
+	if (why) *why = not_here;
+	return false;
+}
+
+bool bssh_handoff_point::request_restart(const QString &path, QString *why, int timeout_ms) {
+	Q_UNUSED(path);
+	Q_UNUSED(timeout_ms);
 	if (why) *why = not_here;
 	return false;
 }

@@ -561,6 +561,10 @@ int main(int argc, char *argv[]) {
 			auto *watch = new bssh_program_watch(QCoreApplication::applicationFilePath(), &app);
 			QObject::connect(watch, &bssh_program_watch::program_replaced, &app,
 			                  [] { bssh_main_window::offer_restart(); });
+			/* Another window's Restart: this one too, if it is the old program. */
+			QObject::connect(handoff, &bssh_handoff_point::restart_requested, &app, [watch] {
+				if (watch->replaced()) bssh_main_window::restart_keeping_sessions();
+			});
 		}
 
 		/*
