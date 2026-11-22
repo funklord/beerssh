@@ -21467,10 +21467,16 @@ and in one place.
   going waits for a question still out, at most half a second a process.
   `handoff_test` `the_terminals_list_asks_other_processes_without_waiting`,
   sabotages in `tool/sabotage/terminals-asking.toml`.
-- **Not yet:** whether it stays open across a restart (not remembered); a
-  way to open it without the menu bar (no chord, no corner entry); a phone,
-  which is one process and has the host list's Sessions section. Each waits
-  on how the holder ends up using it.
+- **Remembered across a restart, since 2026-11-22**: a window's saved layout
+  carries `terminals=true` while the list is shown, written when it is
+  toggled, and the window comes back showing it -- an upgrade already
+  carried it in the arrangement, so a plain restart dropping it was the
+  odd one out. A layout saved before has no key and comes back without
+  it, as it did. `layout_test::a_restored_window_brings_back_the_terminals_list`,
+  sabotages in `tool/sabotage/terminals-remembered.toml`. Opening it without
+  the menu bar is Ctrl+Shift+L and the corner's tmux/screen button (below).
+  **Not on a phone**, which is one process and has the host list's Sessions
+  section.
 - **Swap With** (a Pane-menu verb built to the first reading, set-aside as a
   tab behind) was tested and not committed: "swap is a bit confusing".
 
@@ -21591,9 +21597,8 @@ into that bar.
   pointer, since a hidden widget gets no leave event. The grip keeps the
   right click, so the terminal's own menu does not open as well.
   `layout_test` `the_grips_right_button_steps_the_corner_aside`,
-  sabotages in `tool/sabotage/corner-aside.toml`. Whether the sidebar's
-  shown or hidden state is remembered across a restart is still the open
-  item above.
+  sabotages in `tool/sabotage/corner-aside.toml`. The sidebar's shown
+  state is remembered across a restart since 2026-11-22 (above).
 - **One list for terminals and for screen and tmux sessions** -- **built
   2026-11-21** (the holder: "list of terminals should be the same screen
   as list of screens/tmux put screens below and then tmuxes"). Under the
@@ -21718,9 +21723,18 @@ set aside for this).**
   `tool/sabotage/window-takeover.toml`.
 - **The first upgrade cannot use it**: the giver has to speak `arrange`, so
   a BeerSSH older than this hands its terminals over as tabs once more.
-- **Next:** saving an arrangement to a file and opening one, which needs
-  names that outlive a process (profile ids and kept names) in place of
-  hand-off ids.
+- **Open, the holder's (2026-11-22): saving an arrangement to a file and
+  opening one.** Each window's layout is already saved and restored at
+  every start (profile ids, kept names, shape, geometry, the Terminals
+  list), so a file adds a *named* arrangement on top. Two things decide
+  what gets built: whether a saved file covers every BeerSSH window --
+  each is a process, so saving means asking every process over the
+  hand-off socket for its windows named by profile, a new request -- or
+  only the window it is saved from; and whether profiles are named by id
+  (this machine's store only) or by name (portable, but ambiguous). Best
+  guess: every window, by profile name with the id as a hint, File > Save
+  Arrangement... / Open Arrangement..., one process per window as a start
+  does.
 
 **Fixed 2026-11-20: closing a tab over fuzznet left its shell on the host.**
 `disconnect_from_host()` queues the `hangup` frame and then stops the

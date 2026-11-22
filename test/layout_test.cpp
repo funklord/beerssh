@@ -8575,6 +8575,48 @@ void layout_test::a_restored_window_comes_back_in_its_shape() {
 	store->remove(right_id);
 }
 
+/*
+ * The Terminals list comes back with the window that showed it, as an
+ * upgrade already brought it back (sec 8.4), and a window showing it
+ * writes that down.
+ */
+void layout_test::a_restored_window_brings_back_the_terminals_list() {
+	bssh_profile_store *store = bssh_profile_store::shared();
+	QVERIFY(store && store->is_open());
+	bssh_profile_t host = named(QStringLiteral("listed-host"));
+	host.host = QStringLiteral("listed.example");
+	const int id = store->save(host);
+	QVERIFY(id);
+	const bssh_profile_store::layout_state_t was = store->layout();
+	const auto restore = qScopeGuard([store, was, id] {
+		store->save_layout(was);
+		store->remove(id);
+	});
+
+	for (const bool shown : { true, false }) {
+		bssh_profile_store::layout_state_t saved;
+		saved.profile_ids = { id };
+		saved.terminals_panel = shown;
+		QVERIFY(store->save_layout(saved));
+		QCOMPARE(store->layout().terminals_panel, shown);
+
+		bssh_main_window window;
+		window.resize(900, 600);
+		window.show();
+		const registry_left_as_found_t tidy(window.registry());
+		window.restore_layout();
+		QCOMPARE(window.terminals_panel_shown(), shown);
+
+		/* The save the restore queued lands first, so what follows is the toggle's own. */
+		QTest::qWait(1500);
+		QCOMPARE(store->layout().terminals_panel, shown);
+
+		/* Changed, and written down. */
+		window.set_terminals_panel_shown(!shown);
+		QTRY_COMPARE(store->layout().terminals_panel, !shown);
+	}
+}
+
 void layout_test::a_closed_window_writes_down_its_shape() {
 	bssh_profile_store *store = bssh_profile_store::shared();
 	QVERIFY(store && store->is_open());

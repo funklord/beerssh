@@ -2833,6 +2833,7 @@ void bssh_main_window::set_terminals_panel_shown(bool shown) {
 	}
 	if (m_terminals_action && m_terminals_action->isChecked() != shown)
 		m_terminals_action->setChecked(shown);
+	note_arrangement_changed();
 }
 
 QList<bssh_terminal_entry_t> bssh_main_window::terminal_entries() const {
@@ -5734,6 +5735,7 @@ void bssh_main_window::save_layout() {
 
 	/* Only where windows are placed by the user rather than by a phone. */
 	if (bssh_handoff_point::instance()) layout.geometry = QRect(pos(), size());
+	layout.terminals_panel = terminals_panel_shown();
 
 	m_profile_store->save_layout(layout);
 }
@@ -5916,6 +5918,8 @@ void bssh_main_window::restore_layout() {
 		}
 		return;
 	}
+
+	if (layout.terminals_panel) set_terminals_panel_shown(true);
 
 	/*
 	 * Every remembered host comes back as a tab, and **not one of them

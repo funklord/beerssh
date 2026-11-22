@@ -1,0 +1,30 @@
+# Sabotages for the Terminals list coming back with its window
+# (2026-11-22), as an upgrade already brought it back.
+
+[[sabotage]]
+name = "a restored window does not show the list it had"
+file = "src/ui/main_window.cpp"
+find = "\tif (layout.terminals_panel) set_terminals_panel_shown(true);\n"
+replace = ""
+expect = "a_restored_window_brings_back_the_terminals_list"
+
+[[sabotage]]
+name = "a window never writes down that it showed the list"
+file = "src/ui/main_window.cpp"
+find = "\tlayout.terminals_panel = terminals_panel_shown();\n"
+replace = ""
+expect = "a_restored_window_brings_back_the_terminals_list"
+
+[[sabotage]]
+name = "showing the list does not save the layout"
+file = "src/ui/main_window.cpp"
+find = "\t\tm_terminals_action->setChecked(shown);\n\tnote_arrangement_changed();\n}"
+replace = "\t\tm_terminals_action->setChecked(shown);\n}"
+expect = "a_restored_window_brings_back_the_terminals_list"
+
+[[sabotage]]
+name = "the store drops the list's state"
+file = "src/model/profile_store.cpp"
+find = "\t\tif (layout.terminals_panel) file.setValue(QStringLiteral(\"terminals\"), true);\n"
+replace = ""
+expect = "a_restored_window_brings_back_the_terminals_list"

@@ -1284,6 +1284,7 @@ bool bssh_profile_store::save_layout(const layout_state_t &layout) {
 		file.setValue(QStringLiteral("active"), layout.active_index);
 		if (!layout.shape.isEmpty()) file.setValue(QStringLiteral("shape"), layout.shape);
 		if (!layout.geometry.isNull()) file.setValue(QStringLiteral("geometry"), layout.geometry);
+		if (layout.terminals_panel) file.setValue(QStringLiteral("terminals"), true);
 		file.endGroup();
 		file.sync();
 
@@ -1311,6 +1312,7 @@ bssh_profile_store::layout_state_t bssh_profile_store::layout() const {
 	const int active = file.value(QStringLiteral("active"), 0).toInt();
 	state.shape = file.value(QStringLiteral("shape")).toString();
 	state.geometry = file.value(QStringLiteral("geometry")).toRect();
+	state.terminals_panel = file.value(QStringLiteral("terminals"), false).toBool();
 	file.endGroup();
 
 	/*
