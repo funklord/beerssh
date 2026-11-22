@@ -23,6 +23,7 @@
 #include <QEvent>
 #include <QCheckBox>
 #include <QMessageBox>
+#include <QFrame>
 #include <QPushButton>
 #include <QGuiApplication>
 #include <QInputMethod>
@@ -70,6 +71,9 @@
 
 /* Defined beside drop_spot_at(), which it serves. */
 static bool another_beerssh_under_pointer(const QWidget *ours);
+
+/* A new version has been installed over this process (offer_restart). */
+static bool s_restart_offered = false;
 static qint64 other_beerssh_pid_under_pointer(const QWidget *ours);
 
 #include "model/profile_store.h"
@@ -579,6 +583,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	 * bssh_pane_bar now, per pane.
 	 */
 	m_page_layout = layout;
+	if (s_restart_offered) show_update_bar();
 
 	/*
 	 * The pane container, not a lone terminal view. Both it and the layout
@@ -8321,6 +8326,49 @@ void bssh_main_window::hide_keyboard() {
 	if (!m_keyboard) return;
 	m_keyboard_hidden_by_user = true;
 	m_keyboard->hide();
+}
+
+void bssh_main_window::offer_restart(bool offered) {
+	s_restart_offered = offered;
+	for (QWidget *top : QApplication::topLevelWidgets()) {
+		auto *window = qobject_cast<bssh_main_window *>(top);
+		if (!window) continue;
+		if (offered) {
+			window->show_update_bar();
+		} else {
+			delete window->m_update_bar;
+			window->m_update_bar = nullptr;
+		}
+	}
+}
+
+/*
+ * A row over the terminals rather than a note in the corner: it is shown
+ * once per upgrade and has to be seen, and Later puts it away for this
+ * window. Resizing the terminals once for it is the price.
+ */
+void bssh_main_window::show_update_bar() {
+	if (m_update_bar || !m_page_layout) return;
+	m_update_bar = new QFrame(m_terminal_page);
+	m_update_bar->setObjectName(QStringLiteral("update_bar"));
+	auto *row = new QHBoxLayout(m_update_bar);
+	row->setContentsMargins(8, 4, 8, 4);
+	auto *text = new QLabel(QStringLiteral("A new version of BeerSSH is installed."), m_update_bar);
+	text->setObjectName(QStringLiteral("update_text"));
+	row->addWidget(text, 1);
+	auto *restart = new QPushButton(QStringLiteral("Restart, Keeping Sessions"), m_update_bar);
+	restart->setObjectName(QStringLiteral("update_restart"));
+	row->addWidget(restart);
+	auto *later = new QPushButton(QStringLiteral("Later"), m_update_bar);
+	later->setObjectName(QStringLiteral("update_later"));
+	row->addWidget(later);
+	connect(restart, &QPushButton::clicked, m_update_bar, [text] {
+		QString why;
+		if (!restart_keeping_sessions(&why))
+			text->setText(QStringLiteral("Could not restart: %1").arg(why));
+	});
+	connect(later, &QPushButton::clicked, m_update_bar, &QWidget::hide);
+	m_page_layout->insertWidget(0, m_update_bar);
 }
 
 bool bssh_main_window::restart_keeping_sessions(QString *why) {

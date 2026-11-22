@@ -96,6 +96,7 @@ SOURCES += \
     src/session/generated/situ.c \
     src/model/handoff_wire.cpp \
     src/model/arrangement.cpp \
+    src/model/program_watch.cpp \
     src/model/handoff_point.cpp \
     src/model/session_registry.cpp \
     src/model/kept_scrollback.cpp \
@@ -183,6 +184,7 @@ HEADERS += \
     src/model/session.h \
     src/model/handoff_wire.h \
     src/model/arrangement.h \
+    src/model/program_watch.h \
     src/model/handoff_point.h \
     src/model/session_registry.h \
     src/model/kept_scrollback.h \

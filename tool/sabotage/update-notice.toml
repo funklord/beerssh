@@ -1,0 +1,42 @@
+# Sabotages for the notice that a new version is installed (2026-11-22):
+# the watch on the program file, and the bar every window shows.
+
+# Any change beside the program taken for an upgrade.
+[[sabotage]]
+name = "a file written beside the program reads as an upgrade"
+file = "src/model/program_watch.cpp"
+find = "\tif (now.isEmpty() || now == m_identity) return;\n"
+replace = "\tif (now.isEmpty()) return;\n"
+expect = "an_installed_new_version_is_noticed"
+
+# Said once and never again: a second upgrade goes unnoticed.
+[[sabotage]]
+name = "a second upgrade is not noticed"
+file = "src/model/program_watch.cpp"
+find = "\tm_identity = now;\n\tm_replaced = true;\n"
+replace = "\tif (m_replaced) return;\n\tm_identity = now;\n\tm_replaced = true;\n"
+expect = "an_installed_new_version_is_noticed"
+
+# Told by name, not identity: a rename over the file keeps its name.
+[[sabotage]]
+name = "the program is told apart by its name"
+file = "src/model/program_watch.cpp"
+find = "\treturn QStringLiteral(\"%1:%2\").arg(qulonglong(status.st_dev)).arg(qulonglong(status.st_ino));\n"
+replace = "\treturn path;\n"
+expect = "an_installed_new_version_is_noticed"
+
+# A window made after the upgrade does not offer it.
+[[sabotage]]
+name = "a window made after the upgrade has no bar"
+file = "src/ui/main_window.cpp"
+find = "\tif (s_restart_offered) show_update_bar();\n"
+replace = ""
+expect = "every_window_offers_the_restart_after_an_upgrade"
+
+# Later does nothing.
+[[sabotage]]
+name = "Later leaves the bar up"
+file = "src/ui/main_window.cpp"
+find = "\tconnect(later, &QPushButton::clicked, m_update_bar, &QWidget::hide);\n"
+replace = ""
+expect = "every_window_offers_the_restart_after_an_upgrade"

@@ -16,6 +16,7 @@
 #include "model/profile_store.h"
 #include "model/session_registry.h"
 #include "model/handoff_point.h"
+#include "model/program_watch.h"
 #include "model/session.h"
 #include "model/font_download.h"
 #include "platform/platform.h"
@@ -550,6 +551,17 @@ int main(int argc, char *argv[]) {
 			bssh_profile_store::shared()->release_layout();
 			QCoreApplication::quit();
 		});
+
+		/*
+		 * A new version installed over this one: the windows offer to
+		 * restart into it, keeping every session (sec 8.4, upgrades).
+		 * Only where this process can hand its sessions over.
+		 */
+		if (bssh_handoff_point::instance()) {
+			auto *watch = new bssh_program_watch(QCoreApplication::applicationFilePath(), &app);
+			QObject::connect(watch, &bssh_program_watch::program_replaced, &app,
+			                  [] { bssh_main_window::offer_restart(); });
+		}
 
 		/*
 		 * --adopt-from: this IS the new version. Every session the old one

@@ -798,6 +798,15 @@ public:
 	static bool restart_keeping_sessions(QString *why = nullptr);
 
 	/*
+	 * A new version installed over this one (bssh_program_watch): every
+	 * window of this process offers Restart, Keeping Sessions in a bar
+	 * over its terminals, and so does a window made after. False takes
+	 * the offer back, for a test.
+	 */
+	static void offer_restart(bool offered = true);
+	QWidget *update_bar() const { return m_update_bar; }
+
+	/*
 	 * Every window of this process as an arrangement, its terminals named
 	 * by hand-off id: what a new version asks for, to build the same
 	 * windows from the sessions it takes. Only connected terminals, the
@@ -1059,6 +1068,8 @@ private:
 	/* The app defaults as last applied, to tell a change from a re-read. */
 	QJsonObject m_defaults_applied;
 	QVBoxLayout *m_page_layout = nullptr;
+	QWidget *m_update_bar = nullptr;
+	void show_update_bar();
 	QHBoxLayout *m_body = nullptr;
 
 	/* What lies under a point on screen, for the drag above. */

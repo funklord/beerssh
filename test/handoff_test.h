@@ -23,6 +23,8 @@ private slots:
 	void an_arrangement_reads_back_what_it_wrote();
 	void a_new_version_takes_the_windows_as_they_were();
 	void the_restart_is_offered_once_the_point_listens();
+	void an_installed_new_version_is_noticed();
+	void every_window_offers_the_restart_after_an_upgrade();
 
 	/*
 	 * A terminal moved -- within a window, as a tab, to another window and

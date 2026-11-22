@@ -21630,6 +21630,28 @@ into that bar.
 
 
 
+**Built 2026-11-22: a window says when a new version is installed** (the
+holder, 2026-11-21: "still no way to switch to an updated version?"). The
+restart existed and nothing said when it was wanted. `bssh_program_watch`
+(`src/model/program_watch.{h,cpp}`) watches the directory of the program
+file this process started from and, 1.5 s after it last changed, compares
+the file's device and inode with the ones it started with: dpkg and
+`install` rename a new file over the old, so the path names a new inode
+while this process runs the old one (a running program cannot be rewritten
+in place). Where there are no inodes, size and time written stand in.
+`main()` makes one wherever the hand-off point listens; on a change every
+window of the process shows a row over its terminals, *A new version of
+BeerSSH is installed.* with **Restart, Keeping Sessions** and **Later**, and
+a window made afterwards shows it too. Later puts it away for that window.
+A row rather than the pane corner: it comes once per upgrade and has to be
+seen, and resizing the terminals once is its price. Tests:
+`handoff_test::an_installed_new_version_is_noticed` (a neighbour written
+beside it is not an upgrade; a rename over it is, once; a second upgrade
+again) and `every_window_offers_the_restart_after_an_upgrade`; sabotages in
+`tool/sabotage/update-notice.toml`. `main()`'s wiring has no test; it was
+seen working in the real program under Xvfb, a copy whose file was renamed
+over while it ran.
+
 **Fixed 2026-11-21: File > Restart, Keeping Sessions was never offered**
 (holder: "Never seen that menu entry"). The window added the entry only
 where `bssh_handoff_point::instance()` already existed, and `main()` starts

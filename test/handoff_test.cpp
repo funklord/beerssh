@@ -13,6 +13,7 @@
 #include <QMenu>
 #include <QMimeData>
 #include <QProcess>
+#include <QPushButton>
 #include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -24,6 +25,7 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <cstdio>
 #include <functional>
 #include <cstring>
 #include <thread>
@@ -38,6 +40,7 @@
 #include "model/session_registry.h"
 #include "ui/layout_manager.h"
 #include "ui/main_window.h"
+#include "model/program_watch.h"
 #include "ui/pane_bar.h"
 #include "ui/pane_container.h"
 #include "ui/terminal_view.h"
@@ -334,6 +337,70 @@ void handoff_test::the_restart_is_offered_once_the_point_listens() {
 	QString why;
 	QVERIFY2(point.listen(&why), qPrintable(why));
 	QVERIFY2(offered(), "not offered once this process can hand its sessions over");
+}
+
+/*
+ * A package upgrade renames a new file over the program; the watch says
+ * so once, and not for anything else written beside it.
+ */
+void handoff_test::an_installed_new_version_is_noticed() {
+	QTemporaryDir dir;
+	const QString program = dir.filePath(QStringLiteral("beerssh"));
+	const auto write = [](const QString &path, const QByteArray &body) {
+		QFile file(path);
+		if (!file.open(QIODevice::WriteOnly)) return false;
+		file.write(body);
+		file.close();
+		return file.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+	};
+	QVERIFY(write(program, "old"));
+	bssh_program_watch watch(program);
+	watch.set_settle_ms(50);
+	QSignalSpy replaced(&watch, &bssh_program_watch::program_replaced);
+
+	QVERIFY(write(dir.filePath(QStringLiteral("beerssh-session")), "neighbour"));
+	QTest::qWait(400);
+	QCOMPARE(replaced.count(), 0);
+
+	/* dpkg's way: the new file beside the old, then renamed over it. */
+	const QString incoming = dir.filePath(QStringLiteral("beerssh.dpkg-new"));
+	QVERIFY(write(incoming, "new"));
+	QVERIFY(::rename(QFile::encodeName(incoming).constData(), QFile::encodeName(program).constData()) == 0);
+	QTRY_COMPARE(replaced.count(), 1);
+	QVERIFY(watch.replaced());
+	QTest::qWait(300);
+	QCOMPARE(replaced.count(), 1);
+
+	/* And a second upgrade, again. */
+	QVERIFY(write(incoming, "newer"));
+	QVERIFY(::rename(QFile::encodeName(incoming).constData(), QFile::encodeName(program).constData()) == 0);
+	QTRY_COMPARE(replaced.count(), 2);
+}
+
+/*
+ * Told of the upgrade, a window shows the bar over its terminals, a
+ * window made after shows it too, and Later puts it away.
+ */
+void handoff_test::every_window_offers_the_restart_after_an_upgrade() {
+	bssh_main_window before;
+	before.show();
+	QVERIFY(!before.update_bar());
+	const auto forget = qScopeGuard([] { bssh_main_window::offer_restart(false); });
+	bssh_main_window::offer_restart();
+	QVERIFY(before.update_bar());
+	QTRY_VERIFY(before.update_bar()->isVisible());
+	QVERIFY(before.update_bar()->findChild<QPushButton *>(QStringLiteral("update_restart")));
+
+	bssh_main_window after;
+	after.show();
+	QVERIFY(after.update_bar());
+	QTRY_VERIFY(after.update_bar()->isVisible());
+
+	QPushButton *later = after.update_bar()->findChild<QPushButton *>(QStringLiteral("update_later"));
+	QVERIFY(later);
+	QTest::mouseClick(later, Qt::LeftButton);
+	QVERIFY(!after.update_bar()->isVisible());
+	QVERIFY(before.update_bar()->isVisible());
 }
 
 /* Asked for a session it does not have, the giver says so, and the taker
