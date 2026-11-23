@@ -59,7 +59,7 @@ private slots:
 	 */
 	void an_open_drawer_lists_them_again();
 	void the_terminals_list_offers_screens_then_tmux();
-	void the_corner_button_and_a_chord_open_the_terminals_list();
+	void the_corner_button_opens_the_drawer_and_a_chord_the_list();
 };
 
 #endif /* BSSH_SESSION_REGISTRY_TEST_H */

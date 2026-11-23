@@ -7519,10 +7519,15 @@ void layout_test::a_touch_windows_pane_controls_reach_the_floor() {
 		view->offer_multiplexers({ one, two });
 		bssh_multiplexer_drawer *drawer = view->findChild<bssh_multiplexer_drawer *>();
 		QVERIFY(drawer);
-		drawer->set_open(true);
-		/* Find by its chord: a touch window has no menu bar to find it in. */
+		/*
+		 * Find by its chord: a touch window has no menu bar to find it in.
+		 * Then the drawer, since find taking focus from the terminal
+		 * closes a drawer already open.
+		 */
 		view->setFocus();
 		QTest::keyClick(view, Qt::Key_F, Qt::ControlModifier | Qt::ShiftModifier);
+		QCoreApplication::processEvents();
+		drawer->set_open(true);
 		QCoreApplication::processEvents();
 		bssh_find_bar *find = window.findChild<bssh_find_bar *>();
 		QVERIFY(find && find->isVisible() && drawer->isVisible());

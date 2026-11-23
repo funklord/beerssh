@@ -655,23 +655,6 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	         this, &bssh_main_window::show_corner_tabs);
 	connect(m_panes, &bssh_pane_container::corner_menu_requested,
 	         this, &bssh_main_window::show_corner_menu);
-	/*
-	 * A pane's tmux/screen button: the list, at its screen and tmux rows,
-	 * which are the focused terminal's -- so that pane is focused first.
-	 * Queued, since showing the list lays the panes out again, the
-	 * button's own among them.
-	 */
-	connect(m_panes, &bssh_pane_container::multiplexer_list_requested, this,
-	         [this](bssh_session *front) {
-		QPointer<bssh_session> held = front;
-		QMetaObject::invokeMethod(this, [this, held] {
-			if (!held || !m_shown.contains(held)) return;
-			show_session(held);
-			set_terminals_panel_shown(true);
-			show_terminal_entries();
-			m_terminals_panel->show_multiplexers();
-		}, Qt::QueuedConnection);
-	});
 	/* Queued: it rebuilds the panes, the button's own among them. */
 	connect(m_panes, &bssh_pane_container::maximise_requested, this, [this](bssh_session *front) {
 		QPointer<bssh_session> held = front;

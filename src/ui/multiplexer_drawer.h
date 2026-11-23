@@ -19,7 +19,8 @@ class QListWidget;
  * Closed, it is a button in the pane's corner naming how many there are
  * (bssh_pane_corner, sec 8.7a); open, a panel over the terminal listing
  * them, the one this tab shows marked. A click switches to one and closes
- * the drawer, so another can be chosen after; x closes it.
+ * the drawer, so another can be chosen after; x closes it, and so does
+ * focus leaving its terminal.
  * Typing goes on reaching the terminal throughout. Placed by the terminal
  * view it is a child of (bssh_terminal_view::place_multiplexer_drawer).
  */

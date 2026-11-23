@@ -21608,13 +21608,22 @@ into that bar.
   attached to is bold. While the list is shown, each refresh (every 3 s)
   also lists what is running, one `tmux ls` / `screen -ls` beside the
   shell. The rows follow focus, since the sessions belong to one
-  terminal's host. **On the desktop the corner's tmux/screen button now
-  opens this list** (the holder chose it, 2026-11-21). It focuses that
-  pane, shows the list, and selects the first screen or tmux row, so a
-  long list of terminals does not hide them. The drawer stays only on a
-  phone, which does not show the list.
+  terminal's host. For two days the desktop's corner tmux/screen button
+  opened this list (the holder, 2026-11-21). **Reverted 2026-11-23**:
+  the holder found "it comes up on the side of the whole window, which
+  makes it impossible to use when focus moves under the mouse. It is to
+  allow you to choose a terminal in that terminal, not other terminals,
+  and should probably close if focus leaves it." The list follows the
+  focused pane, so crossing another pane on the way to it changed whose
+  sessions it showed. **The button opens that terminal's drawer, over its
+  pane, on every platform**, and focuses the terminal. The drawer closes
+  when focus moves out of its terminal, to another pane, another widget
+  or another program; focus moving within it, the drawer's list
+  included, keeps it open. Only a move out closes it, so a drawer opened
+  while focus was elsewhere is not shut by an unrelated focus change.
+  The list keeps its screen and tmux rows, reached by Ctrl+Shift+L.
   `session_registry_test`
-  `the_corner_button_and_a_chord_open_the_terminals_list`, sabotages in
+  `the_corner_button_opens_the_drawer_and_a_chord_the_list`, sabotages in
   `tool/sabotage/terminals-open.toml`.
   `session_registry_test` `the_terminals_list_offers_screens_then_tmux`,
   sabotages in `tool/sabotage/terminals-mux.toml`.

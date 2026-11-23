@@ -1796,18 +1796,24 @@ void bssh_terminal_view::set_pane_handle(bool handle) {
 			setFocus();
 		});
 		/*
-		 * On the desktop the button opens the window's Terminals list,
-		 * which carries the same sessions under the terminals (the
-		 * holder, 2026-11-21: one list). A phone shows no list, so there
-		 * it is still the drawer.
+		 * The drawer, over this terminal, on every platform. For two
+		 * days the desktop's button opened the window's Terminals list
+		 * instead (the holder, 2026-11-21: one list), and that went
+		 * wrong (the holder, 2026-11-23: "it comes up on the side of the
+		 * whole window, which makes it impossible to use when focus moves
+		 * under the mouse. It is to allow you to choose a terminal in
+		 * that terminal"): the list follows the focused pane, so with
+		 * focus following the pointer, crossing another pane on the way
+		 * to the list changed whose sessions it showed. The list keeps
+		 * its screen and tmux rows; this button is the one terminal's.
+		 * This terminal takes focus, since the drawer closes when focus
+		 * leaves it (bssh_multiplexer_drawer).
 		 */
 		connect(m_corner, &bssh_pane_corner::multiplexer_clicked, this, [this] {
-			const bssh_platform *platform = bssh_platform::instance();
-			if (!(platform && platform->is_touch_primary())) {
-				emit multiplexer_list_requested();
-				return;
-			}
-			if (m_mux_drawer) m_mux_drawer->set_open(!m_mux_drawer->is_open());
+			if (!m_mux_drawer) return;
+			const bool open = !m_mux_drawer->is_open();
+			if (open) setFocus(Qt::MouseFocusReason);
+			m_mux_drawer->set_open(open);
 		});
 		connect(m_corner, &bssh_pane_corner::tabs_clicked,
 		         this, &bssh_terminal_view::corner_tabs_requested);

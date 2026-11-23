@@ -1,5 +1,6 @@
 #include "ui/multiplexer_drawer.h"
 
+#include <QApplication>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -85,6 +86,26 @@ bssh_multiplexer_drawer::bssh_multiplexer_drawer(QWidget *parent) : QWidget(pare
 	};
 	connect(m_list, &QListWidget::itemClicked, this, choose_row);
 	connect(m_list, &QListWidget::itemActivated, this, choose_row);
+
+	/*
+	 * Closed when focus leaves the terminal it belongs to (the holder,
+	 * 2026-11-23: "should probably close if focus leaves it"). The
+	 * terminal rather than the panel, since with focus following the
+	 * pointer the terminal beside the panel takes focus back as soon as
+	 * the pointer crosses it, and the choice is still that terminal's.
+	 * No focus at all, another program's window, counts as leaving. Only
+	 * a move out of it does: a drawer opened while focus was elsewhere
+	 * stays until its terminal has had focus and lost it.
+	 */
+	connect(qApp, &QApplication::focusChanged, this, [this](QWidget *was, QWidget *now) {
+		if (!m_open) return;
+		QWidget *owner = parentWidget() ? parentWidget() : this;
+		const auto inside = [owner](QWidget *widget) {
+			return widget && owner->isAncestorOf(widget); /* itself included */
+		};
+		if (!inside(was) || inside(now)) return;
+		set_open(false);
+	});
 
 	m_panel->hide();
 }

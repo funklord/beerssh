@@ -4258,21 +4258,18 @@ void terminal_view_test::the_corner_sits_on_the_grid_and_takes_none_of_it() {
 	          "the corner left the grid's right edge with the scrollbar");
 
 	/*
-	 * Closed, the drawer is the corner's button. On the desktop the button
-	 * asks for the window's Terminals list, which carries the same
-	 * sessions (the holder, 2026-11-21), and opens no drawer of its own.
+	 * Closed, the drawer is the corner's button, which opens it over this
+	 * terminal on the desktop too (the holder, 2026-11-23), and closes it.
 	 */
 	QToolButton *button = view.corner()->multiplexer_button();
 	QVERIFY(button);
 	QVERIFY2(button->isVisible(), "the corner has no tmux button");
 	QCOMPARE(button->text(), QStringLiteral("tmux 1"));
-	QSignalSpy listed(&view, &bssh_terminal_view::multiplexer_list_requested);
 	button->click();
-	QCOMPARE(listed.count(), 1);
-	QVERIFY(!view.multiplexer_drawer()->is_open());
-	view.multiplexer_drawer()->set_open(true);
+	QVERIFY(view.multiplexer_drawer()->is_open());
 	QVERIFY(view.multiplexer_drawer()->isVisible());
-	view.multiplexer_drawer()->set_open(false);
+	button->click();
+	QVERIFY(!view.multiplexer_drawer()->is_open());
 	QVERIFY(!view.multiplexer_drawer()->isVisible());
 
 	/*

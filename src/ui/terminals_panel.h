@@ -55,9 +55,6 @@ public:
 	void set_entries(const QList<bssh_terminal_entry_t> &entries);
 	const QList<bssh_terminal_entry_t> &entries() const { return m_entries; }
 
-	/* Scrolled to the screen and tmux rows, where there are any. */
-	void show_multiplexers();
-
 	/* The list, for a test to find a row by. */
 	QListWidget *list() const { return m_list; }
 

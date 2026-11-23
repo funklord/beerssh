@@ -90,17 +90,3 @@ void bssh_terminals_panel::set_entries(const QList<bssh_terminal_entry_t> &entri
 		}
 	}
 }
-
-void bssh_terminals_panel::show_multiplexers() {
-	for (int i = 0; i < m_entries.size(); ++i) {
-		const bssh_terminal_entry_t::place_t place = m_entries.at(i).place;
-		if (place != bssh_terminal_entry_t::SCREEN && place != bssh_terminal_entry_t::TMUX) continue;
-		for (int row = 0; row < m_list->count(); ++row) {
-			if (m_list->item(row)->data(ENTRY_ROLE).toInt() != i) continue;
-			/* The heading above it, so the section reads from its top. */
-			m_list->scrollToItem(m_list->item(qMax(0, row - 1)), QAbstractItemView::PositionAtTop);
-			m_list->setCurrentRow(row);
-			return;
-		}
-	}
-}

@@ -21,6 +21,7 @@
 #include "ui/terminal_view.h"
 #include "ui/multiplexer_drawer.h"
 #include "ui/pane_container.h"
+#include <QLineEdit>
 #include <QListWidget>
 #include <QToolButton>
 #include "ui/pane_corner.h"
@@ -1580,7 +1581,7 @@ void session_registry_test::the_terminals_list_offers_screens_then_tmux() {
  * list at its screen and tmux rows rather than the drawer, and
  * Ctrl+Shift+L shows and hides the list (the holder, 2026-11-21).
  */
-void session_registry_test::the_corner_button_and_a_chord_open_the_terminals_list() {
+void session_registry_test::the_corner_button_opens_the_drawer_and_a_chord_the_list() {
 	const offer_multiplexers_t offer;
 	const bssh_factory_reset_t factory_reset;
 	bssh_fake_ssh_session *fake = nullptr;
@@ -1609,23 +1610,40 @@ void session_registry_test::the_corner_button_and_a_chord_open_the_terminals_lis
 	QTRY_VERIFY(button->isVisible());
 	QVERIFY(!window.terminals_panel_shown());
 
+	/*
+	 * The button opens this terminal's drawer, over the pane, and not
+	 * the window's list (the holder, 2026-11-23: the list "comes up on
+	 * the side of the whole window"). Focus leaving the terminal closes
+	 * it again; focus on the terminal itself does not.
+	 */
 	QTest::mouseClick(button, Qt::LeftButton);
-	QTRY_VERIFY(window.terminals_panel_shown());
-	QVERIFY2(!view->multiplexer_drawer() || !view->multiplexer_drawer()->is_open(),
-	         "the drawer opened as well as the list");
-	QListWidget *rows = window.terminals_panel()->list();
-	QVERIFY(rows->currentItem());
-	QCOMPARE(rows->item(rows->currentRow() - 1)->text(), QStringLiteral("screen sessions"));
+	bssh_multiplexer_drawer *drawer = view->multiplexer_drawer();
+	QTRY_VERIFY(drawer->is_open());
+	QVERIFY2(!window.terminals_panel_shown(), "the corner button showed the window's list");
+	QVERIFY(drawer->isVisible());
+	QVERIFY(view->rect().contains(QRect(drawer->pos(), drawer->size())));
+	QListWidget *choices = drawer->findChild<QListWidget *>(QStringLiteral("multiplexer_sessions"));
+	QVERIFY(choices);
+	choices->setFocus();
+	QTRY_VERIFY(choices->hasFocus());
+	view->setFocus();
+	QTRY_VERIFY(view->hasFocus());
+	QVERIFY2(drawer->is_open(), "focus on its own terminal closed the drawer");
+	QLineEdit elsewhere(&window);
+	elsewhere.show();
+	elsewhere.setFocus();
+	QTRY_VERIFY2(!drawer->is_open(), "focus left the terminal and the drawer stayed");
+	elsewhere.hide();
 
-	/* The chord, typed into the terminal: away, and back. */
+	/* The chord, typed into the terminal: the list, and away again. */
+	view = window.panes()->view_for(session);
+	view->setFocus();
+	QTest::keyClick(view, Qt::Key_L, Qt::ControlModifier | Qt::ShiftModifier);
+	QTRY_VERIFY(window.terminals_panel_shown());
 	view = window.panes()->view_for(session);
 	view->setFocus();
 	QTest::keyClick(view, Qt::Key_L, Qt::ControlModifier | Qt::ShiftModifier);
 	QTRY_VERIFY(!window.terminals_panel_shown());
-	view = window.panes()->view_for(session);
-	view->setFocus();
-	QTest::keyClick(view, Qt::Key_L, Qt::ControlModifier | Qt::ShiftModifier);
-	QTRY_VERIFY(window.terminals_panel_shown());
 
 	/*
 	 * And with the menu bar hidden, where the menu's own copy of the
@@ -1639,7 +1657,7 @@ void session_registry_test::the_corner_button_and_a_chord_open_the_terminals_lis
 	const auto restore = qScopeGuard([menu_bar] { menu_bar->setChecked(true); });
 	menu_bar->setChecked(false);
 	QCoreApplication::processEvents();
-	for (const bool shown : { false, true }) {
+	for (const bool shown : { true, false }) {
 		view = window.panes()->view_for(session);
 		view->setFocus();
 		QTest::keyClick(view, Qt::Key_L, Qt::ControlModifier | Qt::ShiftModifier);
