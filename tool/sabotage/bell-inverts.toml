@@ -1,0 +1,15 @@
+# The visual bell inverts every pixel of its pane (the holder, 2026-11-23).
+
+[[sabotage]]
+name = "the bell swaps only the default colours again"
+file = "src/ui/terminal_view.cpp"
+find = "\t\tpainter.setCompositionMode(QPainter::CompositionMode_Difference);\n\t\tpainter.fillRect(rect(), Qt::white);\n"
+replace = ""
+expect = "a_bell_flashes_its_pane_and_asks_for_the_window"
+
+[[sabotage]]
+name = "the bell is drawn over, not as a difference"
+file = "src/ui/terminal_view.cpp"
+find = "\t\tpainter.setCompositionMode(QPainter::CompositionMode_Difference);\n"
+replace = ""
+expect = "a_bell_flashes_its_pane_and_asks_for_the_window"

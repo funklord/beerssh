@@ -358,12 +358,13 @@ public:
 
 	/*
 	 * The visual bell (sec 5.5): a bell rung in a session on screen
-	 * inverts the whole view for a moment, as xterm's visualBell does.
+	 * inverts every pixel of the view for a moment, as other terminals
+	 * do -- drawn over everything by paint_over().
 	 * The bell is a call for attention NOW (the holder, 2026-11-17: "a
 	 * direct signal for attention ... it rarely carries value
 	 * afterwards"), so it is shown where the eyes are and leaves nothing
-	 * behind. Painted as reverse video on top of DECSCNM, so a screen the
-	 * remote already reversed flashes back to normal rather than staying.
+	 * behind. An inversion of what is drawn, so a screen the remote
+	 * already reversed flashes back to normal rather than staying.
 	 */
 	void flash_bell();
 	bool bell_flashing() const { return m_bell_flash; }
@@ -1426,7 +1427,7 @@ private:
 	bool m_reverse_video;
 	bool m_bell_flash = false;
 	class QTimer *m_bell_timer = nullptr;
-	bool painted_reverse() const { return m_reverse_video != m_bell_flash; }
+	bool painted_reverse() const { return m_reverse_video; }
 	quint64 m_content_revision;
 	bool m_raise_contrast;
 	int m_text_brightness;

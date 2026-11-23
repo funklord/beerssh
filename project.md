@@ -1456,9 +1456,13 @@ holds a socket open simply keeps holding it. What still needs deciding is what
   keeps nothing:
   - **every pane showing the session flashes**, inverted for 120 ms --
     xterm's `visualBell` -- focused or not, the app in front or not.
-    Painted as reverse video on top of DECSCNM, so a screen the remote
-    reversed flashes back to normal; a burst of bells is one flash held
-    from the last, not a strobe;
+    Every pixel of the pane is inverted -- coloured cells, pictures and
+    the scrollbar too -- by a white fill in difference mode over
+    everything drawn (2026-11-23: it had swapped only the default
+    colours, and the holder found it "does not invert the whole terminal
+    like other terminals"). So a screen the remote reversed flashes back
+    to normal; a burst of bells is one flash held from the last, not a
+    strobe;
   - **the window holding the session asks for attention**: the urgency
     hint, `QApplication::alert` (xterm's `bellIsUrgent`), which the
     desktop shows on its taskbar and clears itself when the window is

@@ -2201,6 +2201,19 @@ void bssh_terminal_view::paint_over(QPainter &painter) {
 		const int inset = outline.width() / 2;
 		painter.drawRect(rect().adjusted(inset, inset, -inset - 1, -inset - 1));
 	}
+
+	/*
+	 * The visual bell, last and over everything: every pixel of the pane
+	 * inverted, as other terminals do. It swapped the default colours
+	 * once, which left any cell in a colour of its own, the pictures and
+	 * the scrollbar as they were -- the holder, 2026-11-23: "does not
+	 * invert the whole terminal like other terminals". White by
+	 * difference is the inverse of whatever is underneath.
+	 */
+	if (m_bell_flash) {
+		painter.setCompositionMode(QPainter::CompositionMode_Difference);
+		painter.fillRect(rect(), Qt::white);
+	}
 }
 
 void bssh_terminal_view::paintEvent(QPaintEvent *event) {

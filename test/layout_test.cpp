@@ -11987,14 +11987,33 @@ void layout_test::a_bell_flashes_its_pane_and_asks_for_the_window() {
 	bssh_terminal_view *view_b = container.view_for(b);
 	QVERIFY(view_a && view_b);
 
-	const QColor background = view_b->effective_background();
-	const QColor foreground = view_b->effective_foreground();
+	/*
+	 * Every pixel inverted, a cell in a colour of its own as well as the
+	 * default background (the holder, 2026-11-23: "does not invert the
+	 * whole terminal like other terminals"). A red cell, then measured
+	 * where it is and where nothing is.
+	 */
+	b->emulator()->feed(QByteArrayLiteral("\x1b[41m  \x1b[0m"));
+	QCoreApplication::processEvents();
+	const QRect red_cell = view_b->cell_rect(0, 0);
+	QVERIFY(!red_cell.isNull() && !view_b->cell_rect(5, 20).isNull());
+	const QPoint red_at = red_cell.center();
+	const QPoint plain_at = view_b->cell_rect(5, 20).center();
+	const QImage before = view_b->grab().toImage();
 	b->emulator()->feed(QByteArrayLiteral("\a"));
 	QVERIFY2(view_b->bell_flashing(), "the pane the bell rang in flashes");
-	QCOMPARE(view_b->effective_background(), foreground);
+	const QImage during = view_b->grab().toImage();
+	const auto inverted = [](QRgb was, QRgb now) {
+		return qAbs(255 - qRed(was) - qRed(now)) <= 2 && qAbs(255 - qGreen(was) - qGreen(now)) <= 2
+		       && qAbs(255 - qBlue(was) - qBlue(now)) <= 2;
+	};
+	QVERIFY2(inverted(before.pixel(plain_at), during.pixel(plain_at)), "the background was not inverted");
+	QVERIFY2(qRed(before.pixel(red_at)) > 150, "no red cell to measure");
+	QVERIFY2(inverted(before.pixel(red_at), during.pixel(red_at)),
+	         "a cell in its own colour was not inverted");
 	QVERIFY2(!view_a->bell_flashing(), "its neighbour does not");
 	QTRY_VERIFY_WITH_TIMEOUT(!view_b->bell_flashing(), 2000);
-	QCOMPARE(view_b->effective_background(), background);
+	QCOMPARE(view_b->grab().toImage().pixel(red_at), before.pixel(red_at));
 
 	/* With the app behind another, the same: whether anyone is looking does
 	 * not enter into it. */
