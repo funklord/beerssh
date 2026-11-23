@@ -1,0 +1,24 @@
+# The terminals list's headings are labels, not rows (the holder,
+# 2026-11-23): nothing selects them, and they stand apart from the rows.
+
+[[sabotage]]
+name = "a heading can be selected"
+file = "src/ui/terminals_panel.cpp"
+find = "\t\t\theading->setFlags(Qt::NoItemFlags);\n"
+replace = "\t\t\theading->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);\n"
+expect = "the_terminals_list_offers_screens_then_tmux"
+
+[[sabotage]]
+name = "a heading has no band of its own"
+file = "src/ui/terminals_panel.cpp"
+find = "\t\t\theading->setBackground(QColor::fromRgbF("
+replace = "\t\t\theading->setData(Qt::UserRole + 9, QColor::fromRgbF("
+expect = "the_terminals_list_offers_screens_then_tmux"
+
+# Bold alone, as the current terminal's row is: the two read alike.
+[[sabotage]]
+name = "a heading is only bold"
+file = "src/ui/terminals_panel.cpp"
+find = "\t\t\tfont.setCapitalization(QFont::AllUppercase);\n"
+replace = ""
+expect = "the_terminals_list_offers_screens_then_tmux"

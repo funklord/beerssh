@@ -1570,6 +1570,25 @@ void session_registry_test::the_terminals_list_offers_screens_then_tmux() {
 	         qPrintable(texts.join(QLatin1Char('|'))));
 	QCOMPARE(rows->count(), tmuxes + 3);
 
+	/*
+	 * The headings are labels: nothing selects or lands on them, and they
+	 * stand apart from the rows by more than a slant (the holder,
+	 * 2026-11-23). The keyboard steps over one.
+	 */
+	for (const int heading : { 0, screens, tmuxes }) {
+		QListWidgetItem *item = rows->item(heading);
+		QCOMPARE(item->flags(), Qt::NoItemFlags);
+		QVERIFY2(item->font().bold(), qPrintable(item->text()));
+		QCOMPARE(item->font().capitalization(), QFont::AllUppercase);
+		QVERIFY2(item->background().style() != Qt::NoBrush
+		                 && item->background().color() != rows->palette().color(QPalette::Base),
+		         qPrintable(item->text() + QStringLiteral(" has no band of its own")));
+	}
+	rows->setCurrentRow(screens - 1);
+	rows->setFocus();
+	QTest::keyClick(rows, Qt::Key_Down);
+	QCOMPARE(rows->currentRow(), screens + 1);
+
 	/* A row switches the focused terminal, as the drawer's would. */
 	QTest::mouseClick(rows->viewport(), Qt::LeftButton, {},
 	                  rows->visualItemRect(rows->item(tmuxes + 2)).center());

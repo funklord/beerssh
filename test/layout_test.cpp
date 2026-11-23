@@ -15458,6 +15458,15 @@ void layout_test::hover_leaves_a_text_field_and_the_find_bar_its_pane() {
 		QVERIFY(window.terminals_panel_shown());
 		QCOMPARE(window.terminals_panel()->parentWidget(), static_cast<QWidget *>(left_view));
 		QVERIFY(left_view->rect().contains(window.terminals_panel()->geometry()));
+
+		/* Clear of the corner, shown or hidden: it comes back under the
+		 * pointer, over the list's x. */
+		QVERIFY(left_view->corner() && left_view->corner()->width() > 0);
+		left_view->corner()->hide();
+		window.set_terminals_panel_shown(false);
+		window.set_terminals_panel_shown(true);
+		QVERIFY2(window.terminals_panel()->geometry().right() < left_view->corner()->x(),
+		         "the list lies under the corner's place");
 	}
 	while (shared->count() > 0) shared->close(shared->at(0));
 }

@@ -77,3 +77,11 @@ file = "src/ui/multiplexer_drawer.cpp"
 find = "\t\tif (!inside(was) || inside(now)) return;\n"
 replace = "\t\tif (inside(now)) return;\n"
 expect = "an_open_drawer_lists_them_again"
+
+# Placed beside the corner only while it shows: it comes back over the x.
+[[sabotage]]
+name = "the list ignores a hidden corner"
+file = "src/ui/terminal_view.cpp"
+find = "\tif (m_corner && m_corner->width() > 0) right = qMin(right, m_corner->x() - 2);\n"
+replace = "\tif (m_corner && m_corner->isVisible()) right = m_corner->x() - 2;\n"
+expect = "hover_leaves_a_text_field_and_the_find_bar_its_pane"

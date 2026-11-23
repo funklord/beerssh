@@ -21708,7 +21708,16 @@ into that bar.
   widget or another program -- while focus moving within it, its list
   included, does not. Only a move out closes it. The sidebar column is
   gone. **A phone keeps the drawer**, which it always had and the sidebar
-  never reached, under the same focus rule.
+  never reached, under the same focus rule. **Its headings are labels**
+  (2026-11-23, the holder: "if the 3 legends aren't something that can be
+  used, they shouldn't be selectable. They are also not different clearly
+  enough, only cursive"): no item flags, so no click, keyboard step or
+  hover lands on one, and small bold capitals on a band mixed from the
+  list's text and background -- small capitals because the current
+  terminal's row is bold too. The panel keeps clear of the pane's corner
+  even while the corner is hidden, since it comes back under the pointer
+  over the panel's x. `the_terminals_list_offers_screens_then_tmux`,
+  `tool/sabotage/terminals-headings.toml`.
   `session_registry_test`
   `the_corner_button_and_a_chord_open_the_list_over_the_pane`, sabotages in
   `tool/sabotage/terminals-open.toml`.

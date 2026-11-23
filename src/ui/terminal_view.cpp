@@ -4170,7 +4170,12 @@ QRect bssh_terminal_view::side_panel_rect(const QSize &hint) const {
 	 * stays in sight beside it.
 	 */
 	int right = grid_origin_x() + grid_width();
-	if (m_corner && m_corner->isVisible()) right = m_corner->x() - 2;
+	/*
+	 * Clear of the corner whether it shows now or not: it hides until the
+	 * pointer comes near and then stands over the panel's x, as a list
+	 * opened by its chord with the corner hidden found (2026-11-23).
+	 */
+	if (m_corner && m_corner->width() > 0) right = qMin(right, m_corner->x() - 2);
 	const int wide = qMin(hint.width(), qMax(hint.width() / 2, right * 3 / 4));
 	const int high = height() - 2 * BSSH_GRID_INSET_PX;
 	return QRect(qMax(0, right - wide), BSSH_GRID_INSET_PX, wide, high);

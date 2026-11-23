@@ -1,6 +1,7 @@
 #include "ui/terminals_panel.h"
 
 #include <QApplication>
+#include <QColor>
 #include <QFont>
 #include <QHBoxLayout>
 #include <QHideEvent>
@@ -135,12 +136,33 @@ void bssh_terminals_panel::set_entries(const QList<bssh_terminal_entry_t> &entri
 		const bssh_terminal_entry_t &entry = m_entries.at(i);
 		if (int(entry.place) != last_place) {
 			last_place = int(entry.place);
+			/*
+			 * A heading is a label, not a row: no flags, so neither a
+			 * click, the keyboard's current row nor a hover lands on it.
+			 * It read as one more row, in italics only (the holder,
+			 * 2026-11-23: "if the 3 legends aren't something that can be
+			 * used, they shouldn't be selectable. They are also not
+			 * different clearly enough"). So bold on a shaded band, its
+			 * text in the list's own colour rather than a disabled grey,
+			 * and in small capitals, since the current terminal's row is
+			 * bold too and the two read alike. The band is the list's
+			 * text mixed into its background, so it shows in a light
+			 * theme and a dark one alike.
+			 */
 			QListWidgetItem *heading = new QListWidgetItem(heading_for(entry.place), m_list);
-			heading->setFlags(Qt::ItemIsEnabled);
+			heading->setFlags(Qt::NoItemFlags);
 			heading->setData(ENTRY_ROLE, -1);
 			QFont font = heading->font();
-			font.setItalic(true);
+			font.setBold(true);
+			font.setCapitalization(QFont::AllUppercase);
+			if (font.pointSizeF() > 0) font.setPointSizeF(font.pointSizeF() * 0.85);
 			heading->setFont(font);
+			const QColor base = m_list->palette().color(QPalette::Base);
+			const QColor text = m_list->palette().color(QPalette::Text);
+			heading->setBackground(QColor::fromRgbF(base.redF() * 0.8f + text.redF() * 0.2f,
+			                                        base.greenF() * 0.8f + text.greenF() * 0.2f,
+			                                        base.blueF() * 0.8f + text.blueF() * 0.2f));
+			heading->setForeground(text);
 		}
 		QListWidgetItem *item = new QListWidgetItem(entry.title, m_list);
 		item->setData(ENTRY_ROLE, i);
