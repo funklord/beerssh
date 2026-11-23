@@ -19,6 +19,7 @@ private slots:
 	void a_family_downloads_file_by_file_and_is_checked();
 	void a_file_that_is_not_the_pinned_one_leaves_nothing();
 	void only_a_set_font_that_is_missing_is_offered_for_download();
+	void a_server_that_says_nothing_fails_the_download();
 
 	/*
 	 * The real thing, over the network, against a family's pinned release:

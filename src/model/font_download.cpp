@@ -14,6 +14,11 @@
 
 bssh_network_range_source::bssh_network_range_source(QObject *parent)
     : QObject(parent), m_network(new QNetworkAccessManager(this)) {
+	m_network->setTransferTimeout(30000);
+}
+
+void bssh_network_range_source::set_stall_timeout_ms(int ms) {
+	m_network->setTransferTimeout(ms);
 }
 
 void bssh_network_range_source::size(const QUrl &url, std::function<void(qint64, QString)> done) {

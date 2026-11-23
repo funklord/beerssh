@@ -3,6 +3,8 @@
 #include <QDir>
 #include <QFile>
 #include <QSignalSpy>
+#include <QTcpServer>
+#include <QTcpSocket>
 #include <QTemporaryDir>
 #include <QRandomGenerator>
 
@@ -295,6 +297,32 @@ void font_download_test::only_a_set_font_that_is_missing_is_offered_for_download
 	/* Nothing to fetch it from: an installed family gone missing, an unknown id. */
 	QVERIFY(!bssh_font_offers_download(QStringLiteral("system:Some Mono"), false));
 	QVERIFY(!bssh_font_offers_download(QStringLiteral("no-such-font"), false));
+}
+
+void font_download_test::a_server_that_says_nothing_fails_the_download() {
+	/* Accepts, reads the request, and never answers. */
+	QTcpServer server;
+	QVERIFY(server.listen(QHostAddress::LocalHost));
+	QList<QTcpSocket *> held;
+	connect(&server, &QTcpServer::newConnection, &server, [&server, &held] {
+		while (QTcpSocket *socket = server.nextPendingConnection()) held.append(socket);
+	});
+	const QUrl url(QStringLiteral("http://127.0.0.1:%1/font.zip").arg(server.serverPort()));
+
+	bssh_network_range_source source;
+	source.set_stall_timeout_ms(300);
+	bool sized = false;
+	QString size_error;
+	source.size(url, [&](qint64, const QString &error) { sized = true; size_error = error; });
+	QTRY_VERIFY_WITH_TIMEOUT(sized, 5000);
+	QVERIFY2(!size_error.isEmpty(), "a silent server's HEAD succeeded");
+
+	bool fetched = false;
+	QString fetch_error;
+	source.fetch(url, 0, 16, [&](const QByteArray &, const QString &error) { fetched = true; fetch_error = error; });
+	QTRY_VERIFY_WITH_TIMEOUT(fetched, 5000);
+	QVERIFY2(!fetch_error.isEmpty(), "a silent server's GET succeeded");
+	QVERIFY(!held.isEmpty());
 }
 
 void font_download_test::a_real_family_downloads_from_its_release() {

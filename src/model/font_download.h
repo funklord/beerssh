@@ -43,6 +43,16 @@ class bssh_network_range_source : public QObject, public bssh_range_source {
 public:
 	explicit bssh_network_range_source(QObject *parent = nullptr);
 
+	/*
+	 * How long a request may go with no byte moving before it fails.
+	 * Qt's default is never: a server that accepted and then said nothing
+	 * left the download open with nothing reported (claude-guidelines,
+	 * 2026-11-23, measured on Qt 6.8.2). 30 s, as BsshHttp.java's read
+	 * timeout on Android. Inactivity, not length: it restarts whenever
+	 * bytes arrive, so a long archive is never cut off.
+	 */
+	void set_stall_timeout_ms(int ms);
+
 	void size(const QUrl &url, std::function<void(qint64, QString)> done) override;
 	void fetch(const QUrl &url, qint64 from, qint64 length,
 	           std::function<void(QByteArray, QString)> done) override;

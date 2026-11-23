@@ -1,0 +1,9 @@
+# A font download from a server that accepts and then says nothing fails
+# rather than waiting for ever (claude-guidelines inbox, 2026-11-23).
+
+[[sabotage]]
+name = "a stalled request is never given up"
+file = "src/model/font_download.cpp"
+find = "\tm_network->setTransferTimeout(ms);\n"
+replace = "\t(void)ms;\n"
+expect = "a_server_that_says_nothing_fails_the_download"

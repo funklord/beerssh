@@ -12875,6 +12875,14 @@ diverge on *delivery* but never on *which fonts exist*.
   "Download <font>" under the note for a font of the set that is missing,
   never for a fallback-only one. Guarded by `tool/sabotage/font-download.toml`,
   six edits; `BSSH_TEST_LIVE_FONTS=1` runs a real family over the network.
+  **A stalled server fails the download after 30 s of silence** (2026-11-23,
+  from the claude-guidelines inbox message 20261123T1240Z): Qt's
+  `transferTimeout` is 0, never, so a server that accepted and then said
+  nothing left the download open with nothing reported. Now 30 s of no
+  bytes moving, as `BsshHttp.java`'s read timeout on Android; it restarts
+  as bytes arrive, so a long archive is not cut off.
+  `font_download_test` `a_server_that_says_nothing_fails_the_download`,
+  `tool/sabotage/font-stall.toml`.
   **It could not work on Android as first built** -- Qt there has no TLS, so
   the download failed with "TLS initialization failed"; the Android source
   is `BsshHttp` now, the §5.2 exception. **Seen working on the emulator
@@ -21389,6 +21397,20 @@ machine -- the untried case -- a build now reaches the network without
 `BSSH_CI_ENGINE=hull` (sec 12.4): the package step names its network,
 and the run says `(network none)`, since nothing the job does after
 the packages are installed needs one.
+
+## From claude-guidelines: qtkit holds the shared theme
+
+Inbox message 20261123T1226Z. `qtkit` (`funklord/qtkit`) now holds the
+Qt Widgets pieces the GUIs share: the theme, `qtkit_follow_desktop` and
+`qtkit_theme` (gathered from hydra, beerssh, snurra and situ), and
+`qtkit_flow_layout`. It is taken as a submodule at the tree's root,
+`qtkit/`, with `include(qtkit/qtkit.pri)` in the `.pro` (`QT += dbus`
+before it). Here it would replace the dark detection and palette in
+`src/platform/platform_desktop.cpp`. **Open:** adopting it is ours to
+time, and is taken when that code is next touched. The sender's
+unverified caution: setting the colour-scheme hint and then reading it
+first may read back our own answer on GNOME or Plasma, so check that
+before relying on it.
 
 ## Fold 2026-11-19: device checks, a packaging fault, two open questions
 
