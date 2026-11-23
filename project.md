@@ -21422,6 +21422,28 @@ machine -- the untried case -- a build now reaches the network without
 and the run says `(network none)`, since nothing the job does after
 the packages are installed needs one.
 
+## From fmake: fmake has not built this tree since fuzznet was vendored
+
+Inbox message 20261123T1912Z, from fmake's sibling sweep. README says
+`make && python3 ~/src/fmake/fmake` builds `./beerssh`; since `2e88aea`
+(fuzznet vendored, 2026-11-18) fmake refuses before compiling anything:
+`situ_msg_init` and `situ_view_at` are defined twice, by
+`fuzznet/wire/generated/situ.c` and `src/session/generated/situ.c`, and it
+will not guess which belongs to `beerssh`, `fuzznet_main`, `fuzznet_probe`
+and `session_main`. Same with fmake `3caeffc`, so not an fmake regression.
+The cause: `make` builds fuzznet with fuzznet's own Makefile into
+`libfuzznetd.a` and links that (the Makefile's note at `FUZZNET_LIB`
+already handles the two situ runtimes at the link), while fmake reads
+`fuzznet/` as this tree's sources. **Open:** either `fmake.toml` excludes
+`fuzznet` and the files that need it (`src/ssh/fuzznet_session.cpp`,
+`src/session/fuzznet_link.c`, `src/sshd/fuzznet_node.c`,
+`src/sshd/fuzznet_main.c`, `tool/fuzznet_probe.c`, and the tests), giving
+an fmake build without fuzznet -- but `BSSH_FUZZNET` code in
+`src/model/session.cpp`, `src/ui/main_window.cpp`, `src/ui/host_editor.cpp`
+and `src/sshd/main.cpp` must then compile with it undefined -- or fmake is
+told how fuzznet's library is built. Unmeasured; until then the README's
+fmake line does not hold.
+
 ## From claude-guidelines: qtkit holds the shared theme
 
 Inbox message 20261123T1226Z. `qtkit` (`funklord/qtkit`) now holds the
