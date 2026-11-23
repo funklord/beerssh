@@ -23,9 +23,9 @@ expect = "a_bell_flashes_its_pane_and_asks_for_the_window"
 # The flash is recorded and painted nowhere.
 [[sabotage]]
 name = "the flash does not reach the paint"
-file = "src/ui/terminal_view.h"
-find = "\tbool painted_reverse() const { return m_reverse_video != m_bell_flash; }"
-replace = "\tbool painted_reverse() const { return m_reverse_video; }"
+file = "src/ui/terminal_view.cpp"
+find = "\tif (m_bell_flash) {\n\t\tpainter.setCompositionMode"
+replace = "\tif (false) {\n\t\tpainter.setCompositionMode"
 expect = "a_bell_flashes_its_pane_and_asks_for_the_window"
 
 # The window never asks for attention.
