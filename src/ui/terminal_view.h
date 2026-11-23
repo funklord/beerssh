@@ -1426,6 +1426,9 @@ private:
 	QColor m_foreground;
 	bool m_reverse_video;
 	bool m_bell_flash = false;
+	QElapsedTimer m_reverse_since;
+	/* Reverse video held for less than this was a visual bell. */
+	static constexpr int reverse_pulse_ms = 250;
 	class QTimer *m_bell_timer = nullptr;
 	bool painted_reverse() const { return m_reverse_video; }
 	quint64 m_content_revision;

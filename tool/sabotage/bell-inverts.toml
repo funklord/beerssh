@@ -13,3 +13,18 @@ file = "src/ui/terminal_view.cpp"
 find = "\t\tpainter.setCompositionMode(QPainter::CompositionMode_Difference);\n"
 replace = ""
 expect = "a_bell_flashes_its_pane_and_asks_for_the_window"
+
+# screen's vbell and vim's visualbell: reverse video on and straight off.
+[[sabotage]]
+name = "a reverse-video pulse is not a bell"
+file = "src/ui/terminal_view.cpp"
+find = "\t} else if (m_reverse_since.isValid() && m_reverse_since.elapsed() < reverse_pulse_ms) {\n\t\tflash_bell();\n"
+replace = "\t} else if (m_reverse_since.isValid() && m_reverse_since.elapsed() < reverse_pulse_ms) {\n"
+expect = "a_bell_flashes_its_pane_and_asks_for_the_window"
+
+[[sabotage]]
+name = "every end of reverse video flashes"
+file = "src/ui/terminal_view.cpp"
+find = "m_reverse_since.elapsed() < reverse_pulse_ms) {"
+replace = "true) {"
+expect = "a_bell_flashes_its_pane_and_asks_for_the_window"

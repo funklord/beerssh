@@ -12026,6 +12026,22 @@ void layout_test::a_bell_flashes_its_pane_and_asks_for_the_window() {
 	QCoreApplication::processEvents();
 	QTRY_VERIFY_WITH_TIMEOUT(!view_b->bell_flashing(), 2000);
 
+	/*
+	 * terminfo's flash, which screen sends for every bell under `vbell
+	 * on`: reverse video on and off in one read. It flashes the pane
+	 * whole, the red cell too, as a bell does (the holder, 2026-11-23).
+	 * Reverse video that stays is the program's, not a bell.
+	 */
+	b->emulator()->feed(QByteArrayLiteral("\x1b[?5h\x1b[?5l"));
+	QVERIFY2(view_b->bell_flashing(), "a reverse-video pulse did not flash");
+	QVERIFY2(inverted(before.pixel(red_at), view_b->grab().toImage().pixel(red_at)),
+	         "the pulse's flash left a coloured cell as it was");
+	QTRY_VERIFY_WITH_TIMEOUT(!view_b->bell_flashing(), 2000);
+	b->emulator()->feed(QByteArrayLiteral("\x1b[?5h"));
+	QTest::qWait(400);
+	b->emulator()->feed(QByteArrayLiteral("\x1b[?5l"));
+	QVERIFY2(!view_b->bell_flashing(), "reverse video held on purpose flashed when it ended");
+
 	/* A host that silences the bell gets no flash either (sec 10.2). */
 	QJsonObject quiet = b->settings();
 	quiet.insert(QStringLiteral("bell_enabled"), false);

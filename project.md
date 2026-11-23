@@ -1462,7 +1462,15 @@ holds a socket open simply keeps holding it. What still needs deciding is what
     colours, and the holder found it "does not invert the whole terminal
     like other terminals"). So a screen the remote reversed flashes back
     to normal; a burst of bells is one flash held from the last, not a
-    strobe;
+    strobe. **Reverse video switched on and off within 250 ms rings
+    the same flash**: it is terminfo's `flash` for xterm
+    (`\E[?5h$<100/>\E[?5l`), which screen sends for every bell under
+    `vbell on` -- Debian's `/etc/screenrc` has it -- and vim under
+    `visualbell`. Both halves came in one read, so the holder, working
+    in screen, saw reverse video for a frame ("only flashing a frame")
+    and only the default colours reversed. Found on the holder's display
+    after the first fix changed nothing there, since screen never sends
+    a plain bell;
   - **the window holding the session asks for attention**: the urgency
     hint, `QApplication::alert` (xterm's `bellIsUrgent`), which the
     desktop shows on its taskbar and clears itself when the window is

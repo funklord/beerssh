@@ -456,6 +456,22 @@ void bssh_terminal_view::set_cursor_blink(bool blink) {
 void bssh_terminal_view::set_reverse_video(bool reverse) {
 	if (reverse == m_reverse_video) return;
 
+	/*
+	 * Reverse video on and straight off again is a visual bell: it is
+	 * terminfo's `flash` for xterm, `\E[?5h$<100/>\E[?5l`, which screen
+	 * sends for every bell under `vbell on` (Debian's /etc/screenrc) and
+	 * vim under `visualbell`. Both halves arrive in one read, so the
+	 * reversed screen was shown for a frame at most -- and showed only
+	 * the default colours reversed. The holder, 2026-11-23, in screen:
+	 * "does not invert the whole terminal like other terminals",
+	 * "only flashing a frame". So a pulse shorter than a flash rings
+	 * the flash, which inverts everything for long enough to see.
+	 */
+	if (reverse) {
+		m_reverse_since.start();
+	} else if (m_reverse_since.isValid() && m_reverse_since.elapsed() < reverse_pulse_ms) {
+		flash_bell();
+	}
 	m_reverse_video = reverse;
 	update();
 }
