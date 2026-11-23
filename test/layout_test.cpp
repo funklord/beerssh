@@ -15376,6 +15376,68 @@ void layout_test::hovering_a_tiled_pane_moves_focus_to_it() {
 	while (shared->count() > 0) shared->close(shared->at(0));
 }
 
+void layout_test::hover_leaves_a_text_field_and_the_find_bar_its_pane() {
+	/*
+	 * With focus following the pointer, a window-level panel is reached
+	 * across panes (the holder, 2026-11-23, of the tmux list: "impossible
+	 * to use when focus moves under the mouse"). The find bar under the
+	 * panes keeps the keyboard while the pointer crosses one, and keeps
+	 * searching the pane it was opened from when focus does move.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	const bool original = bssh_app_settings().focus_follows_mouse();
+	bssh_app_settings().set_focus_follows_mouse(true);
+	const auto restore = qScopeGuard([original] { bssh_app_settings().set_focus_follows_mouse(original); });
+
+	{
+		bssh_main_window window;
+		window.resize(900, 600);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		window.activateWindow();
+
+		bssh_session *left = window.registry()->create(named(QStringLiteral("left")));
+		window.adopt_session(left);
+		bssh_session *right = window.registry()->create(named(QStringLiteral("right")));
+		window.drop_session_on(right, window.panes()->focused_session(), bssh_layout_manager::EDGE_RIGHT);
+		QCoreApplication::processEvents();
+		QCOMPARE(window.panes()->views().size(), 2);
+		left->emulator()->feed(QByteArrayLiteral("find the treasure here\r\n"));
+		right->emulator()->feed(QByteArrayLiteral("nothing to see\r\n"));
+
+		window.panes()->focus_session(left);
+		QCoreApplication::processEvents();
+		bssh_terminal_view *left_view = window.panes()->view_for(left);
+		bssh_terminal_view *right_view = window.panes()->view_for(right);
+		QVERIFY(left_view && right_view);
+
+		QKeyEvent chord(QEvent::KeyPress, Qt::Key_F, Qt::ControlModifier | Qt::ShiftModifier);
+		left->input_router()->handle_key(&chord);
+		bssh_find_bar *bar = window.findChild<bssh_find_bar *>();
+		QVERIFY(bar && !bar->isHidden());
+		QLineEdit *field = bar->findChild<QLineEdit *>(QStringLiteral("find_field"));
+		QVERIFY(field);
+		QTRY_COMPARE(QApplication::focusWidget(), static_cast<QWidget *>(field));
+
+		/* The pointer crosses the other pane on its way down to the bar. */
+		const QPointF at(5, 5);
+		QEnterEvent enter(at, at, right_view->mapToGlobal(QPoint(5, 5)));
+		QCoreApplication::sendEvent(right_view, &enter);
+		QCoreApplication::processEvents();
+		QVERIFY2(QApplication::focusWidget() == field, "hovering a pane took the keyboard from the find bar");
+
+		/* Focus does move, by a click: the bar still searches its pane. */
+		window.panes()->focus_session(right);
+		right_view->setFocus();
+		QCoreApplication::processEvents();
+		QTest::keyClicks(field, QStringLiteral("treasure"));
+		QCoreApplication::processEvents();
+		QVERIFY2(left_view->find_match_count() >= 1, "the bar's own pane was not searched");
+		QCOMPARE(right_view->find_match_count(), 0);
+	}
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
 void layout_test::a_trusted_host_can_actually_set_the_clipboard() {
 	bssh_session_registry *shared = bssh_session_registry::shared();
 	while (shared->count() > 0) shared->close(shared->at(0));

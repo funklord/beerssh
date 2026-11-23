@@ -447,6 +447,7 @@ private slots:
 	 * The wiring was written with Qt::UniqueConnection and a lambda,
 	 * which Qt refuses outright -- so the feature had never once run.
 	 */
+	void hover_leaves_a_text_field_and_the_find_bar_its_pane();
 	void a_trusted_host_can_actually_set_the_clipboard();
 	void a_long_title_cannot_push_the_other_tabs_off_the_bar();
 	void a_pane_drag_is_not_raised_from_inside_the_views_own_handler();

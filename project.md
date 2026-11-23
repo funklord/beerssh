@@ -8592,8 +8592,25 @@ a tab dragged to the end of a two-tab bar would tear itself out mid-reorder.
   unasserted property of code written for a different reason, which is the
   "stored, read and applied to nothing" shape §6.2 records for the key row and
   §10.1 for the override badge. Both halves are sabotaged now.
-  It remains **off by default**, so it does nothing until it is turned on in
-  Settings; that default is the [DECIDED] above rather than an oversight.
+  It is **on by default** (the [DECIDED] above), and turned off in Settings.
+  **Two limits, 2026-11-23**, after the holder found window-level panels
+  "impossible to use when focus moves under the mouse": hovering a pane
+  does not take focus from a text field elsewhere in the window -- the
+  find bar, a file panel's name, a settings field -- since what was being
+  typed would go on into a shell; and the find bar searches the pane that
+  was focused when it opened, not the last one the pointer crossed on the
+  way down to it (opening it again from another pane moves it there).
+  `layout_test` `hover_leaves_a_text_field_and_the_find_bar_its_pane`.
+  **Open, the holder's: a delay before a hovered pane takes focus.** The
+  two limits cover a text field and the find bar; they do not cover the
+  rest of what is reached across panes. Going up to the menu bar from a
+  lower pane crosses the one above, so Edit > Paste lands in that shell,
+  and the Terminals list's tmux and screen rows switch to whichever pane
+  was crossed on the way to the sidebar. A short rest before focus moves
+  (window managers call it a focus delay; 100 to 200 ms) would answer
+  all of them at once, at the cost of the window feeling slower to
+  follow. How the window should feel is the holder's call; best guess,
+  worth trying at about 150 ms.
 - **Tap-to-focus** (or click-to-focus) on a pane; keyboard shortcuts for
   pane/tab navigation (§6.1).
   **This was half-built in the way that is worse than not built at all.** Two
@@ -14058,7 +14075,10 @@ question over the prompt the user was about to type at. Now:
 - **Open, a panel over the terminal**, at most three quarters of the
   pane, listing them -- the one this tab shows marked ▸ and bold -- with
   × to take the drawer away ("Shell only"). The handle closes it again.
-  Typing goes to the terminal throughout.
+  Typing goes to the terminal throughout. Since 2026-11-23 it also
+  closes when focus moves out of its terminal, and the corner's button
+  opens it on the desktop too (*One list for terminals and for screen
+  and tmux sessions*, which records why).
 - **One click switches** to a session, and the drawer closes to its
   handle and **stays**, so another can be switched to after: the
   holder's correction of the same day -- "normally you should be able to

@@ -41,7 +41,11 @@
 #include <QInputMethod>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
+#include <QAbstractSpinBox>
 #include <QApplication>
+#include <QLineEdit>
+#include <QPlainTextEdit>
+#include <QTextEdit>
 #include <QMouseEvent>
 #include <QWheelEvent>
 
@@ -3346,6 +3350,21 @@ void bssh_terminal_view::enterEvent(QEnterEvent *event) {
 	sync_multiplexer_drawer_shown();
 
 	if (!m_focus_follows_mouse) return;
+
+	/*
+	 * Not out of a text field elsewhere in this window -- the find bar,
+	 * a file panel's name, a settings field: crossing a pane on the way
+	 * would send the rest of what was being typed into a shell, the
+	 * wrong-shell hazard sec 8.3's focus border exists for. Another
+	 * terminal, or a list or button, is left as before.
+	 */
+	if (const QWidget *holder = QApplication::focusWidget()) {
+		const bool typing = qobject_cast<const QLineEdit *>(holder)
+		                    || qobject_cast<const QAbstractSpinBox *>(holder)
+		                    || qobject_cast<const QTextEdit *>(holder)
+		                    || qobject_cast<const QPlainTextEdit *>(holder);
+		if (typing && holder->window() == window() && !isAncestorOf(holder)) return;
+	}
 
 	/*
 	 * MouseFocusReason, because that is what this is: the pointer chose

@@ -1306,6 +1306,16 @@ private:
 	bool m_room_queued = false;
 	bssh_find_bar *m_find_bar;
 
+	/*
+	 * The terminal the open find bar searches: the one focused when it
+	 * opened, not whichever has focus at each keystroke. With focus
+	 * following the pointer, reaching the bar under the panes crossed
+	 * another pane and moved the search there (the holder's report of
+	 * the same shape about the tmux list, 2026-11-23). See find_view().
+	 */
+	QPointer<bssh_session> m_find_session;
+	bssh_terminal_view *find_view() const;
+
 	QLabel *m_status_label;
 
 	/* The status line's row; see place_status_line. */

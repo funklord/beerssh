@@ -1,0 +1,23 @@
+# Focus following the pointer, and window-level fields reached across
+# panes (the holder, 2026-11-23).
+
+[[sabotage]]
+name = "hovering a pane takes focus from a text field"
+file = "src/ui/terminal_view.cpp"
+find = "\t\tif (typing && holder->window() == window() && !isAncestorOf(holder)) return;\n"
+replace = ""
+expect = "hover_leaves_a_text_field_and_the_find_bar_its_pane"
+
+[[sabotage]]
+name = "the find bar searches whichever pane has focus"
+file = "src/ui/main_window.cpp"
+find = "\tif (m_find_session) {\n\t\tif (bssh_terminal_view *view = m_panes->view_for(m_find_session)) return view;\n\t}\n"
+replace = ""
+expect = "hover_leaves_a_text_field_and_the_find_bar_its_pane"
+
+[[sabotage]]
+name = "the find bar is never told its pane"
+file = "src/ui/main_window.cpp"
+find = "\tm_find_session = m_panes ? m_panes->focused_session() : nullptr;\n"
+replace = ""
+expect = "hover_leaves_a_text_field_and_the_find_bar_its_pane"

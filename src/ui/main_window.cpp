@@ -2166,7 +2166,7 @@ void bssh_main_window::apply_device_settings() {
 	        == bssh_app_settings::CONTEXT_MENU_TOUCH;
 
 	/*
-	 * sec 8.3's focus-follows-mouse, off unless asked for. Never where
+	 * sec 8.3's focus-follows-mouse, on unless turned off. Never where
 	 * touch is the input: there is no pointer to hover, and a stray
 	 * synthesised enter would move focus with nothing visible causing it.
 	 */
@@ -3064,6 +3064,8 @@ void bssh_main_window::clear_scrollback() {
 void bssh_main_window::open_find() {
 	if (!m_find_bar) return;
 
+	/* Opened again from another pane, the bar moves to that pane. */
+	m_find_session = m_panes ? m_panes->focused_session() : nullptr;
 	m_find_bar->show();
 	m_find_bar->take_focus();
 
@@ -3071,14 +3073,23 @@ void bssh_main_window::open_find() {
 	run_find(m_find_bar->query());
 }
 
+bssh_terminal_view *bssh_main_window::find_view() const {
+	if (!m_panes) return nullptr;
+	if (m_find_session) {
+		if (bssh_terminal_view *view = m_panes->view_for(m_find_session)) return view;
+	}
+	/* Its terminal closed or moved away: the pane in focus, as before. */
+	return m_panes->focused_view();
+}
+
 void bssh_main_window::run_find(const QString &query) {
-	if (bssh_terminal_view *view = m_panes ? m_panes->focused_view() : nullptr)
+	if (bssh_terminal_view *view = find_view())
 		view->find_text(query);
 	update_find_status();
 }
 
 void bssh_main_window::step_find(int direction) {
-	if (bssh_terminal_view *view = m_panes ? m_panes->focused_view() : nullptr)
+	if (bssh_terminal_view *view = find_view())
 		view->find_step(direction);
 	update_find_status();
 }
@@ -3087,16 +3098,17 @@ void bssh_main_window::close_find() {
 	if (!m_find_bar) return;
 
 	m_find_bar->hide();
-	if (bssh_terminal_view *view = m_panes ? m_panes->focused_view() : nullptr) {
+	if (bssh_terminal_view *view = find_view()) {
 		view->clear_find();
 		view->setFocus();
 	}
+	m_find_session = nullptr;
 }
 
 void bssh_main_window::update_find_status() {
 	if (!m_find_bar) return;
 
-	bssh_terminal_view *view = m_panes ? m_panes->focused_view() : nullptr;
+	bssh_terminal_view *view = find_view();
 	m_find_bar->set_status(view ? view->current_find_index() : 0,
 	                        view ? view->find_match_count() : 0);
 }
