@@ -1,35 +1,73 @@
-# Sabotages for Ctrl+Shift+L, the way to the Terminals list, and for the
-# corner's tmux/screen button, which opens its own terminal's drawer.
+# Sabotages for the one terminals list, over the focused pane: Ctrl+Shift+L
+# and the corner's tmux/screen button open it (the holder, 2026-11-23).
 
 [[sabotage]]
 name = "the chord is not stolen"
 file = "src/input/input_router.cpp"
 find = "\t\t{ SHORTCUT_TERMINALS_LIST, Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_L,\n"
 replace = "\t\t{ SHORTCUT_TERMINALS_LIST, Qt::ControlModifier | Qt::ShiftModifier | Qt::AltModifier, Qt::Key_L,\n"
-expect = "the_corner_button_opens_the_drawer_and_a_chord_the_list"
+expect = "the_corner_button_and_a_chord_open_the_list_over_the_pane"
 
 [[sabotage]]
 name = "the chord only ever shows the list"
 file = "src/ui/main_window.cpp"
 find = "\t\tset_terminals_panel_shown(!terminals_panel_shown());\n}"
 replace = "\t\tset_terminals_panel_shown(true);\n}"
-expect = "the_corner_button_opens_the_drawer_and_a_chord_the_list"
+expect = "the_corner_button_and_a_chord_open_the_list_over_the_pane"
 
-# The corner's button opens its terminal's drawer, over that pane (the
-# holder, 2026-11-23), and focus leaving the terminal closes it.
+# The corner's button opens the one list over its own pane (the holder,
+# 2026-11-23), and focus leaving that terminal closes it.
 [[sabotage]]
-name = "the corner button no longer opens the drawer"
+name = "the desktop's corner button opens the drawer"
 file = "src/ui/terminal_view.cpp"
-find = "\t\t\tm_mux_drawer->set_open(open);\n"
-replace = ""
-expect = "the_corner_button_opens_the_drawer_and_a_chord_the_list"
+find = "\t\t\tif (!(platform && platform->is_touch_primary())) {\n\t\t\t\tsetFocus(Qt::MouseFocusReason);"
+replace = "\t\t\tif (false) {\n\t\t\t\tsetFocus(Qt::MouseFocusReason);"
+expect = "the_corner_button_and_a_chord_open_the_list_over_the_pane"
 
+[[sabotage]]
+name = "the window never hears the button"
+file = "src/ui/pane_container.cpp"
+find = "\tconnect(view, &bssh_terminal_view::terminals_list_requested, this,\n\t         [this, session] { emit terminals_list_requested(session); });\n"
+replace = ""
+expect = "the_corner_button_and_a_chord_open_the_list_over_the_pane"
+
+# Opened at the top, with the sessions below the fold of a long list.
+[[sabotage]]
+name = "the list opens away from the screen and tmux rows"
+file = "src/ui/main_window.cpp"
+find = "\t\t\tif (m_terminals_panel) m_terminals_panel->show_multiplexers();\n"
+replace = ""
+expect = "the_corner_button_and_a_chord_open_the_list_over_the_pane"
+
+# A column beside the panes again, not over the one that asked.
+[[sabotage]]
+name = "the list is not put over the pane"
+file = "src/ui/terminal_view.cpp"
+find = "\tif (panel->parentWidget() != this) panel->setParent(this);\n"
+replace = ""
+expect = "hover_leaves_a_text_field_and_the_find_bar_its_pane"
+
+[[sabotage]]
+name = "focus leaving the terminal leaves the list open"
+file = "src/ui/terminals_panel.cpp"
+find = "\t\tif (!inside(was) || inside(now)) return;\n\t\thide();\n"
+replace = "\t\tif (!inside(was) || inside(now)) return;\n"
+expect = "the_corner_button_and_a_chord_open_the_list_over_the_pane"
+
+[[sabotage]]
+name = "a choice leaves the list open"
+file = "src/ui/main_window.cpp"
+find = "\t\t\topen_terminal_entry(entry);\n\t\t\tif (m_terminals_panel) m_terminals_panel->hide();\n"
+replace = "\t\t\topen_terminal_entry(entry);\n"
+expect = "the_corner_button_and_a_chord_open_the_list_over_the_pane"
+
+# The phone's drawer: focus leaving its terminal closes it.
 [[sabotage]]
 name = "focus leaving the terminal leaves the drawer open"
 file = "src/ui/multiplexer_drawer.cpp"
 find = "\t\tset_open(false);\n\t});\n\n\tm_panel->hide();\n"
 replace = "\t});\n\n\tm_panel->hide();\n"
-expect = "the_corner_button_opens_the_drawer_and_a_chord_the_list"
+expect = "the_corner_sits_on_the_grid_and_takes_none_of_it"
 
 # A drawer opened while focus was elsewhere closes at the next unrelated
 # focus change, before anybody could choose from it.

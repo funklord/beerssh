@@ -44,11 +44,3 @@ file = "src/ui/main_window.cpp"
 find = "\tif (holding.isEmpty()) {\n\t\tfor (int other = 1;"
 replace = "\tif (false) {\n\t\tfor (int other = 1;"
 expect = "a_new_version_takes_the_windows_as_they_were"
-
-# The sidebar's state left out of the document.
-[[sabotage]]
-name = "an arrangement drops the sidebar"
-file = "src/model/arrangement.cpp"
-find = "\t\twindow.terminals_panel = object.value(QStringLiteral(\"terminals_panel\")).toBool();"
-replace = "\t\twindow.terminals_panel = false;"
-expect = "an_arrangement_reads_back_what_it_wrote"

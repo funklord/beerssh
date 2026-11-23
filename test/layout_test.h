@@ -374,7 +374,6 @@ private slots:
 	 */
 	void a_background_tab_can_be_dragged_out();
 	void a_restored_window_comes_back_in_its_shape();
-	void a_restored_window_brings_back_the_terminals_list();
 	void a_closed_window_writes_down_its_shape();
 
 	/* Picture history per terminal, set by hand (sec 7.1, 2026-09-26). */

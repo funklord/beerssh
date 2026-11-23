@@ -655,6 +655,21 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	         this, &bssh_main_window::show_corner_tabs);
 	connect(m_panes, &bssh_pane_container::corner_menu_requested,
 	         this, &bssh_main_window::show_corner_menu);
+	/*
+	 * A pane's tmux/screen button: the list over that pane, at its screen
+	 * and tmux rows. Queued, since showing the session may lay the panes
+	 * out again, the button's own among them.
+	 */
+	connect(m_panes, &bssh_pane_container::terminals_list_requested, this,
+	         [this](bssh_session *front) {
+		QPointer<bssh_session> held = front;
+		QMetaObject::invokeMethod(this, [this, held] {
+			if (!held || !m_shown.contains(held)) return;
+			show_session(held);
+			set_terminals_panel_shown(true);
+			if (m_terminals_panel) m_terminals_panel->show_multiplexers();
+		}, Qt::QueuedConnection);
+	});
 	/* Queued: it rebuilds the panes, the button's own among them. */
 	connect(m_panes, &bssh_pane_container::maximise_requested, this, [this](bssh_session *front) {
 		QPointer<bssh_session> held = front;
@@ -2780,21 +2795,36 @@ bool bssh_main_window::terminals_panel_shown() const {
 }
 
 void bssh_main_window::set_terminals_panel_shown(bool shown) {
-	if (shown == terminals_panel_shown()) return;
+	if (!shown) {
+		if (m_terminals_panel) m_terminals_panel->hide();
+		return;
+	}
 
-	if (shown && !m_terminals_panel) {
-		/*
-		 * Beside the panes, on the left, in the row a side tab bar uses
-		 * (sec 8.7): a list of names, so narrow, and the panes keep the
-		 * rest.
-		 */
-		m_terminals_panel = new bssh_terminals_panel(m_terminal_page);
-		m_terminals_panel->setMinimumWidth(140);
-		m_terminals_panel->setMaximumWidth(260);
-		m_body->insertWidget(0, m_terminals_panel, 0);
+	/*
+	 * Over the focused terminal, as its drawer was (the holder,
+	 * 2026-11-23: one list, in the terminal, rather than a sidebar for
+	 * the window beside a second list in the pane). Shown again over
+	 * whichever pane has focus now.
+	 */
+	bssh_terminal_view *view = nullptr;
+	if (m_panes) view = m_current ? m_panes->view_for(m_current) : nullptr;
+	if (!view && m_panes) view = m_panes->focused_view();
+	if (!view) return;
+
+	if (!m_terminals_panel) {
+		m_terminals_panel = new bssh_terminals_panel(view);
+		m_terminals_panel->hide();
+		/* Chosen, the list has done its job, as the drawer did. */
 		connect(m_terminals_panel, &bssh_terminals_panel::picked, this,
-		        [this](const bssh_terminal_entry_t &entry) { open_terminal_entry(entry); });
-
+		        [this](const bssh_terminal_entry_t &entry) {
+			open_terminal_entry(entry);
+			if (m_terminals_panel) m_terminals_panel->hide();
+		});
+		connect(m_terminals_panel, &bssh_terminals_panel::closed, this, [this] {
+			if (m_terminals_timer) m_terminals_timer->stop();
+		});
+	}
+	if (!m_terminals_timer) {
 		/*
 		 * Another process says nothing when its terminals change, so the
 		 * list is asked again every few seconds while it is on screen.
@@ -2805,18 +2835,9 @@ void bssh_main_window::set_terminals_panel_shown(bool shown) {
 		m_terminals_timer->setInterval(3000);
 		connect(m_terminals_timer, &QTimer::timeout, this, [this] { refresh_terminals_panel(); });
 	}
-	if (!m_terminals_panel) return;
-
-	m_terminals_panel->setVisible(shown);
-	if (shown) {
-		refresh_terminals_panel();
-		m_terminals_timer->start();
-	} else {
-		m_terminals_timer->stop();
-	}
-	if (m_terminals_action && m_terminals_action->isChecked() != shown)
-		m_terminals_action->setChecked(shown);
-	note_arrangement_changed();
+	view->show_side_panel(m_terminals_panel);
+	refresh_terminals_panel();
+	m_terminals_timer->start();
 }
 
 QList<bssh_terminal_entry_t> bssh_main_window::terminal_entries() const {
@@ -5730,7 +5751,6 @@ void bssh_main_window::save_layout() {
 
 	/* Only where windows are placed by the user rather than by a phone. */
 	if (bssh_handoff_point::instance()) layout.geometry = QRect(pos(), size());
-	layout.terminals_panel = terminals_panel_shown();
 
 	m_profile_store->save_layout(layout);
 }
@@ -5768,7 +5788,6 @@ bssh_arrangement_t::window_t bssh_main_window::describe_window() const {
 	out.geometry = normalGeometry();
 	out.maximized = isMaximized();
 	out.full_screen = isFullScreen();
-	out.terminals_panel = terminals_panel_shown();
 	return out;
 }
 
@@ -5801,7 +5820,6 @@ void bssh_main_window::arrange(const bssh_arrangement_t::window_t &window,
 	}
 	if (window.full_screen) setWindowState(windowState() | Qt::WindowFullScreen);
 	else if (window.maximized) setWindowState(windowState() | Qt::WindowMaximized);
-	set_terminals_panel_shown(window.terminals_panel);
 
 	bssh_session *current = taken.value(window.current);
 	if (!current || !m_shown.contains(current)) return;
@@ -5913,8 +5931,6 @@ void bssh_main_window::restore_layout() {
 		}
 		return;
 	}
-
-	if (layout.terminals_panel) set_terminals_panel_shown(true);
 
 	/*
 	 * Every remembered host comes back as a tab, and **not one of them
@@ -6362,14 +6378,13 @@ void bssh_main_window::build_menu_bar() {
 		apply_menu_bar();
 	});
 
-	/* The Terminals sidebar: every terminal, to open one here. */
+	/* The terminals list, over the focused pane: every terminal, to open
+	 * one here, and that terminal's screens and tmux sessions. */
 	m_terminals_action = view->addAction(QStringLiteral("&Terminals"));
 	m_terminals_action->setObjectName(QStringLiteral("show_terminals"));
 	m_terminals_action->setShortcut(chord("terminals-list"));
-	m_terminals_action->setCheckable(true);
-	m_terminals_action->setChecked(terminals_panel_shown());
-	connect(m_terminals_action, &QAction::toggled, this, [this](bool shown) {
-		set_terminals_panel_shown(shown);
+	connect(m_terminals_action, &QAction::triggered, this, [this] {
+		set_terminals_panel_shown(!terminals_panel_shown());
 	});
 	view->addSeparator();
 

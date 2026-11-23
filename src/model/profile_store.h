@@ -131,12 +131,6 @@ public:
 		 */
 		QRect geometry;
 
-		/*
-		 * The Terminals list was shown (sec 8.4): an upgrade carried it
-		 * and a plain restart did not, so the two disagreed.
-		 */
-		bool terminals_panel = false;
-
 		layout_state_t() : pane_count(1), active_index(0) {}
 		bool is_empty() const { return profile_ids.isEmpty(); }
 	};

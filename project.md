@@ -20,8 +20,9 @@ questions* at the end of this file.** In short: BeerSSH's Android floor is API 2
 long-press menu; beersshd's APK no longer aborts at start with its helpers
 (sec 19.1); both apps were seen working end to end on an API 36 emulator, not yet
 on the Fold. Since (2026-11-20): no multi-line paste question under bracketed
-paste; a Terminals sidebar (View > Terminals) that opens any terminal, from any
-BeerSSH window, here -- closing a window still closes its terminals. Open and
+paste; a Terminals list (View > Terminals, Ctrl+Shift+L, a pane's tmux/screen
+button), over the focused pane since 2026-11-23, that opens any terminal, from
+any BeerSSH window, here -- closing a window still closes its terminals. Open and
 the holder's: whether a package's version should name its commit.
 
 ## 0.1 Name and identity — **[DECIDED]**
@@ -21509,8 +21510,10 @@ closing, but we need a way to hand them off easily."** The holder expects
 the shape to change "as we figure out a good workflow", so it is kept small
 and in one place.
 
-- **View > Terminals** (desktop menu bar) shows a list on the left of the
-  window: *This window*, *Other windows* (this process's), *Other BeerSSH
+- **View > Terminals** (desktop menu bar) showed a list on the left of the
+  window -- **since 2026-11-23 a panel over the focused pane instead**
+  (*One list for terminals and for screen and tmux sessions*, below):
+  *This window*, *Other windows* (this process's), *Other BeerSSH
   windows* (other processes). A click, or Return, opens that terminal HERE:
   in this window it is shown; from another window or process it MOVES here,
   by `adopt_session()` or by the handoff socket's `take` (sec 8.4), and a
@@ -21543,14 +21546,14 @@ and in one place.
   going waits for a question still out, at most half a second a process.
   `handoff_test` `the_terminals_list_asks_other_processes_without_waiting`,
   sabotages in `tool/sabotage/terminals-asking.toml`.
-- **Remembered across a restart, since 2026-11-22**: a window's saved layout
-  carries `terminals=true` while the list is shown, written when it is
-  toggled, and the window comes back showing it -- an upgrade already
-  carried it in the arrangement, so a plain restart dropping it was the
-  odd one out. A layout saved before has no key and comes back without
-  it, as it did. `layout_test::a_restored_window_brings_back_the_terminals_list`,
-  sabotages in `tool/sabotage/terminals-remembered.toml`. Opening it without
-  the menu bar is Ctrl+Shift+L and the corner's tmux/screen button (below).
+- **Remembered across a restart from 2026-11-22 to 2026-11-23, then
+  withdrawn**: the saved layout's `terminals=true` and the arrangement's
+  `terminals_panel` brought a shown sidebar back. Once the list became a
+  panel over one pane that closes when focus leaves it, there was nothing
+  standing to bring back, so neither is written; a layout or arrangement
+  carrying either key reads as before, the key ignored. Opening it
+  without the menu bar is Ctrl+Shift+L and the corner's tmux/screen
+  button (below).
   **Not on a phone**, which is one process and has the host list's Sessions
   section.
 - **Swap With** (a Pane-menu verb built to the first reading, set-aside as a
@@ -21673,8 +21676,9 @@ into that bar.
   pointer, since a hidden widget gets no leave event. The grip keeps the
   right click, so the terminal's own menu does not open as well.
   `layout_test` `the_grips_right_button_steps_the_corner_aside`,
-  sabotages in `tool/sabotage/corner-aside.toml`. The sidebar's shown
-  state is remembered across a restart since 2026-11-22 (above).
+  sabotages in `tool/sabotage/corner-aside.toml`. Since 2026-11-23 the
+  list is a panel over the focused pane, which Ctrl+Shift+L opens and
+  closes (*One list*, below).
 - **One list for terminals and for screen and tmux sessions** -- **built
   2026-11-21** (the holder: "list of terminals should be the same screen
   as list of screens/tmux put screens below and then tmuxes"). Under the
@@ -21684,22 +21688,29 @@ into that bar.
   attached to is bold. While the list is shown, each refresh (every 3 s)
   also lists what is running, one `tmux ls` / `screen -ls` beside the
   shell. The rows follow focus, since the sessions belong to one
-  terminal's host. For two days the desktop's corner tmux/screen button
-  opened this list (the holder, 2026-11-21). **Reverted 2026-11-23**:
-  the holder found "it comes up on the side of the whole window, which
-  makes it impossible to use when focus moves under the mouse. It is to
-  allow you to choose a terminal in that terminal, not other terminals,
-  and should probably close if focus leaves it." The list follows the
-  focused pane, so crossing another pane on the way to it changed whose
-  sessions it showed. **The button opens that terminal's drawer, over its
-  pane, on every platform**, and focuses the terminal. The drawer closes
-  when focus moves out of its terminal, to another pane, another widget
-  or another program; focus moving within it, the drawer's list
-  included, keeps it open. Only a move out closes it, so a drawer opened
-  while focus was elsewhere is not shut by an unrelated focus change.
-  The list keeps its screen and tmux rows, reached by Ctrl+Shift+L.
+  terminal's host. On 2026-11-21 the desktop's corner tmux/screen button
+  opened this list as a sidebar. On 2026-11-23 the holder found "it
+  comes up on the side of the whole window, which makes it impossible to
+  use when focus moves under the mouse. It is to allow you to choose a
+  terminal in that terminal, not other terminals, and should probably
+  close if focus leaves it." -- the sidebar followed the focused pane, so
+  crossing another pane on the way to it changed whose sessions it
+  showed. The button was pointed at the pane's drawer for a few hours,
+  which left two lists, and the holder: "there are still two terminal
+  lists. One is global for the process, while the other loads in a
+  terminal." Asked which to keep, they chose **one list, in the pane**.
+  **So the Terminals list is now a panel over the focused pane**, placed
+  where the drawer was, with an x: every terminal, then that terminal's
+  screens, then its tmux sessions. The corner's tmux/screen button (on
+  the desktop), Ctrl+Shift+L and View > Terminals open it; the button
+  scrolls it to the screen and tmux rows. A choice closes it, and so
+  does focus moving out of its terminal -- to another pane, another
+  widget or another program -- while focus moving within it, its list
+  included, does not. Only a move out closes it. The sidebar column is
+  gone. **A phone keeps the drawer**, which it always had and the sidebar
+  never reached, under the same focus rule.
   `session_registry_test`
-  `the_corner_button_opens_the_drawer_and_a_chord_the_list`, sabotages in
+  `the_corner_button_and_a_chord_open_the_list_over_the_pane`, sabotages in
   `tool/sabotage/terminals-open.toml`.
   `session_registry_test` `the_terminals_list_offers_screens_then_tmux`,
   sabotages in `tool/sabotage/terminals-mux.toml`.
@@ -21774,8 +21785,7 @@ set aside for this).**
 
 - **The arrangement** (`src/model/arrangement.{h,cpp}`) is a JSON document,
   `{"format":"beerssh-arrangement","version":1,"windows":[...]}`: per
-  window its normal geometry, maximised, full screen, the Terminals sidebar,
-  the panes' shape (`shape_text()`), its terminals in order, and the current
+  window its normal geometry, maximised, full screen, the panes' shape (`shape_text()`), its terminals in order, and the current
   one. Terminals are named by whoever writes it -- hand-off ids for an
   upgrade -- so the same document can carry profile ids or kept names when
   saving and loading an arrangement is built. A reader refuses another
@@ -21801,9 +21811,9 @@ set aside for this).**
   `describe_window()`, `arrange()`, `take_arranged_from()`.
 - Tests: `an_arrangement_reads_back_what_it_wrote`;
   `a_new_version_takes_the_windows_as_they_were` -- an old version in a
-  second process (`--handoff-arranged`) with H(a,V(b,c)), c current, the
-  sidebar open, and a second window holding d; this process takes window 0
-  (shape, focus, sidebar), sees window 1 asked of a program, plays it, and
+  second process (`--handoff-arranged`) with H(a,V(b,c)), c current, and a
+  second window holding d; this process takes window 0 (shape, focus),
+  sees window 1 asked of a program, plays it, and
   the old process exits on its own. Sabotages in
   `tool/sabotage/window-takeover.toml`.
 - **The first upgrade cannot use it**: the giver has to speak `arrange`, so

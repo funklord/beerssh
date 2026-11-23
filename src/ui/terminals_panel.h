@@ -40,7 +40,11 @@ struct bssh_terminal_entry_t {
  * bssh_terminals_panel -- a list of every terminal this user has open, to
  * open one here from (the holder, 2026-11-20: "list terminals, then open
  * the terminal from a sidebar"; closing a window still closes its
- * terminals, so this is how one is handed off before that).
+ * terminals, so this is how one is handed off before that), and under
+ * them the screen and tmux sessions of the terminal it is over. A panel
+ * over that terminal since 2026-11-23, no longer a sidebar: the holder
+ * found two lists, "one is global for the process, while the other
+ * loads in a terminal", and chose the one in the terminal.
  *
  * Only the list: what an entry is and what opening it does are the
  * window's, so the panel can be reshaped -- the holder expects to, as a
@@ -58,9 +62,20 @@ public:
 	/* The list, for a test to find a row by. */
 	QListWidget *list() const { return m_list; }
 
+	/* Scrolled to the screen and tmux rows, where there are any. */
+	void show_multiplexers();
+
+	QSize sizeHint() const override;
+
 signals:
 	/* An entry chosen: clicked, or Return on it. */
 	void picked(const bssh_terminal_entry_t &entry);
+
+	/* Hidden: by its x, by focus leaving its terminal, or by the window. */
+	void closed();
+
+protected:
+	void hideEvent(QHideEvent *event) override;
 
 private:
 	QListWidget *m_list;

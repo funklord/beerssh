@@ -19,6 +19,7 @@
 #include <QGestureEvent>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QSpinBox>
 #include <QTemporaryDir>
 #include "ui/touch_metrics.h"
@@ -4258,19 +4259,51 @@ void terminal_view_test::the_corner_sits_on_the_grid_and_takes_none_of_it() {
 	          "the corner left the grid's right edge with the scrollbar");
 
 	/*
-	 * Closed, the drawer is the corner's button, which opens it over this
-	 * terminal on the desktop too (the holder, 2026-11-23), and closes it.
+	 * Closed, the drawer is the corner's button. On the desktop the button
+	 * asks for the window's one list over this pane (the holder,
+	 * 2026-11-23), and opens no drawer of its own.
 	 */
 	QToolButton *button = view.corner()->multiplexer_button();
 	QVERIFY(button);
 	QVERIFY2(button->isVisible(), "the corner has no tmux button");
 	QCOMPARE(button->text(), QStringLiteral("tmux 1"));
+	QSignalSpy listed(&view, &bssh_terminal_view::terminals_list_requested);
 	button->click();
-	QVERIFY(view.multiplexer_drawer()->is_open());
-	QVERIFY(view.multiplexer_drawer()->isVisible());
-	button->click();
+	QCOMPARE(listed.count(), 1);
 	QVERIFY(!view.multiplexer_drawer()->is_open());
-	QVERIFY(!view.multiplexer_drawer()->isVisible());
+
+	/*
+	 * Open, it closes when focus moves out of its terminal, and not when
+	 * focus moves within it (the holder, 2026-11-23: "should probably
+	 * close if focus leaves it") -- the phone's drawer, and the rule the
+	 * desktop's list shares.
+	 */
+	QWidget host;
+	view.setParent(&host);
+	const auto give_back = qScopeGuard([&view] { view.setParent(nullptr); });
+	QLineEdit elsewhere(&host);
+	elsewhere.move(0, view.height() + 4);
+	host.resize(view.width(), view.height() + 40);
+	view.show();
+	host.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&host));
+	host.activateWindow();
+	view.setFocus();
+	QTRY_VERIFY(view.hasFocus());
+	view.multiplexer_drawer()->set_open(true);
+	QVERIFY(view.multiplexer_drawer()->isVisible());
+	view.multiplexer_drawer()->findChild<QListWidget *>()->setFocus();
+	QTRY_VERIFY(!view.hasFocus());
+	view.setFocus();
+	QTRY_VERIFY(view.hasFocus());
+	QVERIFY2(view.multiplexer_drawer()->is_open(), "focus within its terminal closed the drawer");
+	elsewhere.setFocus();
+	QTRY_VERIFY2(!view.multiplexer_drawer()->is_open(), "focus left the terminal and the drawer stayed");
+	view.setParent(nullptr);
+	view.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&view));
+	view.activateWindow();
+	QCoreApplication::processEvents();
 
 	/*
 	 * The drawer's x closes it and leaves the button: the holder found the

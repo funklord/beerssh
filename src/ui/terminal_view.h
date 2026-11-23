@@ -6,6 +6,7 @@
 #include <QFont>
 #include <QHash>
 #include <QJsonObject>
+#include <QPointer>
 #include <QWidget>
 
 #include <functional>
@@ -753,11 +754,23 @@ public slots:
 	 * session keeps the offer and each new view is handed it again.
 	 */
 	void offer_multiplexers(const QList<bssh_mux_session_t> &found);
+
+	/*
+	 * A panel over this terminal, placed as the drawer is and kept in
+	 * place as the pane resizes: the window's terminals list (sec 8.4).
+	 * Made a child of this view; it goes with the view.
+	 */
+	void show_side_panel(QWidget *panel);
+	QRect side_panel_rect(const QSize &hint) const;
 	void withdraw_multiplexers();
 
 signals:
 	/* The drawer's answer (sec 10.2a); see offer_multiplexers(). */
 	void multiplexer_chosen(const bssh_mux_session_t &chosen);
+
+	/* The corner's tmux/screen button on the desktop: the terminals list,
+	 * over this pane. */
+	void terminals_list_requested();
 
 	/* The drawer is open and wants what is running now: on opening, and
 	 * every few seconds while it stays open. */
@@ -1392,6 +1405,7 @@ private:
 	void place_multiplexer_drawer();
 	void sync_multiplexer_drawer_shown();
 	bssh_multiplexer_drawer *m_mux_drawer = nullptr;
+	QPointer<QWidget> m_side_panel;
 	class QTimer *m_mux_relist = nullptr;
 
 	/* The corner over the grid's top-right (sec 8.7a). */

@@ -1,8 +1,12 @@
 #include "ui/terminals_panel.h"
 
+#include <QApplication>
 #include <QFont>
+#include <QHBoxLayout>
+#include <QHideEvent>
 #include <QLabel>
 #include <QListWidget>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 namespace {
@@ -29,16 +33,50 @@ bssh_terminals_panel::bssh_terminals_panel(QWidget *parent)
 	m_list->setObjectName(QStringLiteral("terminals_list"));
 	m_list->setAccessibleName(QStringLiteral("Terminals"));
 
+	/*
+	 * A panel over the pane it was opened in, as the tmux and screen
+	 * drawer was, rather than a column beside every pane (the holder,
+	 * 2026-11-23: one list, in the pane, not a second one for the
+	 * window). Opaque, framed, with an x.
+	 */
+	setAutoFillBackground(true);
+	setBackgroundRole(QPalette::Window);
 	QVBoxLayout *layout = new QVBoxLayout(this);
-	layout->setContentsMargins(0, 0, 0, 0);
-	layout->setSpacing(0);
+	layout->setContentsMargins(4, 2, 4, 4);
+	layout->setSpacing(2);
+	QHBoxLayout *top = new QHBoxLayout;
 	QLabel *title = new QLabel(QStringLiteral("Terminals"), this);
-	title->setContentsMargins(6, 4, 6, 4);
+	title->setContentsMargins(2, 2, 2, 2);
 	QFont bold = title->font();
 	bold.setBold(true);
 	title->setFont(bold);
-	layout->addWidget(title, 0);
+	top->addWidget(title, 1);
+	QToolButton *close = new QToolButton(this);
+	close->setObjectName(QStringLiteral("terminals_close"));
+	close->setText(QStringLiteral("\u00d7"));
+	close->setToolTip(QStringLiteral("Close"));
+	close->setAccessibleName(QStringLiteral("Close the terminals list"));
+	close->setAutoRaise(true);
+	connect(close, &QToolButton::clicked, this, &QWidget::hide);
+	top->addWidget(close, 0);
+	layout->addLayout(top, 0);
 	layout->addWidget(m_list, 1);
+
+	/*
+	 * Closed when focus moves out of the terminal it is over -- another
+	 * pane, another widget, another program -- as the drawer is
+	 * (bssh_multiplexer_drawer): focus within it, the list included,
+	 * keeps it, and only a move out counts.
+	 */
+	connect(qApp, &QApplication::focusChanged, this, [this](QWidget *was, QWidget *now) {
+		if (isHidden()) return;
+		QWidget *owner = parentWidget() ? parentWidget() : this;
+		const auto inside = [owner](QWidget *widget) {
+			return widget && owner->isAncestorOf(widget); /* itself included */
+		};
+		if (!inside(was) || inside(now)) return;
+		hide();
+	});
 
 	/*
 	 * A click opens, as a tab does; Return as well, for the keyboard.
@@ -63,6 +101,29 @@ bssh_terminals_panel::bssh_terminals_panel(QWidget *parent)
 	};
 	connect(m_list, &QListWidget::itemClicked, this, pick);
 	connect(m_list, &QListWidget::itemActivated, this, pick);
+}
+
+void bssh_terminals_panel::hideEvent(QHideEvent *event) {
+	QWidget::hideEvent(event);
+	if (!event->spontaneous()) emit closed();
+}
+
+QSize bssh_terminals_panel::sizeHint() const {
+	return QSize(320, 360);
+}
+
+void bssh_terminals_panel::show_multiplexers() {
+	for (int i = 0; i < m_entries.size(); ++i) {
+		const bssh_terminal_entry_t::place_t place = m_entries.at(i).place;
+		if (place != bssh_terminal_entry_t::SCREEN && place != bssh_terminal_entry_t::TMUX) continue;
+		for (int row = 0; row < m_list->count(); ++row) {
+			if (m_list->item(row)->data(ENTRY_ROLE).toInt() != i) continue;
+			/* The heading above it, so the section reads from its top. */
+			m_list->scrollToItem(m_list->item(qMax(0, row - 1)), QAbstractItemView::PositionAtTop);
+			m_list->setCurrentRow(row);
+			return;
+		}
+	}
 }
 
 void bssh_terminals_panel::set_entries(const QList<bssh_terminal_entry_t> &entries) {

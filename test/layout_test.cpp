@@ -8359,7 +8359,13 @@ void layout_test::the_terminals_sidebar_opens_another_windows_terminal_here() {
 	QVERIFY2(other.isNull() || !other->isVisible(),
 	          "the window that gave up its last terminal is still on screen");
 
-	/* And the list says so: both here now. */
+	/*
+	 * Chosen, the list has closed, as the drawer did; opened again, it
+	 * says so: both here now.
+	 */
+	QVERIFY2(!window.terminals_panel_shown(), "the list stayed open after a choice");
+	window.set_terminals_panel_shown(true);
+	QVERIFY(window.terminals_panel_shown());
 	const QList<bssh_terminal_entry_t> after = window.terminals_panel()->entries();
 	QCOMPARE(after.size(), 2);
 	QCOMPARE(after.at(0).place, bssh_terminal_entry_t::HERE);
@@ -8585,43 +8591,6 @@ void layout_test::a_restored_window_comes_back_in_its_shape() {
  * upgrade already brought it back (sec 8.4), and a window showing it
  * writes that down.
  */
-void layout_test::a_restored_window_brings_back_the_terminals_list() {
-	bssh_profile_store *store = bssh_profile_store::shared();
-	QVERIFY(store && store->is_open());
-	bssh_profile_t host = named(QStringLiteral("listed-host"));
-	host.host = QStringLiteral("listed.example");
-	const int id = store->save(host);
-	QVERIFY(id);
-	const bssh_profile_store::layout_state_t was = store->layout();
-	const auto restore = qScopeGuard([store, was, id] {
-		store->save_layout(was);
-		store->remove(id);
-	});
-
-	for (const bool shown : { true, false }) {
-		bssh_profile_store::layout_state_t saved;
-		saved.profile_ids = { id };
-		saved.terminals_panel = shown;
-		QVERIFY(store->save_layout(saved));
-		QCOMPARE(store->layout().terminals_panel, shown);
-
-		bssh_main_window window;
-		window.resize(900, 600);
-		window.show();
-		const registry_left_as_found_t tidy(window.registry());
-		window.restore_layout();
-		QCOMPARE(window.terminals_panel_shown(), shown);
-
-		/* The save the restore queued lands first, so what follows is the toggle's own. */
-		QTest::qWait(1500);
-		QCOMPARE(store->layout().terminals_panel, shown);
-
-		/* Changed, and written down. */
-		window.set_terminals_panel_shown(!shown);
-		QTRY_COMPARE(store->layout().terminals_panel, !shown);
-	}
-}
-
 void layout_test::a_closed_window_writes_down_its_shape() {
 	bssh_profile_store *store = bssh_profile_store::shared();
 	QVERIFY(store && store->is_open());
@@ -15469,6 +15438,26 @@ void layout_test::hover_leaves_a_text_field_and_the_find_bar_its_pane() {
 		QCoreApplication::processEvents();
 		QVERIFY2(left_view->find_match_count() >= 1, "the bar's own pane was not searched");
 		QCOMPARE(right_view->find_match_count(), 0);
+
+		/*
+		 * The terminals list opens over the focused pane, and over the
+		 * other one when that is focused next: one list, in the terminal
+		 * (the holder, 2026-11-23), not a column beside them all.
+		 */
+		window.panes()->focus_session(right);
+		right_view->setFocus();
+		QCoreApplication::processEvents();
+		window.set_terminals_panel_shown(true);
+		QVERIFY(window.terminals_panel_shown());
+		QCOMPARE(window.terminals_panel()->parentWidget(), static_cast<QWidget *>(right_view));
+		window.set_terminals_panel_shown(false);
+		window.panes()->focus_session(left);
+		left_view->setFocus();
+		QCoreApplication::processEvents();
+		window.set_terminals_panel_shown(true);
+		QVERIFY(window.terminals_panel_shown());
+		QCOMPARE(window.terminals_panel()->parentWidget(), static_cast<QWidget *>(left_view));
+		QVERIFY(left_view->rect().contains(window.terminals_panel()->geometry()));
 	}
 	while (shared->count() > 0) shared->close(shared->at(0));
 }

@@ -1830,6 +1830,18 @@ void bssh_terminal_view::set_pane_handle(bool handle) {
 		 * leaves it (bssh_multiplexer_drawer).
 		 */
 		connect(m_corner, &bssh_pane_corner::multiplexer_clicked, this, [this] {
+			/*
+			 * On the desktop the button opens the window's list of
+			 * terminals, screens and tmux sessions over this pane: one
+			 * list (the holder, 2026-11-23), where the drawer was a
+			 * second. A phone has no such list and keeps the drawer.
+			 */
+			const bssh_platform *platform = bssh_platform::instance();
+			if (!(platform && platform->is_touch_primary())) {
+				setFocus(Qt::MouseFocusReason);
+				emit terminals_list_requested();
+				return;
+			}
 			if (!m_mux_drawer) return;
 			const bool open = !m_mux_drawer->is_open();
 			if (open) setFocus(Qt::MouseFocusReason);
@@ -4151,9 +4163,7 @@ void bssh_terminal_view::withdraw_multiplexers() {
 	sync_corner();
 }
 
-void bssh_terminal_view::place_multiplexer_drawer() {
-	if (!m_mux_drawer || !m_mux_drawer->is_open()) return;
-
+QRect bssh_terminal_view::side_panel_rect(const QSize &hint) const {
 	/*
 	 * Over the terminal, beside the corner that opened it, as wide as it
 	 * asks and never wider than most of the pane, so the text behind
@@ -4161,11 +4171,28 @@ void bssh_terminal_view::place_multiplexer_drawer() {
 	 */
 	int right = grid_origin_x() + grid_width();
 	if (m_corner && m_corner->isVisible()) right = m_corner->x() - 2;
-	const QSize hint = m_mux_drawer->sizeHint();
 	const int wide = qMin(hint.width(), qMax(hint.width() / 2, right * 3 / 4));
 	const int high = height() - 2 * BSSH_GRID_INSET_PX;
-	m_mux_drawer->setGeometry(qMax(0, right - wide), BSSH_GRID_INSET_PX, wide, high);
+	return QRect(qMax(0, right - wide), BSSH_GRID_INSET_PX, wide, high);
+}
+
+void bssh_terminal_view::place_multiplexer_drawer() {
+	if (m_side_panel && !m_side_panel->isHidden()) {
+		m_side_panel->setGeometry(side_panel_rect(m_side_panel->sizeHint()));
+		m_side_panel->raise();
+	}
+	if (!m_mux_drawer || !m_mux_drawer->is_open()) return;
+
+	m_mux_drawer->setGeometry(side_panel_rect(m_mux_drawer->sizeHint()));
 	m_mux_drawer->raise();
+}
+
+void bssh_terminal_view::show_side_panel(QWidget *panel) {
+	if (!panel) return;
+	if (panel->parentWidget() != this) panel->setParent(this);
+	m_side_panel = panel;
+	panel->show();
+	place_multiplexer_drawer();
 }
 
 void bssh_terminal_view::on_rows_damaged(int first_row, int last_row) {

@@ -23,7 +23,6 @@ QString bssh_arrangement_t::to_text() const {
 		                          window.geometry.height() });
 		if (window.maximized) object.insert(QStringLiteral("maximized"), true);
 		if (window.full_screen) object.insert(QStringLiteral("full_screen"), true);
-		if (window.terminals_panel) object.insert(QStringLiteral("terminals_panel"), true);
 		if (!window.shape.isEmpty()) object.insert(QStringLiteral("shape"), window.shape);
 		object.insert(QStringLiteral("terminals"), QJsonArray::fromStringList(window.terminals));
 		if (!window.current.isEmpty()) object.insert(QStringLiteral("current"), window.current);
@@ -67,7 +66,6 @@ bssh_arrangement_t bssh_arrangement_t::from_text(const QString &text, QString *w
 		}
 		window.maximized = object.value(QStringLiteral("maximized")).toBool();
 		window.full_screen = object.value(QStringLiteral("full_screen")).toBool();
-		window.terminals_panel = object.value(QStringLiteral("terminals_panel")).toBool();
 		window.shape = object.value(QStringLiteral("shape")).toString();
 		for (const QJsonValue &name : object.value(QStringLiteral("terminals")).toArray()) {
 			const QString text = name.toString();

@@ -711,9 +711,13 @@ public:
 	 * user has open, here, in another window, or in another BeerSSH, and
 	 * one picked opens HERE -- taken from wherever it was, which is the
 	 * easy hand-off a window needs now that closing it closes its
-	 * terminals. View > Terminals; desktop, where windows are processes.
+	 * terminals. View > Terminals, Ctrl+Shift+L, or a pane's tmux/screen
+	 * button; desktop, where windows are processes. A panel over the
+	 * focused pane since 2026-11-23, no longer a sidebar, and so neither
+	 * saved with the window nor carried across a restart: it closes when
+	 * focus leaves its terminal.
 	 *
-	 * terminal_entries() is what the sidebar lists, in its order: this
+	 * terminal_entries() is what the list holds, in its order: this
 	 * window's, then this process's other windows', then other processes'
 	 * that they would give (connected ones; bssh_handoff_point::terminals).
 	 * open_terminal_entry() is what picking one does.
@@ -1276,7 +1280,7 @@ private:
 	void add_fuzznet_twin(bssh_session *asked, const QString &image, const QString &why);
 	QAction *m_menu_bar_action = nullptr;
 	QAction *m_terminals_action = nullptr;
-	bssh_terminals_panel *m_terminals_panel = nullptr;
+	QPointer<bssh_terminals_panel> m_terminals_panel;
 	/* Other processes are asked, not told: the list is re-read while shown. */
 	QTimer *m_terminals_timer = nullptr;
 

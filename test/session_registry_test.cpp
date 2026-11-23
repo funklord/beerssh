@@ -20,6 +20,7 @@
 #include "term/emulator.h"
 #include "ui/terminal_view.h"
 #include "ui/multiplexer_drawer.h"
+#include "ui/terminals_panel.h"
 #include "ui/pane_container.h"
 #include <QLineEdit>
 #include <QListWidget>
@@ -1581,7 +1582,7 @@ void session_registry_test::the_terminals_list_offers_screens_then_tmux() {
  * list at its screen and tmux rows rather than the drawer, and
  * Ctrl+Shift+L shows and hides the list (the holder, 2026-11-21).
  */
-void session_registry_test::the_corner_button_opens_the_drawer_and_a_chord_the_list() {
+void session_registry_test::the_corner_button_and_a_chord_open_the_list_over_the_pane() {
 	const offer_multiplexers_t offer;
 	const bssh_factory_reset_t factory_reset;
 	bssh_fake_ssh_session *fake = nullptr;
@@ -1611,29 +1612,45 @@ void session_registry_test::the_corner_button_opens_the_drawer_and_a_chord_the_l
 	QVERIFY(!window.terminals_panel_shown());
 
 	/*
-	 * The button opens this terminal's drawer, over the pane, and not
-	 * the window's list (the holder, 2026-11-23: the list "comes up on
-	 * the side of the whole window"). Focus leaving the terminal closes
-	 * it again; focus on the terminal itself does not.
+	 * The button opens the one list -- every terminal, then this
+	 * terminal's screens and tmux sessions -- over this pane (the holder,
+	 * 2026-11-23: two lists were one too many, and the one in the
+	 * terminal stays). Not the drawer, not a column beside the panes.
+	 * Focus leaving the terminal closes it; focus within it does not.
 	 */
 	QTest::mouseClick(button, Qt::LeftButton);
-	bssh_multiplexer_drawer *drawer = view->multiplexer_drawer();
-	QTRY_VERIFY(drawer->is_open());
-	QVERIFY2(!window.terminals_panel_shown(), "the corner button showed the window's list");
-	QVERIFY(drawer->isVisible());
-	QVERIFY(view->rect().contains(QRect(drawer->pos(), drawer->size())));
-	QListWidget *choices = drawer->findChild<QListWidget *>(QStringLiteral("multiplexer_sessions"));
-	QVERIFY(choices);
-	choices->setFocus();
-	QTRY_VERIFY(choices->hasFocus());
+	QTRY_VERIFY(window.terminals_panel_shown());
+	bssh_terminals_panel *panel = window.terminals_panel();
+	view = window.panes()->view_for(session);
+	QVERIFY2(panel->parentWidget() == view, "the list is not over the pane whose button opened it");
+	QVERIFY(view->rect().contains(panel->geometry()));
+	QVERIFY2(!view->multiplexer_drawer() || !view->multiplexer_drawer()->is_open(),
+	         "the drawer opened as well as the list");
+	QListWidget *rows = panel->list();
+	QVERIFY(rows->currentItem());
+	QCOMPARE(rows->item(rows->currentRow() - 1)->text(), QStringLiteral("screen sessions"));
+	rows->setFocus();
+	QTRY_VERIFY(rows->hasFocus());
 	view->setFocus();
 	QTRY_VERIFY(view->hasFocus());
-	QVERIFY2(drawer->is_open(), "focus on its own terminal closed the drawer");
+	QVERIFY2(window.terminals_panel_shown(), "focus on its own terminal closed the list");
 	QLineEdit elsewhere(&window);
 	elsewhere.show();
 	elsewhere.setFocus();
-	QTRY_VERIFY2(!drawer->is_open(), "focus left the terminal and the drawer stayed");
+	QTRY_VERIFY2(!window.terminals_panel_shown(), "focus left the terminal and the list stayed");
 	elsewhere.hide();
+
+	/* A choice closes it, as the drawer's did: here a screen session,
+	 * which switches this terminal and rebuilds nothing. */
+	view = window.panes()->view_for(session);
+	view->setFocus();
+	QTRY_VERIFY(view->hasFocus());
+	QTest::mouseClick(view->corner()->multiplexer_button(), Qt::LeftButton);
+	QTRY_VERIFY(window.terminals_panel_shown());
+	rows = window.terminals_panel()->list();
+	QVERIFY(rows->currentItem());
+	QTest::mouseClick(rows->viewport(), Qt::LeftButton, {}, rows->visualItemRect(rows->currentItem()).center());
+	QTRY_VERIFY2(!window.terminals_panel_shown(), "the list stayed open after a choice");
 
 	/* The chord, typed into the terminal: the list, and away again. */
 	view = window.panes()->view_for(session);

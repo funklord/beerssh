@@ -24,7 +24,6 @@ struct bssh_arrangement_t {
 		QRect geometry;
 		bool maximized = false;
 		bool full_screen = false;
-		bool terminals_panel = false;
 
 		/* bssh_layout_manager::shape_text() over the window's tree, or empty for one pane. */
 		QString shape;

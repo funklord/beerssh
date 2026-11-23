@@ -787,7 +787,6 @@ void handoff_test::an_arrangement_reads_back_what_it_wrote() {
 	bssh_arrangement_t::window_t first;
 	first.geometry = QRect(10, 20, 800, 600);
 	first.maximized = true;
-	first.terminals_panel = true;
 	first.shape = QStringLiteral("H(a,V(b,c))");
 	first.terminals = { QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c") };
 	first.current = QStringLiteral("c");
@@ -802,7 +801,6 @@ void handoff_test::an_arrangement_reads_back_what_it_wrote() {
 	QCOMPARE(read.windows.at(0).geometry, first.geometry);
 	QVERIFY(read.windows.at(0).maximized);
 	QVERIFY(!read.windows.at(0).full_screen);
-	QVERIFY(read.windows.at(0).terminals_panel);
 	QCOMPARE(read.windows.at(0).shape, first.shape);
 	QCOMPARE(read.windows.at(0).terminals, first.terminals);
 	QCOMPARE(read.windows.at(0).current, first.current);
@@ -849,7 +847,6 @@ int bssh_handoff_arranged_mode() {
 	        QStringLiteral("H(a,V(b,c))"), [&shell](const QString &name) { return shell.value(name); }));
 	QCoreApplication::processEvents();
 	first.panes()->focus_session(shell.value(QStringLiteral("c")));
-	first.set_terminals_panel_shown(true);
 
 	bssh_main_window second;
 	second.resize(700, 500);
@@ -955,7 +952,6 @@ void handoff_test::a_new_version_takes_the_windows_as_they_were() {
 	};
 	QTest::qWait(100);
 	QCOMPARE(focused(), QStringLiteral("c"));
-	QVERIFY(first.terminals_panel_shown());
 
 	/* The window the program started for it would be. */
 	bssh_main_window second;
@@ -967,7 +963,6 @@ void handoff_test::a_new_version_takes_the_windows_as_they_were() {
 	QCOMPARE(started.size(), 1);
 	QCOMPARE(second.shown_sessions().size(), 1);
 	QCOMPARE(marker(second.shown_sessions().first()), QStringLiteral("d"));
-	QVERIFY(!second.terminals_panel_shown());
 
 	/* The shells came with them, and answer here. */
 	bssh_session *moved = second.shown_sessions().first();
@@ -1242,8 +1237,13 @@ void handoff_test::the_terminals_list_asks_other_processes_without_waiting() {
 	bssh_main_window window;
 	window.resize(900, 600);
 	window.show();
+	/* A terminal for the list to open over (it is a panel over a pane);
+	 * unconnected, since only the list's asking is measured. */
+	window.adopt_session(window.registry()->create(local_shell_profile()));
+	QCoreApplication::processEvents();
 	timer.restart();
 	window.set_terminals_panel_shown(true);
+	QVERIFY(window.terminals_panel_shown());
 	window.refresh_terminals_panel();
 	QVERIFY2(timer.elapsed() < 250,
 	         qPrintable(QStringLiteral("the window waited %1 ms for other processes").arg(timer.elapsed())));
