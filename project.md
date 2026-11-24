@@ -21583,6 +21583,52 @@ and `src/sshd/main.cpp` must then compile with it undefined -- or fmake is
 told how fuzznet's library is built. Unmeasured; until then the README's
 fmake line does not hold.
 
+## Inbox of 2026-11-24, recorded at a fold: four asks, none done yet
+
+Recorded at the weekly fold (usage 96%), so the work is waiting, not
+refused. Each names its rule in claude-guidelines; read it there.
+
+- **Desktop entry and icon (20261124T2059Z, claude-guidelines 1f1404d,
+  the `desktop-entry` skill).** The holder wants every program started
+  from a desktop to install an entry and an icon alike. Measured here:
+  the icon is an SVG only (`hicolor/scalable`); add PNGs at 16, 22, 32,
+  48, 64 and 128, since TDE prefers a PNG and draws SVG with a partial
+  engine. Do not rename the entry: whether the id stays
+  `se.vibes.beerssh` is open with the holder.
+- **Window icon fallback (20261124T2111Z, 2823b74, the
+  `qt-desktop-integration` skill, "Icons: Qt does not know TDE's icon
+  theme").** `src/main.cpp` sets `QIcon::fromTheme("se.vibes.beerssh")`
+  with no fallback, so that the icon is not a second copy in the binary.
+  A `.qrc` entry naming `packaging/se.vibes.beerssh.svg` is the same file,
+  not a copy, and without it a build run from the tree or offscreen has
+  no window icon. On the holder's TDE, Qt's theme is hicolor and named
+  icons are null until `QIcon::setThemeName` names kdeglobals' theme
+  (`crystalsvg`); this tree's own icon resolves once installed. Open:
+  whether the fallback answers the comment's reason (likely yes).
+- **AppStream metainfo has no homepage (20261124T2114Z, 35daafd, the
+  `debian-packaging` skill, "Lintian clean").** lintian warns
+  `appstream-metadata-validation-failed` and `appstreamcli validate`
+  says `url-homepage-missing`. The metainfo's comment leaves the URL out
+  because the repository was private; it has been public since
+  2026-10-22, so `<url type="homepage">https://github.com/funklord/beerssh</url>`
+  can go in.
+- **One copy of each dependency, at the leaf (20261124T2300Z, from
+  raidcfgd; harmonization.md, "The leaf decides", f26d139). beerssh is
+  step 7 of 8**, after fuzznet 24071d77, snurra 284bc06, situ e485b900,
+  fuzzypickles fa865b02, netcfgd 463ddda4/8296e9f6 and raidcfgd f4efbfb;
+  then hull, named with this tree's commit. The shape raidcfgd used:
+  measure what is compiled from fuzznet's nested submodules (`ar t`, the
+  `.d` files), make those root submodules over https at fuzznet's
+  commits, pass every sub-make into fuzznet their directories
+  (`MONOCYPHER_DIR`, `FLOG_DIR`, ...) as absolute paths, and fetch root
+  submodules by name, never `--recursive`. Two traps it met, both worth
+  checking here: a failed fetch that printed why and built on without
+  the dependency (check each marker again after the fetch, with `test -f`,
+  not `$(wildcard)`, which make caches); and a qmake `exists()` racing a
+  library under `-j8`, silently turning a feature off with exit 0 --
+  check the binary, not the exit code. A fresh-clone proof needs
+  `protocol.file.allow=always` for local submodule URLs.
+
 ## From claude-guidelines: qtkit holds the shared theme
 
 Inbox message 20261123T1226Z. `qtkit` (`funklord/qtkit`) now holds the
