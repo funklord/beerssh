@@ -59,6 +59,8 @@ debian/beersshd/
 debian/beerssh-session/
 debian/*.substvars
 debian/*.debhelper.log
+# Maintainer-script snippets, written since beersshd ships a unit.
+debian/*.debhelper
 debian/debhelper-build-stamp
 
 # The manual page and the bash completion. Both generated from the option
