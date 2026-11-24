@@ -206,6 +206,13 @@ COMPLETION = $(TARGET).bash
 # of *.cpp alone left a .c edit rebuilding nothing while `make test` passed.
 SOURCES = $(wildcard src/*.cpp src/*/*.cpp src/*/*.c src/*/*/*.c softkeys/src/*.cpp)
 HEADERS = $(wildcard src/*.h src/*/*.h softkeys/include/softkeys/*.h)
+# And what qmake's rcc compiles in: resources.qrc and every file it names.
+# The sub-make's own rule depends on them, but it runs only when this
+# Makefile decides to recurse, and with these absent from the lists below a
+# changed resource rebuilt nothing -- found 2026-11-25 by a sabotage that
+# took the window icon out of resources.qrc and left the test green.
+RESOURCE_INPUTS = resources.qrc \
+                  $(shell sed -n 's|.*<file[^>]*>\(.*\)</file>.*|\1|p' resources.qrc)
 
 # --- vendored libvterm ------------------------------------------------------
 # Built here, by hand, rather than through its own autotools: this repo's
@@ -792,7 +799,7 @@ endif
 $(BUILD_DIR)/Makefile: beerssh.pro $(DESKTOP_MEDIA_SOURCE) $(BUILD_DIR)/qmake.args
 	$(call bssh_qmake,$(BUILD_DIR),beerssh.pro)
 
-$(TARGET): $(VTERM_LIB) $(LIBSSH_LIB) $(BUILD_DIR)/Makefile $(SOURCES) $(HEADERS)
+$(TARGET): $(VTERM_LIB) $(LIBSSH_LIB) $(BUILD_DIR)/Makefile $(SOURCES) $(HEADERS) $(RESOURCE_INPUTS)
 	$(MAKE) -C $(BUILD_DIR) $(QMAKE_SUBMAKE)
 	cp $(BUILD_DIR)/$(TARGET)$(EXE) $(TARGET)$(EXE)
 
@@ -960,7 +967,8 @@ $(TEST_BUILD_DIR)/Makefile: test/tests.pro $(TEST_BUILD_DIR)/qmake.args \
                             $(if $(call bssh_qmake_orphaned,$(TEST_BUILD_DIR)),FORCE)
 	$(call bssh_qmake,$(TEST_BUILD_DIR),test/tests.pro)
 
-$(TEST_BIN): $(VTERM_LIB) $(LIBSSH_LIB) $(TEST_BUILD_DIR)/Makefile $(SOURCES) $(HEADERS) $(wildcard test/*.cpp test/*.h)
+$(TEST_BIN): $(VTERM_LIB) $(LIBSSH_LIB) $(TEST_BUILD_DIR)/Makefile $(SOURCES) $(HEADERS) $(RESOURCE_INPUTS) \
+            $(wildcard test/*.cpp test/*.h)
 	$(MAKE) -C $(TEST_BUILD_DIR) $(QMAKE_SUBMAKE)
 
 # The tests link fuzznet's client end where BeerSSH does (fuzznet.pri).
