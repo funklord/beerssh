@@ -32,8 +32,16 @@ inline QString bssh_store_writer_failure(int code) {
  * cleanly, and the reader then asks the store what survived; otherwise
  * which writer failed and how, with what it printed. A bare false once
  * cost a Windows CI failure its reason (2026-11-17, project.md sec 8.4).
+ *
+ * `said`, given, gets what every writer printed, the ones that succeeded
+ * too: on 2026-11-24 all three succeeded and a secret was still lost, at
+ * load 30, and the warning that would say why -- a lock waited for past
+ * its patience, the change going ahead anyway -- is printed by a writer
+ * that then exits cleanly. The caller shows it when what it reads back is
+ * short.
  */
-inline QString bssh_run_store_writers(const QString &kind, const QString &dir, int each) {
+inline QString bssh_run_store_writers(const QString &kind, const QString &dir, int each,
+                                      QString *said_all = nullptr) {
 	const QStringList prefixes = { QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c") };
 
 	std::vector<std::unique_ptr<QProcess>> writers;
@@ -71,6 +79,8 @@ inline QString bssh_run_store_writers(const QString &kind, const QString &dir, i
 		QProcess &writer = *writers.at(size_t(i));
 		const bool finished = writer.waitForFinished(60000);
 		const QString said = QString::fromLocal8Bit(writer.readAll()).trimmed();
+		if (said_all && !said.isEmpty())
+			*said_all += QStringLiteral("[writer %1] %2\n").arg(prefixes.at(i), said.right(1200));
 		if (!finished)
 			failures << QStringLiteral("writer %1 still running after 60 s").arg(prefixes.at(i));
 		else if (writer.exitStatus() != QProcess::NormalExit)

@@ -10020,6 +10020,21 @@ covered shape's divisions changed nothing measurable, so it went.
   logged *Got unexpected locking error 3* on Windows. That test makes the
   lock fail on purpose, so it is not evidence either way. The writers'
   captured output will show the warning if this is it.
+  **Seen a third time 2026-11-24, on Linux, with its message:** in a full
+  suite run at load about 30 on 24 cores, every writer reported success and
+  the reader then found `c-0` EMPTY (`secret_store_test.cpp:656`, expected
+  "c-0", actual ""). So a secret really was lost, with no refusal anywhere;
+  five runs alone just after all passed. **Leading candidate, untested:**
+  the five-second wait for a peer's lock, after which the change goes ahead
+  unlocked with a warning, by design so that a peer stopped under a
+  debugger cannot block saving. Three writers queueing on one lock at load
+  30 can wait past five seconds; the one that gives up writes its stale
+  map back over a peer's save, and every writer still succeeds -- exactly
+  this shape. The writers' output, which would carry the warning, is shown
+  only when a writer fails, so this run could not confirm it. Next: print
+  the writers' output when the reader finds a secret missing, then decide
+  whether going ahead unlocked should require the holder to be stopped or
+  gone rather than merely slow (the debugger case the wait exists for).
 - **A pane drag was raised from inside the view's own signal emission, and
   the thing it reaches destroys that view.** `mouseMoveEvent` emits
   `pane_drag_requested`; `start_session_drag` answers it with

@@ -2693,13 +2693,17 @@ void profile_store_test::a_store_that_loaded_first_does_not_erase_a_later_save()
 void profile_store_test::two_processes_saving_at_once_lose_nothing() {
 	QTemporaryDir dir;
 	const int each = 100;
-	const QString failed = bssh_run_store_writers(QStringLiteral("hosts"), dir.path(), each);
+	QString said;
+	const QString failed = bssh_run_store_writers(QStringLiteral("hosts"), dir.path(), each, &said);
 	QVERIFY2(failed.isEmpty(), qPrintable(failed));
 
 	bssh_profile_store reader(dir.filePath(QStringLiteral("test.db")));
 	QSet<int> ids;
 	for (const bssh_profile_t &profile : reader.profiles()) ids.insert(profile.id);
-	QCOMPARE(reader.profiles().count(), 3 * each);
+	QVERIFY2(reader.profiles().count() == 3 * each,
+	         qPrintable(QStringLiteral("%1 hosts of %2; the writers said:\n%3")
+	                            .arg(reader.profiles().count()).arg(3 * each)
+	                            .arg(said.isEmpty() ? QStringLiteral("nothing") : said)));
 	QCOMPARE(ids.size(), 3 * each);
 }
 

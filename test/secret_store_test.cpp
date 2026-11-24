@@ -645,7 +645,8 @@ void secret_store_test::two_processes_saving_at_once_lose_no_secret() {
 	QTemporaryDir dir;
 	app_data_redirect redirect(dir);
 	const int each = 30;
-	const QString failed = bssh_run_store_writers(QStringLiteral("secrets"), dir.path(), each);
+	QString said;
+	const QString failed = bssh_run_store_writers(QStringLiteral("secrets"), dir.path(), each, &said);
 	QVERIFY2(failed.isEmpty(), qPrintable(failed));
 
 	std::unique_ptr<bssh_secret_store> reader(bssh_make_separate_file_secret_store());
@@ -653,7 +654,10 @@ void secret_store_test::two_processes_saving_at_once_lose_no_secret() {
 	for (const QString &prefix : { QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c") }) {
 		for (int i = 0; i < each; ++i) {
 			const QString name = QStringLiteral("%1-%2").arg(prefix).arg(i);
-			QCOMPARE(reader->load(name), name);
+			const QString got = reader->load(name);
+			QVERIFY2(got == name,
+			         qPrintable(QStringLiteral("%1 read back as \"%2\"; the writers said:\n%3")
+			                            .arg(name, got, said.isEmpty() ? QStringLiteral("nothing") : said)));
 		}
 	}
 }
