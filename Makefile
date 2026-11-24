@@ -152,6 +152,12 @@ SSHD_MAN_PAGE = $(SSHD_TARGET).1
 # The app id from sec 0.1. Every packaging file is named after it, and a
 # mismatch shows up as an app that installs, runs, and cannot be found.
 APP_ID = se.vibes.beerssh
+# The PNG sizes beside the SVG (packaging/icon/), the floor the
+# desktop-entry rule sets for TDE: rendered with
+#   inkscape -w N -h N -o packaging/icon/N.png packaging/$(APP_ID).svg
+# and committed, so a bare make needs no SVG renderer. Render them again
+# whenever the SVG changes.
+ICON_SIZES = 16 22 32 48 64 128
 
 # One version, passed into the build rather than repeated. It was written
 # in main.cpp and again in beerssh.pro for the Android package name, which
@@ -2038,6 +2044,13 @@ install: $(ARTIFACTS) $(SESSION_BIN)
 	mkdir -p $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps
 	install -m 0644 packaging/$(APP_ID).svg \
 	        $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/$(APP_ID).svg
+	# And PNGs, rendered from it and committed (packaging/icon/): TDE takes
+	# a PNG before an SVG and draws SVG with an engine of its own that lacks
+	# patterns and some gradients, so an SVG-only icon may draw wrong there.
+	for n in $(ICON_SIZES); do \
+		install -D -m 0644 packaging/icon/$$n.png \
+		        $(DESTDIR)$(PREFIX)/share/icons/hicolor/$${n}x$${n}/apps/$(APP_ID).png || exit 1; \
+	done
 
 	# The fonts, if they were fetched. Not an error when they were not:
 	# `make install` must work on a checkout that never ran `make fonts`,
@@ -2181,6 +2194,9 @@ uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/share/applications/$(APP_ID).desktop
 	rm -f $(DESTDIR)$(PREFIX)/share/metainfo/$(APP_ID).metainfo.xml
 	rm -f $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/$(APP_ID).svg
+	for n in $(ICON_SIZES); do \
+		rm -f $(DESTDIR)$(PREFIX)/share/icons/hicolor/$${n}x$${n}/apps/$(APP_ID).png; \
+	done
 	rm -rf $(DESTDIR)$(PREFIX)/share/beerssh
 
 # clean removes intermediates only; $(TARGET) survives, matching the split

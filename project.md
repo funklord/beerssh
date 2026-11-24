@@ -21594,7 +21594,16 @@ refused. Each names its rule in claude-guidelines; read it there.
   the icon is an SVG only (`hicolor/scalable`); add PNGs at 16, 22, 32,
   48, 64 and 128, since TDE prefers a PNG and draws SVG with a partial
   engine. Do not rename the entry: whether the id stays
-  `se.vibes.beerssh` is open with the holder.
+  `se.vibes.beerssh` is open with the holder (the skill now says it is
+  `se.vibes.<name>`, which this tree already is). **Done 2026-11-25:**
+  `packaging/icon/{16,22,32,48,64,128}.png`, rendered from the SVG with
+  inkscape and committed (`ICON_SIZES` in the Makefile says how, and to
+  render again when the SVG changes), installed into
+  `hicolor/NxN/apps` and removed by name on uninstall; a scratch install
+  lists exactly the SVG and the six. The 16 and 22 are renderings, soft
+  but legible -- a hand-drawn 16 would be sharper, a later step if
+  wanted. Not yet looked at in TDE's menu and panel, which needs the
+  package installed and `tdebuildsycoca`.
 - **Window icon fallback (20261124T2111Z, 2823b74, the
   `qt-desktop-integration` skill, "Icons: Qt does not know TDE's icon
   theme").** `src/main.cpp` sets `QIcon::fromTheme("se.vibes.beerssh")`
