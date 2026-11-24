@@ -1,5 +1,6 @@
 #include <QApplication>
 #include <QIcon>
+#include <QImageReader>
 #include <QLabel>
 #include <QPixmap>
 #include <QSettings>
@@ -1367,6 +1368,13 @@ void platform_test::the_window_icon_draws_with_no_icon_theme() {
 	 * (qt6-svg-plugins, which the package recommends).
 	 */
 	QVERIFY2(QFile::exists(QStringLiteral(":/se.vibes.beerssh.svg")), "the icon is not compiled in");
+	/*
+	 * Drawing it needs Qt's SVG plugins, which a Linux package recommends
+	 * and Windows CI's Qt does not carry (2026-11-24: the icon drew
+	 * nothing there). Compiled in everywhere; drawn where SVG can be read.
+	 */
+	if (!QImageReader::supportedImageFormats().contains("svg"))
+		QSKIP("no SVG image plugin here, so no SVG icon can draw");
 	const QIcon icon = QIcon::fromTheme(QStringLiteral("se.vibes.beerssh"),
 	                                    QIcon(QStringLiteral(":/se.vibes.beerssh.svg")));
 	const QPixmap drawn = icon.pixmap(48, 48);
