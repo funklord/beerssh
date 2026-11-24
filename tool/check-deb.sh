@@ -93,7 +93,7 @@ else
 		git -C "$path" archive --format=tar --prefix="src/$path/" \
 			"$(git rev-parse "HEAD:$path")" | tar -xf - -C "$STAGE" || exit 1
 	done
-	# fuzznet's flog and monocypher are root submodules since 2026-11-25,
+	# fuzznet's flog and monocypher are root submodules since 2026-11-24,
 	# so the loop above carries them; fuzznet's nested copies are not used.
 	ln -s "$PWD/fonts" "$STAGE/src/fonts"
 

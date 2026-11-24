@@ -1,5 +1,5 @@
 # The window icon's fallback, compiled in from the SVG the package installs
-# (src/main.cpp, resources.qrc; 2026-11-25).
+# (src/main.cpp, resources.qrc; 2026-11-24).
 
 [[sabotage]]
 name = "the icon is not compiled in"

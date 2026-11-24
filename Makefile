@@ -215,7 +215,7 @@ HEADERS = $(wildcard src/*.h src/*/*.h softkeys/include/softkeys/*.h)
 # And what qmake's rcc compiles in: resources.qrc and every file it names.
 # The sub-make's own rule depends on them, but it runs only when this
 # Makefile decides to recurse, and with these absent from the lists below a
-# changed resource rebuilt nothing -- found 2026-11-25 by a sabotage that
+# changed resource rebuilt nothing -- found 2026-11-24 by a sabotage that
 # took the window icon out of resources.qrc and left the test green.
 RESOURCE_INPUTS = resources.qrc \
                   $(shell sed -n 's|.*<file[^>]*>\(.*\)</file>.*|\1|p' resources.qrc)

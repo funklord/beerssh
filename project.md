@@ -21595,7 +21595,7 @@ refused. Each names its rule in claude-guidelines; read it there.
   48, 64 and 128, since TDE prefers a PNG and draws SVG with a partial
   engine. Do not rename the entry: whether the id stays
   `se.vibes.beerssh` is open with the holder (the skill now says it is
-  `se.vibes.<name>`, which this tree already is). **Done 2026-11-25:**
+  `se.vibes.<name>`, which this tree already is). **Done 2026-11-24:**
   `packaging/icon/{16,22,32,48,64,128}.png`, rendered from the SVG with
   inkscape and committed (`ICON_SIZES` in the Makefile says how, and to
   render again when the SVG changes), installed into
@@ -21614,7 +21614,7 @@ refused. Each names its rule in claude-guidelines; read it there.
   icons are null until `QIcon::setThemeName` names kdeglobals' theme
   (`crystalsvg`); this tree's own icon resolves once installed. Open:
   whether the fallback answers the comment's reason (likely yes).
-  **Done 2026-11-25:** yes, since the resource names the installed file
+  **Done 2026-11-24:** yes, since the resource names the installed file
   rather than copying it. `QIcon::fromTheme(name, QIcon(":/se.vibes.beerssh.svg"))`,
   the SVG in `resources.qrc`, and `qt6-svg-plugins` recommended by the
   package, since both the theme's icon and this one are SVG and the
@@ -21633,7 +21633,7 @@ refused. Each names its rule in claude-guidelines; read it there.
   says `url-homepage-missing`. The metainfo's comment leaves the URL out
   because the repository was private; it has been public since
   2026-10-22, so `<url type="homepage">https://github.com/funklord/beerssh</url>`
-  can go in. **Done 2026-11-25:** in, and `appstreamcli validate --no-net`
+  can go in. **Done 2026-11-24:** in, and `appstreamcli validate --no-net`
   passes where the old file failed on `url-homepage-missing`.
 - **One copy of each dependency, at the leaf (20261124T2300Z, from
   raidcfgd; harmonization.md, "The leaf decides", f26d139). beerssh is
@@ -21651,7 +21651,7 @@ refused. Each names its rule in claude-guidelines; read it there.
   library under `-j8`, silently turning a feature off with exit 0 --
   check the binary, not the exit code. A fresh-clone proof needs
   `protocol.file.allow=always` for local submodule URLs.
-  **Done 2026-11-25, this tree's step.** What beerssh compiles from
+  **Done 2026-11-24, this tree's step.** What beerssh compiles from
   fuzznet's nested submodules is flog and monocypher, both into fuzznet's
   archives (desktop and both Android ones); nothing of qtty, quirc or
   thorvg. They are root submodules now, https, at the commits fuzznet's

@@ -23,7 +23,7 @@ jobs:
       # there (first seen 2026-10-22, the workflow's first run since
       # softkeys became a submodule).
       # The tree's own submodules only, never recursive: fuzznet's flog and
-      # monocypher are this tree's root submodules since 2026-11-25 (one
+      # monocypher are this tree's root submodules since 2026-11-24 (one
       # copy of each dependency, at the leaf), and a recursive checkout
       # would fetch fuzznet's nested copies too, which nothing builds.
       - uses: actions/checkout@v4

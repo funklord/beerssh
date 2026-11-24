@@ -230,7 +230,7 @@ PY
 # the runner's recursive checkout gives -- listed by hand here before, and
 # the hand list had no snurra and no fuzznet once the desktop build linked
 # them (found 2026-11-18, with check-deb's and check-keepalive's same miss).
-# fuzznet's flog and monocypher are root submodules since 2026-11-25 (one
+# fuzznet's flog and monocypher are root submodules since 2026-11-24 (one
 # copy of each dependency at the leaf), so this list carries them too and
 # fuzznet's nested copies are not wanted.
 if [ "$WANTS_SUBMODULES" = yes ]; then
