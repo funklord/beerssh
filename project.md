@@ -21611,7 +21611,8 @@ refused. Each names its rule in claude-guidelines; read it there.
   says `url-homepage-missing`. The metainfo's comment leaves the URL out
   because the repository was private; it has been public since
   2026-10-22, so `<url type="homepage">https://github.com/funklord/beerssh</url>`
-  can go in.
+  can go in. **Done 2026-11-25:** in, and `appstreamcli validate --no-net`
+  passes where the old file failed on `url-homepage-missing`.
 - **One copy of each dependency, at the leaf (20261124T2300Z, from
   raidcfgd; harmonization.md, "The leaf decides", f26d139). beerssh is
   step 7 of 8**, after fuzznet 24071d77, snurra 284bc06, situ e485b900,
