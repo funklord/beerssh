@@ -2342,6 +2342,14 @@ beersshd run by a user is exactly what it was.
   runs as the user, never 0, the map's line added without a restart. A
   hull vm was the first plan; check-ci's machine already is root and
   already switches to a user, so it needed nothing new.
+  **First run, GitHub on `eee8393`:** passed, the session running as the
+  run's user, uid 1002, groups only its own. **And seen failing**, on a
+  throwaway branch since deleted: with the drop made a no-op inside
+  `bssh_login_become`, `sshd_test` caught it first ("a user became another
+  user"); with the daemon skipping the call instead, which no unit test
+  can see, the suite passed and this check failed on `uid=0 gid=0
+  groups=0`. So the root check is the only guard of the daemon's call,
+  and it guards it.
 
 The holder's point, 2026-11-06: fuzznet already maintains host keys and
 authentication for other software, so setup is simpler there. Trust is settled
