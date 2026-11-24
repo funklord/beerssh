@@ -12,7 +12,7 @@ Rules-Requires-Root: no
 Package: beerssh
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
-Recommends: beerssh-fonts
+Recommends: beerssh-fonts, qt6-svg-plugins
 Description: SSH terminal for desktop and Android
  An SSH client with a real terminal emulator, built from one
  codebase for the desktop and for Android. Sessions live apart

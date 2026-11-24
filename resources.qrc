@@ -3,5 +3,7 @@
     <qresource prefix="/">
         <!-- The font set's pins, which tool/fetch-fonts.sh reads too (sec 9.4). -->
         <file alias="font-sources.txt">tool/font-sources.txt</file>
+        <!-- The window icon's fallback: the file the package installs, not a copy (src/main.cpp). -->
+        <file alias="se.vibes.beerssh.svg">packaging/se.vibes.beerssh.svg</file>
     </qresource>
 </RCC>

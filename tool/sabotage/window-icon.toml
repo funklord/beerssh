@@ -1,0 +1,9 @@
+# The window icon's fallback, compiled in from the SVG the package installs
+# (src/main.cpp, resources.qrc; 2026-11-25).
+
+[[sabotage]]
+name = "the icon is not compiled in"
+file = "resources.qrc"
+find = "        <file alias=\"se.vibes.beerssh.svg\">packaging/se.vibes.beerssh.svg</file>\n"
+replace = ""
+expect = "the_window_icon_draws_with_no_icon_theme"

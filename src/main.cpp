@@ -229,11 +229,16 @@ int main(int argc, char *argv[]) {
 	 * the launcher that started it has a perfectly good icon. Seen on a
 	 * real X11 desktop, running the packaged build.
 	 *
-	 * From the icon theme rather than a compiled-in resource, because the
-	 * packaging installs it into hicolor (sec 12.2) and a second copy
-	 * inside the binary is a second thing to keep in step.
+	 * From the icon theme first, where the packaging installs it
+	 * (sec 12.2), and else from the same SVG compiled in: a build run from
+	 * the tree, or a test under -platform offscreen, finds no theme icon
+	 * and had no window icon at all. The resource names the file the
+	 * package installs (resources.qrc), so it is not a second copy to
+	 * keep in step. Both are SVG, drawn by qt6-svg-plugins, which the
+	 * package recommends.
 	 */
-	QGuiApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("se.vibes.beerssh")));
+	QGuiApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("se.vibes.beerssh"),
+	                                                QIcon(QStringLiteral(":/se.vibes.beerssh.svg"))));
 
 	/*
 	 * The curated font set (sec 9), before any widget is built: a view

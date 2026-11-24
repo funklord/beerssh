@@ -1,5 +1,7 @@
 #include <QApplication>
+#include <QIcon>
 #include <QLabel>
+#include <QPixmap>
 #include <QSettings>
 #include <QtTest>
 #include <QSignalSpy>
@@ -1352,4 +1354,27 @@ void platform_test::a_file_filled_out_of_order_fetches_what_its_reader_wants() {
 	QVERIFY(plain.has(0, 400));
 	QVERIFY(!plain.has(300, 200));
 	QCOMPARE(plain.run_from(100), qint64(300));
+}
+
+void platform_test::the_window_icon_draws_with_no_icon_theme() {
+	/*
+	 * main() asks the icon theme for the window icon and falls back to the
+	 * same SVG compiled in (resources.qrc). Under -platform offscreen, as
+	 * in a build run from the tree, there is no theme icon: before the
+	 * fallback the window had none (2026-11-24, claude-guidelines'
+	 * qt-desktop-integration skill). So the icon, asked as main() asks it,
+	 * must draw here -- which also needs the SVG icon engine
+	 * (qt6-svg-plugins, which the package recommends).
+	 */
+	QVERIFY2(QFile::exists(QStringLiteral(":/se.vibes.beerssh.svg")), "the icon is not compiled in");
+	const QIcon icon = QIcon::fromTheme(QStringLiteral("se.vibes.beerssh"),
+	                                    QIcon(QStringLiteral(":/se.vibes.beerssh.svg")));
+	const QPixmap drawn = icon.pixmap(48, 48);
+	QVERIFY2(!drawn.isNull(), "the window icon draws nothing");
+	const QImage image = drawn.toImage();
+	bool painted = false;
+	for (int y = 0; y < image.height() && !painted; ++y)
+		for (int x = 0; x < image.width() && !painted; ++x)
+			painted = qAlpha(image.pixel(x, y)) > 0;
+	QVERIFY2(painted, "the window icon is transparent throughout");
 }

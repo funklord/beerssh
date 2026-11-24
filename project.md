@@ -21605,6 +21605,19 @@ refused. Each names its rule in claude-guidelines; read it there.
   icons are null until `QIcon::setThemeName` names kdeglobals' theme
   (`crystalsvg`); this tree's own icon resolves once installed. Open:
   whether the fallback answers the comment's reason (likely yes).
+  **Done 2026-11-25:** yes, since the resource names the installed file
+  rather than copying it. `QIcon::fromTheme(name, QIcon(":/se.vibes.beerssh.svg"))`,
+  the SVG in `resources.qrc`, and `qt6-svg-plugins` recommended by the
+  package, since both the theme's icon and this one are SVG and the
+  library scan cannot see a plugin. `platform_test`
+  `the_window_icon_draws_with_no_icon_theme`, `tool/sabotage/window-icon.toml`.
+  **Its first sabotage was MISSED, and that was the build:** the outer
+  Makefile recursed into qmake's build only when a source, header or
+  test changed, and `resources.qrc` and the files it names were in none
+  of those lists, so taking the icon out rebuilt nothing and the test
+  ran the old binary. Both rules now list `RESOURCE_INPUTS`; a second
+  `make` still writes nothing, and the same sabotage is caught. A `.pri`
+  edit, the same shape, was measured to reach qmake already.
 - **AppStream metainfo has no homepage (20261124T2114Z, 35daafd, the
   `debian-packaging` skill, "Lintian clean").** lintian warns
   `appstream-metadata-validation-failed` and `appstreamcli validate`
