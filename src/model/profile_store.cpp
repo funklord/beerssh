@@ -1,4 +1,5 @@
 #include "model/profile_store.h"
+#include "model/store_lock.h"
 #include "model/kept_scrollback.h"
 
 #include <QSet>
@@ -296,23 +297,17 @@ void bssh_profile_store::load() {
  * windows saving at once each read the list, each added their host and
  * each wrote the list back, and measured with three real processes
  * adding hosts together, 200 of 300 were gone. A window's save is rare
- * and short, so a queue costs nothing, and a peer stopped under a
- * debugger costs five seconds and a warning rather than a save refused:
- * going on without the lock is what happened before it existed.
+ * and short, so a queue costs nothing; how long it waits, and when it
+ * goes on without, is bssh_store_lock's.
  */
 namespace {
 class store_change {
 public:
 	explicit store_change(const QString &directory)
-	        : m_lock(directory + QStringLiteral("/.store.lock")) {
-		m_lock.setStaleLockTime(10000);
-		if (!m_lock.tryLock(5000)) {
-			qWarning("hosts: another BeerSSH holds the store, changing it anyway");
-		}
-	}
+	        : m_lock(directory + QStringLiteral("/.store.lock"), "hosts") {}
 
 private:
-	QLockFile m_lock;
+	bssh_store_lock m_lock;
 };
 }
 

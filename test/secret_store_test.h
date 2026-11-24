@@ -20,6 +20,11 @@ class secret_store_test : public QObject {
 
 private slots:
 	void two_processes_saving_at_once_lose_no_secret();
+#ifdef Q_OS_LINUX
+	/* src/model/store_lock.h: who is waited for, and who is not. */
+	void a_store_lock_waits_for_a_slow_holder();
+	void a_store_lock_goes_on_past_a_stopped_holder();
+#endif
 	/* XDG_DATA_HOME is as found when the class is done; see app_data_redirect. */
 	void initTestCase();
 	void cleanupTestCase();

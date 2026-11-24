@@ -1,4 +1,5 @@
 #include "platform/secret_store.h"
+#include "model/store_lock.h"
 
 #include <QDir>
 #include <QFile>
@@ -165,22 +166,16 @@ QByteArray decrypt(const QByteArray &ciphertext, const QByteArray &key, const QB
  * One change at a time across every BeerSSH on this account, from the
  * re-read to the write: reread() alone is a check and then an act, and
  * two windows saving at once each wrote the map back without the
- * other's secret. The host store's reason, and its measurement (sec 11).
- * Going on without the lock after five seconds is what happened before
- * it existed, and is better than refusing to keep a password.
+ * other's secret. The host store's reason, and its measurement (sec 11);
+ * how long it waits, and when it goes on without, is bssh_store_lock's.
  */
 namespace {
 class store_change {
 public:
-	store_change() : m_lock(store_path() + QStringLiteral(".lock")) {
-		m_lock.setStaleLockTime(10000);
-		if (!m_lock.tryLock(5000)) {
-			qWarning("secrets: another BeerSSH holds the store, changing it anyway");
-		}
-	}
+	store_change() : m_lock(store_path() + QStringLiteral(".lock"), "secrets") {}
 
 private:
-	QLockFile m_lock;
+	bssh_store_lock m_lock;
 };
 }
 

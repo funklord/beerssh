@@ -158,6 +158,7 @@ SOURCES += \
     ../src/ui/multiplexer_drawer.cpp \
     ../src/model/ssh_config.cpp \
     ../src/model/profile_store.cpp \
+    ../src/model/store_lock.cpp \
     ../src/model/settings_resolver.cpp \
     ../src/model/window_title.cpp \
     ../src/model/session.cpp \
@@ -298,6 +299,7 @@ HEADERS += \
     ../src/ui/multiplexer_drawer.h \
     ../src/model/ssh_config.h \
     ../src/model/profile_store.h \
+    ../src/model/store_lock.h \
     ../src/model/settings_resolver.h \
     ../src/model/window_title.h \
     ../src/model/session.h \

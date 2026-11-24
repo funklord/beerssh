@@ -16,6 +16,15 @@
 #include "ui/password_prompt.h"
 #include "secret_store_test.h"
 #include "store_writers.h"
+#include "model/store_lock.h"
+
+#ifdef Q_OS_LINUX
+#include <QElapsedTimer>
+#include <QThread>
+#include <csignal>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 #include "phone_metrics.h"
 
 /*
@@ -661,3 +670,74 @@ void secret_store_test::two_processes_saving_at_once_lose_no_secret() {
 		}
 	}
 }
+
+#ifdef Q_OS_LINUX
+void secret_store_test::a_store_lock_waits_for_a_slow_holder() {
+	/*
+	 * The lock gave up after five seconds and the save went on unlocked;
+	 * under load a holder that was only slow lost a peer's secret that
+	 * way, 25 runs in 144 (2026-11-24). A holder that is running is waited
+	 * for: here it lets go after six seconds, past the old give-up, and
+	 * the lock is then held, not skipped.
+	 */
+	QTemporaryDir dir;
+	const QString path = dir.filePath(QStringLiteral("store.lock"));
+	QLockFile holder(path);
+	QVERIFY(holder.tryLock(0));
+	QThread *release = QThread::create([&holder] {
+		QThread::msleep(6000);
+		holder.unlock();
+	});
+	release->start();
+	QElapsedTimer waited;
+	waited.start();
+	{
+		const bssh_store_lock lock(path, "test");
+		QVERIFY2(lock.held(), "gave up on a holder that was only slow");
+		QVERIFY2(waited.elapsed() >= 5500, qPrintable(QString::number(waited.elapsed())));
+	}
+	release->wait();
+	delete release;
+}
+
+void secret_store_test::a_store_lock_goes_on_past_a_stopped_holder() {
+	/*
+	 * And a holder that cannot finish -- stopped, as under a debugger --
+	 * is waited for five seconds and then gone past, as before, rather
+	 * than blocking every save for a minute.
+	 */
+	QTemporaryDir dir;
+	const QString path = dir.filePath(QStringLiteral("store.lock"));
+	int ready[2];
+	QVERIFY(pipe(ready) == 0);
+	const pid_t child = fork();
+	QVERIFY(child >= 0);
+	if (child == 0) {
+		close(ready[0]);
+		QLockFile held(path);
+		const char ok = held.tryLock(0) ? 'y' : 'n';
+		if (write(ready[1], &ok, 1) != 1) _exit(1);
+		raise(SIGSTOP);
+		_exit(0);
+	}
+	close(ready[1]);
+	char ok = 0;
+	QVERIFY(read(ready[0], &ok, 1) == 1 && ok == 'y');
+	close(ready[0]);
+	int status = 0;
+	QVERIFY(waitpid(child, &status, WUNTRACED) == child && WIFSTOPPED(status));
+	const auto finish = qScopeGuard([child] {
+		kill(child, SIGKILL);
+		waitpid(child, nullptr, 0);
+	});
+	QVERIFY(bssh_store_lock::process_is_stopped(child));
+	QVERIFY(!bssh_store_lock::process_is_stopped(getpid()));
+
+	QElapsedTimer waited;
+	waited.start();
+	const bssh_store_lock lock(path, "test");
+	QVERIFY2(!lock.held(), "took a lock a stopped process holds");
+	QVERIFY2(waited.elapsed() >= 4500 && waited.elapsed() < 20000,
+	         qPrintable(QString::number(waited.elapsed())));
+}
+#endif

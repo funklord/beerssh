@@ -1,0 +1,24 @@
+# The stores' lock waits for a holder that is getting on with it and goes
+# past one that is stopped (src/model/store_lock.h; 2026-11-24, a secret
+# lost under load 25 runs in 144 while it gave up after five seconds).
+
+[[sabotage]]
+name = "every holder is treated as stopped"
+file = "src/model/store_lock.cpp"
+find = "\t\tif (known && here && pid > 0 && process_is_stopped(pid)) {\n"
+replace = "\t\tif (known && here && pid > 0) {\n"
+expect = "a_store_lock_waits_for_a_slow_holder"
+
+[[sabotage]]
+name = "a stopped holder is waited for to the ceiling"
+file = "src/model/store_lock.cpp"
+find = "\t\tif (known && here && pid > 0 && process_is_stopped(pid)) {\n"
+replace = "\t\tif (false) {\n"
+expect = "a_store_lock_goes_on_past_a_stopped_holder"
+
+[[sabotage]]
+name = "the stopped state is never read"
+file = "src/model/store_lock.cpp"
+find = "\treturn state == 'T' || state == 't';\n"
+replace = "\treturn false;\n"
+expect = "a_store_lock_goes_on_past_a_stopped_holder"

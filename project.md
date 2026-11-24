@@ -10121,6 +10121,24 @@ covered shape's divisions changed nothing measurable, so it went.
   Each now warns with its reason and the system's error (`secret store:
   not re-read: ...`, `secret store: not saved: commit: ...`), which the
   helper carries into the failure, so the next sighting names the step.
+  **Found and fixed the same night: the candidate was it.** Reproduced by
+  load alone: 24 copies of the test at once, six rounds, at a load near
+  28 on 24 cores -- 25 of 144 runs lost a secret, and every one of the 25
+  carried a writer's "another BeerSSH holds the store, changing it
+  anyway". The five-second give-up, written for a peer stopped under a
+  debugger, also gave up on peers that were merely slow. Both stores' locks
+  are now one, `bssh_store_lock` (`src/model/store_lock.h`): it waits as
+  long as the holder is running, goes on after five seconds only when the
+  holder is stopped or traced (`/proc/<pid>/stat`, T or t, and only for a
+  pid of this machine), and after a minute in any case; a dead holder's
+  lock QLockFile takes over itself. After it, the same 144 runs lost
+  nothing and no writer went on unlocked, nor did 72 runs of the hosts'
+  twin at a load of 39. `a_store_lock_waits_for_a_slow_holder` (a holder
+  letting go after six seconds is waited for) and
+  `a_store_lock_goes_on_past_a_stopped_holder` (a forked holder that
+  stops itself), sabotages in `tool/sabotage/store-lock.toml`. The
+  Windows sighting (a refused save, not a lost one) is not this, since
+  the lock never gave up there; its next failure names its step.
 - **A pane drag was raised from inside the view's own signal emission, and
   the thing it reaches destroys that view.** `mouseMoveEvent` emits
   `pane_drag_requested`; `start_session_drag` answers it with
