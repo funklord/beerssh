@@ -310,6 +310,11 @@ way sshd does: each paired device's session starts as the user
 and a device with no line there is refused and its key logged so it can
 be added. The service is installed switched off; the comment at the top
 of `beersshd-fuzznet.service` has the four commands that set it up.
+For one user's own sessions, no root is needed: the user unit
+`beersshd-fuzznet-user` (`systemctl --user enable --now
+beersshd-fuzznet-user`) serves the devices paired from BeerSSH's Pair
+Over Fuzznet, every session as that user, and refuses a map of other
+users; one user per machine can hold its port.
 
 ## Presets
 

@@ -47,3 +47,8 @@ override_dh_auto_install:
 # also waits for its map of devices to users, which nothing installs.
 override_dh_installsystemd:
 	dh_installsystemd --no-enable --no-start
+
+# And the per-user one: enabled, it would start for every user who logs in,
+# each serving fuzznet on beersshd's port. Each user turns on their own.
+override_dh_installsystemduser:
+	dh_installsystemduser --no-enable

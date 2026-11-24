@@ -1,0 +1,33 @@
+# beersshd as one user's fuzznet host (project.md sec 5.6): BeerSSH's kept
+# sessions for the devices this user paired, every one of them as this user
+# and nobody else -- a daemon a user runs cannot become anybody else, and
+# refuses a map of devices to users (that is the root daemon's,
+# beersshd-fuzznet.service).
+#
+# Its store is fuzznet's default, $XDG_DATA_HOME/fuzznet, the one BeerSSH's
+# Pair Over Fuzznet pairs into over SSH, so a device paired from the app
+# reaches it with nothing more. Shipped, not enabled. Once, as the user:
+#
+#   beersshd --fuzznet --new-root        (if this user has no host yet)
+#   systemctl --user enable --now beersshd-fuzznet-user
+#   loginctl enable-linger               (to serve while logged out)
+#
+# Without lingering, systemd stops a user's services when their last login
+# ends, and this one with them.
+#
+# One user per machine at beersshd's port: a second user's would find it
+# taken. Where several users want their sessions over fuzznet, the root
+# daemon serves them all, each as themself.
+[Unit]
+Description=beersshd fuzznet host for this user's BeerSSH kept sessions
+Documentation=man:beersshd(1)
+
+[Service]
+ExecStart=/usr/bin/beersshd --fuzznet --sessions
+Restart=on-failure
+# A session started for a device lives in its own process: stopping or
+# restarting the daemon must not end it.
+KillMode=process
+
+[Install]
+WantedBy=default.target

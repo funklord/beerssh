@@ -2002,6 +2002,10 @@ install: $(ARTIFACTS) $(SESSION_BIN)
 	mkdir -p $(DESTDIR)$(PREFIX)/lib/systemd/system
 	install -m 0644 packaging/beersshd-fuzznet.service \
 	        $(DESTDIR)$(PREFIX)/lib/systemd/system/beersshd-fuzznet.service
+	# And one user's, also left for the user to enable.
+	mkdir -p $(DESTDIR)$(PREFIX)/lib/systemd/user
+	install -m 0644 packaging/beersshd-fuzznet-user.service \
+	        $(DESTDIR)$(PREFIX)/lib/systemd/user/beersshd-fuzznet-user.service
 
 	# What a server needs for a kept shell (sec 5.6), packaged apart as well:
 	# a server has no use for the terminal and its Qt.
@@ -2164,6 +2168,7 @@ uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/$(SSHD_TARGET)
 	rm -f $(DESTDIR)$(PREFIX)/share/man/man1/$(SSHD_MAN_PAGE)
 	rm -f $(DESTDIR)$(PREFIX)/lib/systemd/system/beersshd-fuzznet.service
+	rm -f $(DESTDIR)$(PREFIX)/lib/systemd/user/beersshd-fuzznet-user.service
 	rm -f $(DESTDIR)$(PREFIX)/share/bash-completion/completions/$(TARGET)
 	rm -f $(DESTDIR)$(PREFIX)/share/applications/$(APP_ID).desktop
 	rm -f $(DESTDIR)$(PREFIX)/share/metainfo/$(APP_ID).metainfo.xml

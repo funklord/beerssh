@@ -1,3 +1,4 @@
 usr/bin/beersshd
 usr/share/man/man1/beersshd.1
 usr/lib/systemd/system/beersshd-fuzznet.service
+usr/lib/systemd/user/beersshd-fuzznet-user.service

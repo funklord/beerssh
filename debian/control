@@ -41,6 +41,13 @@ Description: SFTP-only server for one folder
  Started with --sessions it also runs beerssh-session for a login
  that asks, so BeerSSH's shell there survives a dropped connection.
  That is a shell as the server's user, so it is off by default.
+ .
+ With --fuzznet it is a fuzznet host instead, reached by paired
+ devices with no SSH login. Two systemd units are shipped, neither
+ enabled: beersshd-fuzznet, run by root, starts each device's
+ session as the user /etc/beersshd/fuzznet-users maps it to; and
+ the user unit beersshd-fuzznet-user, which a user enables for
+ their own sessions only.
 
 Package: beerssh-session
 Architecture: any

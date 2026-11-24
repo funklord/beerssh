@@ -2328,6 +2328,17 @@ beersshd run by a user is exactly what it was.
   keeps its store in `/var/lib/beersshd`, and has `KillMode=process`, as
   sshd's unit does, so a restart leaves sessions running. The unit's
   comment has the four commands that set it up.
+- **And a user's own, without root** (2026-11-24, the holder: "beersshd
+  can be run as a user too, to log in only as that user, right?" -- yes,
+  as it always could): `packaging/beersshd-fuzznet-user.service`, a
+  systemd user unit, `beersshd --fuzznet --sessions` on fuzznet's default
+  store, the one Pair Over Fuzznet pairs into over SSH, so a device paired
+  from the app reaches it with nothing more. Every session is that user's;
+  `--users` is refused there. Shipped and not enabled
+  (`dh_installsystemduser --no-enable`, since enabled it would start for
+  every user who logs in); serving while logged out needs `loginctl
+  enable-linger`. One user per machine can hold beersshd's port; several
+  users are the root daemon's case.
 - **Tests, built 2026-11-24:** the map, the refusals and the environment
   as a user, in `sshd_test` (Linux only, under `BSSH_TEST_FUZZNET_USERS`;
   `tool/sabotage/fuzznet-users.toml`), and a user's `--users` refused in
