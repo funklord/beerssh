@@ -2272,6 +2272,77 @@ maybe we should put it in beersshd if it links fuzznet." beersshd linked nothing
 fuzznet then (it does since 2026-11-18, above); the split proposed in its sec 925 is that fuzznet carries and gates, and
 beersshd starts the process. A service started as the right user is unbuilt.
 
+**Planned 2026-11-24, the holder's go-ahead ("ok do that"): beersshd as a
+root fuzznet daemon, sshd's shape.** The same program, run by root: `beersshd --fuzznet --sessions
+--users=FILE --fuzznet-dir=/var/lib/beersshd/fuzznet`, from a system
+service. Each paired device that speaks is started as the user FILE maps
+its key to, as sshd starts a login as the user it authenticated. What
+stays as it is: pairing, revoking and who may speak are fuzznet's, and a
+beersshd run by a user is exactly what it was.
+
+- **The user map, FILE** (the unit names `/etc/beersshd/fuzznet-users`):
+  a line per device, its public key as 64 hex digits, then a user name;
+  `#` starts a comment. Read again for every new session, so an edit
+  applies without a restart, and a removed line refuses that device's next
+  session. **Checked as sshd's StrictModes checks:** a regular file owned
+  by root, writable by nobody else, in a directory owned by root and
+  writable by nobody else. A map that fails a check refuses every new
+  session and says why; the daemon goes on serving nothing rather than
+  guessing. A key twice, a malformed line or a name that is not a user
+  name refuses the whole map, not one line, so a typo cannot quietly
+  grant or drop the wrong device.
+- **Refusals, each logged:** as root, `--sessions` without `--users`
+  refuses to start, since every paired device would get a root shell; a
+  user, `--users` refuses to start, since only root can start a shell as
+  somebody else. A device with no line is refused and its key logged,
+  which is how an administrator learns the key to write. A user not in
+  the password database, **uid 0** (root is never a fuzznet login: map a
+  user and use sudo), an account past its expiry date, a shell that is
+  not executable, and any non-root user while `/etc/nologin` exists, as
+  sshd does without PAM.
+- **The drop**, in the forked child before the helper runs: the user and
+  their groups looked up first (`getpwnam_r`, `getgrouplist`), then
+  `setgroups`, `setgid`, `setuid` in that order, then checked: real and
+  effective ids are the user's and `setuid(0)` fails. Any step failing ends
+  the child before anything runs. Then `chdir` to the home directory, `/`
+  where it cannot, and an environment built from the password entry, not
+  inherited: `HOME`, `USER`, `LOGNAME`, `SHELL`, a plain `PATH`,
+  `XDG_RUNTIME_DIR` only where `/run/user/<uid>` exists, is the user's and
+  is closed to others (the helper falls back to its own directory under
+  `/tmp`), and the daemon's `LANG` and `TZ`.
+- **Not done, and said so:** no PAM, so no `limits.conf`, no logind
+  session (the session lives outside the user's slice, and `/run/user`
+  may be absent), no `utmp`/`wtmp` or `lastlog` entry. sshd built without
+  PAM is the same. Each is a later step if wanted.
+- **Pairing a device with the root daemon** is root's: `sudo beersshd
+  --fuzznet-pair --fuzznet-dir=/var/lib/beersshd/fuzznet`. The app's Pair
+  Over Fuzznet runs `beersshd --fuzznet-pair` as the SSH user, into that
+  user's own store, so it pairs with a user's daemon and not this one.
+  **Open, the holder's:** whether the app should pair with a system
+  daemon, which would need a way for a user to ask root to add a device
+  and its line.
+- **The service is shipped, not enabled**: a root daemon on a UDP port
+  is the administrator's to turn on. `packaging/beersshd-fuzznet.service`,
+  installed with beersshd and left off by `dh_installsystemd --no-enable
+  --no-start`; it starts only once `/etc/beersshd/fuzznet-users` exists,
+  keeps its store in `/var/lib/beersshd`, and has `KillMode=process`, as
+  sshd's unit does, so a restart leaves sessions running. The unit's
+  comment has the four commands that set it up.
+- **Tests, built 2026-11-24:** the map, the refusals and the environment
+  as a user, in `sshd_test` (Linux only, under `BSSH_TEST_FUZZNET_USERS`;
+  `tool/sabotage/fuzznet-users.toml`), and a user's `--users` refused in
+  `tool/check-fuzznet.sh`. The drop needs root, so
+  `tool/check-fuzznet-root.sh` (`make check-fuzznet-root`) runs as root
+  where there is root: in check-ci's machine before the suite goes to its
+  user, and on GitHub's Linux runner under `sudo -n`. It makes a user,
+  pairs a device, and puts a stand-in helper beside beersshd that writes
+  down the uid, groups and environment it really ran with: root without a
+  map, an unmapped device (whose key the log gives), a group-writable map
+  and a line naming root are refused, and the mapped device's session
+  runs as the user, never 0, the map's line added without a restart. A
+  hull vm was the first plan; check-ci's machine already is root and
+  already switches to a user, so it needed nothing new.
+
 The holder's point, 2026-11-06: fuzznet already maintains host keys and
 authentication for other software, so setup is simpler there. Trust is settled
 once per device, not per host, which replaces both the host key prompt and copying

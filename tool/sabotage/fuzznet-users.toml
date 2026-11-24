@@ -1,0 +1,59 @@
+# The root fuzznet daemon's map of devices to users and its login checks
+# (src/sshd/fuzznet_users.c, project.md sec 5.6). What needs root -- the
+# drop itself -- is the hull vm test's; these are what a user can test.
+
+[[sabotage]]
+name = "a device named twice is taken"
+file = "src/sshd/fuzznet_users.c"
+find = "\t\t\tif (!memcmp(out[other].key, entry->key, BSSH_FUZZNET_KEY_LEN))\n"
+replace = "\t\t\tif (0)\n"
+expect = "the_user_map_refuses_the_whole_map_for_one_bad_line"
+
+[[sabotage]]
+name = "any word is a user name"
+file = "src/sshd/fuzznet_users.c"
+find = "\t\tif (!name_is_user_name(text + user_start, user_len))\n\t\t\treturn fail(why, why_capacity, \"line %d: not a user name\", line);\n"
+replace = ""
+expect = "the_user_map_refuses_the_whole_map_for_one_bad_line"
+
+[[sabotage]]
+name = "a map others may write is read"
+file = "src/sshd/fuzznet_users.c"
+find = "\treturn info->st_uid == owner && !(info->st_mode & (S_IWGRP | S_IWOTH));\n"
+replace = "\treturn info->st_uid == owner;\n"
+expect = "the_user_map_is_held_to_strict_modes"
+
+[[sabotage]]
+name = "the map is read through a link"
+file = "src/sshd/fuzznet_users.c"
+find = "\tconst int fd = open(path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);\n"
+replace = "\tconst int fd = open(path, O_RDONLY | O_CLOEXEC);\n"
+expect = "the_user_map_is_held_to_strict_modes"
+
+[[sabotage]]
+name = "root may be a fuzznet login"
+file = "src/sshd/fuzznet_users.c"
+find = "\tif (found->pw_uid == 0)\n"
+replace = "\tif (0)\n"
+expect = "a_login_is_refused_for_root_strangers_and_nologin"
+
+[[sabotage]]
+name = "/etc/nologin is not read"
+file = "src/sshd/fuzznet_users.c"
+find = "\tif (nologin && access(nologin, F_OK) == 0)\n"
+replace = "\tif (0)\n"
+expect = "a_login_is_refused_for_root_strangers_and_nologin"
+
+[[sabotage]]
+name = "a runtime directory open to others is used"
+file = "src/sshd/fuzznet_users.c"
+find = "\t\t    && !(info.st_mode & 077))\n"
+replace = "\t\t    )\n"
+expect = "a_login_environment_is_built_not_inherited"
+
+[[sabotage]]
+name = "becoming uid 0 is not refused"
+file = "src/sshd/fuzznet_users.c"
+find = "\tif (login->uid == 0) return fail(why, why_capacity, \"refused to become uid 0\");\n"
+replace = ""
+expect = "becoming_a_user_needs_root_and_never_becomes_root"

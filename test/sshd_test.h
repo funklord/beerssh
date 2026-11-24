@@ -24,6 +24,15 @@ private slots:
 	void init();
 	void cleanup();
 
+#ifdef BSSH_TEST_FUZZNET_USERS
+	/* The root fuzznet daemon's map and login (src/sshd/fuzznet_users.h). */
+	void the_user_map_refuses_the_whole_map_for_one_bad_line();
+	void the_user_map_is_held_to_strict_modes();
+	void a_login_is_refused_for_root_strangers_and_nologin();
+	void a_login_environment_is_built_not_inherited();
+	void becoming_a_user_needs_root_and_never_becomes_root();
+#endif
+
 	void a_client_path_never_climbs_above_the_root();
 	void a_symlink_out_of_the_root_is_not_followed();
 	void the_root_itself_is_never_removed_or_replaced();

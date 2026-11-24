@@ -20,6 +20,12 @@ set -u
 bin=${1:?usage: check-fuzznet.sh path/to/beersshd path/to/beerssh-session path/to/probe}
 helper=${2:?usage: check-fuzznet.sh path/to/beersshd path/to/beerssh-session path/to/probe}
 probe=${3:?usage: check-fuzznet.sh path/to/beersshd path/to/beerssh-session path/to/probe}
+# A user's check: as root, --sessions without a map of devices to users
+# refuses to start, and root's half is check-fuzznet-root.sh.
+if [ "$(id -u)" = 0 ]; then
+	echo "check-fuzznet: run as a user; as root, tool/check-fuzznet-root.sh is the check" >&2
+	exit 1
+fi
 dir=$(mktemp -d)
 server=
 finish() {
@@ -113,5 +119,19 @@ if said=$(timeout 30 "$probe" "$image" 127.0.0.1 "$port" 2>/dev/null); then
 fi
 stop
 
+# A map of devices to users is root's: a user's daemon given one refuses to
+# start, rather than serve sessions it cannot start as anybody else
+# (project.md sec 5.6, the root fuzznet daemon).
+if [ "$(id -u)" != 0 ]; then
+	timeout 20 "$bin" --fuzznet --fuzznet-dir="$dir/server" --sessions \
+	        --users="$dir/fuzznet-users" >/dev/null 2>"$dir/err"
+	code=$?
+	if [ "$code" != 2 ] || ! grep -q -- '--users needs root' "$dir/err"; then
+		echo "check-fuzznet: FAILED -- a user's beersshd took --users (exit $code):" \
+		     "$(head -c 300 "$dir/err")" >&2
+		exit 1
+	fi
+fi
+
 echo "check-fuzznet: paired with beersshd --fuzznet-pair; the helper answered over fuzznet with" \
-     "--sessions, again to a new stream, and nothing answered without"
+     "--sessions, again to a new stream, nothing answered without, and a user's --users refused"

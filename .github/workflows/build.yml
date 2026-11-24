@@ -112,6 +112,11 @@ jobs:
         run: make doc
       - name: Headless smoke test
         run: make test
+      # beersshd as a root fuzznet daemon (project.md sec 5.6): the drop to
+      # a mapped user needs root, which the suite above never has. Built as
+      # the runner's user, run under its passwordless sudo.
+      - name: Root fuzznet daemon
+        run: make check-fuzznet-root
 
   # sec 1: macOS is best-effort -- "it should build, and breakage there is
   # a bug". Nothing built it until this job, so nothing could know.

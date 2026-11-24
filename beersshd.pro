@@ -149,11 +149,13 @@ android {
     DEFINES += BSSH_FUZZNET
     SOURCES += src/sshd/fuzznet_pair.cpp \
                src/sshd/fuzznet_node.c \
+               src/sshd/fuzznet_users.c \
                src/session/stream.c \
                src/session/generated/frame.c \
                src/session/generated/situ.c
     HEADERS += src/sshd/fuzznet_pair.h \
                src/sshd/fuzznet_node.h \
+               src/sshd/fuzznet_users.h \
                src/session/stream.h
     QMAKE_CFLAGS += -I$$BSSH_FUZZNET_DIR -I$$BSSH_FUZZNET_DIR/node -I$$BSSH_FUZZNET_DIR/wire/generated
     QMAKE_CFLAGS_RELEASE -= -O2

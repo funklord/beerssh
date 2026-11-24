@@ -13,6 +13,13 @@
  * speak (`remote/permit/said`) would otherwise get a shell as this user
  * without anybody having said it should.
  *
+ * AS ROOT, A USER PER DEVICE, `--users=FILE` (fuzznet_users.h, project.md
+ * sec 5.6): each device's session starts as the user the map names for its
+ * key, as sshd starts a login as the user it authenticated. Root with
+ * `--sessions` and no map refuses to start, since every paired device would
+ * get a root shell; a map without root refuses too, since only root can
+ * start a shell as somebody else.
+ *
  * ONE LOOP, fuzznet's: the helpers' descriptors are polled in it (`fds`,
  * `ready`), and everything that sends runs from `tick`, which fuzznet calls
  * after every pass and at least about once a second -- so a timeout the
@@ -39,6 +46,7 @@
 
 #include "../posix_compat.h"
 #include "../session/stream.h"
+#include "fuzznet_users.h"
 #include "chain/service.h"
 #include "node/daemon.h"
 
@@ -77,11 +85,19 @@ typedef struct link {
 	size_t to_helper_len;
 } link_t;
 
+_Static_assert(FZN_PUBKEY_LEN == BSSH_FUZZNET_KEY_LEN, "a device's key is the map's key");
+
 static struct {
 	int sessions;
 	char helper[PATH_MAX];
+	/* Root's map of devices to users, or empty for a daemon run by a user. */
+	char users[PATH_MAX];
 	link_t links[LINKS_MAX];
 } node;
+
+/* What /etc/nologin is for sshd without PAM. */
+#define NOLOGIN_PATH "/etc/nologin"
+#define RUNTIME_ROOT "/run/user"
 
 static uint64_t now_ms(void) {
 	struct timespec ts;
@@ -115,9 +131,51 @@ static void end_link(link_t *link) {
 
 /*
  * The helper with the words the command named, its stdin and stdout one
- * socket here, and nothing else of this process's held open in it.
+ * socket here, and nothing else of this process's held open in it. As root,
+ * as the user the map names for the link's device, decided here, before the
+ * fork, so a refusal is logged by the daemon and nothing is started.
  */
 static int start_helper(link_t *link, char *const argv[]) {
+	bssh_login_t login;
+	char *envp[16];
+	char storage[8192];
+	const int as_user = node.users[0] != '\0';
+	/*
+	 * Never a helper as root: main() refuses root with --sessions and no
+	 * map before fuzznet starts, and this refuses again where it matters,
+	 * so no later change to how options arrive can open a root shell.
+	 */
+	if (!as_user && geteuid() == 0) {
+		fprintf(stderr, "beersshd: refused a fuzznet session: root with no map of devices to users\n");
+		return 0;
+	}
+	if (as_user) {
+		static bssh_fuzznet_user_t map[BSSH_FUZZNET_USERS_MAX];
+		char why[256] = "";
+		char key[2 * BSSH_FUZZNET_KEY_LEN + 1];
+		bssh_fuzznet_key_hex(link->host, key);
+		/* Read again each time, so an edit or a removed line applies at once. */
+		const int count = bssh_fuzznet_users_load(node.users, 0, map, BSSH_FUZZNET_USERS_MAX, why, sizeof(why));
+		if (count < 0) {
+			fprintf(stderr, "beersshd: no fuzznet session for %s: the user map: %s\n", key, why);
+			return 0;
+		}
+		const char *user = bssh_fuzznet_user_for(map, count, link->host);
+		if (!user) {
+			fprintf(stderr, "beersshd: no fuzznet session for %s: no line in %s names it\n", key,
+			        node.users);
+			return 0;
+		}
+		if (bssh_login_lookup(user, NOLOGIN_PATH, &login, why, sizeof(why)) != 0
+		    || bssh_login_environment(&login, RUNTIME_ROOT, envp, sizeof(envp) / sizeof(envp[0]), storage,
+		                              sizeof(storage)) != 0) {
+			fprintf(stderr, "beersshd: no fuzznet session for %s as %s: %s\n", key, user,
+			        why[0] ? why : "its environment does not fit");
+			return 0;
+		}
+		fprintf(stderr, "beersshd: fuzznet session for %s as %s\n", key, user);
+	}
+
 	int io[2];
 	if (socketpair(AF_UNIX, SOCK_STREAM, 0, io) != 0) return 0;
 	if (bssh_set_fd_flags(io[0], BSSH_CLOEXEC | BSSH_NONBLOCK) != 0 || bssh_no_sigpipe(io[0]) != 0) {
@@ -141,6 +199,16 @@ static int start_helper(link_t *link, char *const argv[]) {
 		/* stderr stays the node's, whose log is where a helper's trouble belongs. */
 		for (int fd = STDERR_FILENO + 1; fd < highest; ++fd) close(fd);
 		signal(SIGPIPE, SIG_DFL);
+		if (as_user) {
+			char why[256];
+			if (bssh_login_become(&login, why, sizeof(why)) != 0) {
+				fprintf(stderr, "beersshd: not started as %s: %s\n", login.name, why);
+				_exit(126);
+			}
+			if (chdir(login.home) != 0 && chdir("/") != 0) _exit(126);
+			execve(node.helper, argv, envp);
+			_exit(127);
+		}
 		execv(node.helper, argv);
 		_exit(127);
 	}
@@ -343,7 +411,12 @@ static const char *helper_beside(void) {
 
 static const char *option(void *ctx, const char *name, const char *value) {
 	(void)ctx;
-	(void)value;
+	if (!strcmp(name, "--users")) {
+		if (!value || value[0] != '/') return "--users needs the map's absolute path";
+		if (snprintf(node.users, sizeof(node.users), "%s", value) >= (int)sizeof(node.users))
+			return "--users: the path is too long";
+		return NULL;
+	}
 	if (strcmp(name, "--sessions") != 0) return "unknown option";
 	const char *why = helper_beside();
 	if (why) return why;
@@ -355,6 +428,10 @@ static const fzn_daemon_option_t options[] = {
 	{ "--sessions", 0,
 	  "carry BeerSSH's sessions that survive a dropped connection to paired hosts that may "
 	  "speak here (remote/permit/said), as beersshd --sessions does over SSH" },
+	{ "--users", 1,
+	  "as root, start each device's session as the user the map at VALUE names for its key: "
+	  "a line per device, 64 hex digits and a user name, in a file and directory only root "
+	  "may write; root with --sessions needs it" },
 };
 
 static const fzn_daemon_ext_t extension = {
@@ -379,6 +456,24 @@ int bssh_fuzznet_main(int argc, char **argv) {
 	/* First, before anything is opened: it may execute this program again. */
 	fzn_daemon_refuse_huge_pages(argv);
 	for (size_t i = 0; i < LINKS_MAX; ++i) node.links[i].io = -1;
+
+	/*
+	 * Who may start whom, settled before fuzznet takes the process: root
+	 * serving sessions with no map would hand every paired device a root
+	 * shell, and a map in a user's daemon names users it cannot become.
+	 */
+	const int sessions = given(argc, argv, "--sessions");
+	const int users = given(argc, argv, "--users");
+	if (geteuid() == 0 && sessions && !users) {
+		fprintf(stderr, "beersshd: as root, --sessions needs --users=FILE, the map of devices to "
+		                "users; root itself is never a fuzznet login\n");
+		return 2;
+	}
+	if (geteuid() != 0 && users) {
+		fprintf(stderr, "beersshd: --users needs root, since only root can start a session as "
+		                "another user\n");
+		return 2;
+	}
 
 	/*
 	 * beerssh's numbers, fuzznet's to assign (its chain/service.h): every

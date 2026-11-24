@@ -363,6 +363,16 @@ QMAKE_CFLAGS   += -MMD -MP
 QMAKE_CXXFLAGS += -MMD -MP
 QMAKE_CLEAN    += *.d
 
+# beersshd's map of fuzznet devices to users and its drop to one (project.md
+# sec 5.6): plain C over Linux's password, group and shadow calls, which is
+# where the root fuzznet daemon runs; macOS spells getgrouplist differently
+# and Windows has none of them.
+linux {
+    DEFINES += BSSH_TEST_FUZZNET_USERS
+    SOURCES += ../src/sshd/fuzznet_users.c
+    HEADERS += ../src/sshd/fuzznet_users.h
+}
+
 # Windows (sec 1, best-effort): what beerssh.pro leaves out there, and the
 # classes that test only it -- the local shell (forkpty), moving a session
 # between processes (SCM_RIGHTS), the session helper's host side, and

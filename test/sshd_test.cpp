@@ -27,6 +27,12 @@
 #include "model/session.h"
 #include "sshd/root_path.h"
 #include "sshd/sshd.h"
+#ifdef BSSH_TEST_FUZZNET_USERS
+#include "sshd/fuzznet_users.h"
+
+#include <pwd.h>
+#include <sys/wait.h>
+#endif
 #include "term/emulator.h"
 
 namespace {
@@ -134,6 +140,221 @@ void sshd_test::cleanup() {
 	m_pair_device = nullptr;
 	m_dir.reset();
 }
+
+#ifdef BSSH_TEST_FUZZNET_USERS
+namespace {
+
+const char *const key_a = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
+const char *const key_b = "ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100";
+
+int parse(const QByteArray &text, bssh_fuzznet_user_t *map, int capacity, QString *why_out = nullptr) {
+	char why[256] = "";
+	const int count = bssh_fuzznet_users_parse(text.constData(), size_t(text.size()), map, capacity, why,
+	                                           sizeof(why));
+	if (why_out) *why_out = QString::fromUtf8(why);
+	return count;
+}
+
+QString this_user() {
+	const struct passwd *entry = getpwuid(getuid());
+	return entry ? QString::fromLocal8Bit(entry->pw_name) : QString();
+}
+
+}  // namespace
+
+void sshd_test::the_user_map_refuses_the_whole_map_for_one_bad_line() {
+	/*
+	 * The root fuzznet daemon's map (project.md sec 5.6): a line per
+	 * device, its key and a user. A bad line refuses the whole map, so a
+	 * typo can neither quietly grant a device nor quietly drop one.
+	 */
+	bssh_fuzznet_user_t map[4];
+	const QByteArray good = QByteArray("# the holder's phone\n\n") + key_a + "  alice\r\n\t" + key_b
+	                        + "\tbob   # the tablet\n";
+	QCOMPARE(parse(good, map, 4), 2);
+	uint8_t key[BSSH_FUZZNET_KEY_LEN];
+	for (int i = 0; i < BSSH_FUZZNET_KEY_LEN; ++i) key[i] = map[1].key[i];
+	QCOMPARE(QString::fromUtf8(bssh_fuzznet_user_for(map, 2, key)), QStringLiteral("bob"));
+	char hex[2 * BSSH_FUZZNET_KEY_LEN + 1];
+	bssh_fuzznet_key_hex(map[0].key, hex);
+	QCOMPARE(QByteArray(hex), QByteArray(key_a));
+	key[0] ^= 1;
+	QVERIFY2(!bssh_fuzznet_user_for(map, 2, key), "a key one bit off found a user");
+
+	const struct {
+		QByteArray text;
+		const char *says;
+	} bad[] = {
+		{ QByteArray(key_a) + " alice\n" + QByteArray(key_b).left(62) + " bob\n", "line 2" },
+		{ QByteArray(key_a).replace(5, 1, "g") + " alice\n", "hex" },
+		{ QByteArray(key_a) + " alice\n" + key_a + " bob\n", "a line above" },
+		{ QByteArray(key_a) + " alice extra\n", "more than" },
+		{ QByteArray(key_a) + "\n", "no user" },
+		{ QByteArray(key_a) + " -alice\n", "user name" },
+		{ QByteArray(key_a) + " ../etc\n", "user name" },
+		{ QByteArray(key_a) + QByteArray(" al\0ice\n", 8), "NUL" },
+	};
+	for (const auto &each : bad) {
+		QString why;
+		QCOMPARE(parse(each.text, map, 4, &why), -1);
+		QVERIFY2(why.contains(QString::fromUtf8(each.says)), qPrintable(why));
+	}
+	QString why;
+	QCOMPARE(parse(QByteArray(key_a) + " a\n" + key_b + " b\n", map, 1, &why), -1);
+	QVERIFY2(why.contains(QStringLiteral("more than 1")), qPrintable(why));
+}
+
+void sshd_test::the_user_map_is_held_to_strict_modes() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	QFile::setPermissions(dir.path(), QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+	const QString path = dir.filePath(QStringLiteral("fuzznet-users"));
+	QFile file(path);
+	QVERIFY(file.open(QIODevice::WriteOnly));
+	file.write(QByteArray(key_a) + " alice\n");
+	file.close();
+	QVERIFY(QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner));
+
+	bssh_fuzznet_user_t map[4];
+	char why[256];
+	const auto load = [&](const QString &at, uid_t owner) {
+		why[0] = '\0';
+		return bssh_fuzznet_users_load(QFile::encodeName(at).constData(), owner, map, 4, why, sizeof(why));
+	};
+	QCOMPARE(load(path, getuid()), 1);
+
+	QCOMPARE(load(path, getuid() + 1), -1);
+	QVERIFY2(QByteArray(why).contains("only uid"), why);
+
+	QVERIFY(QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner | QFile::WriteGroup));
+	QCOMPARE(load(path, getuid()), -1);
+	QVERIFY(QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner));
+
+	QVERIFY(QFile::setPermissions(dir.path(), QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner
+	                                                  | QFile::WriteOther | QFile::ExeOther));
+	QCOMPARE(load(path, getuid()), -1);
+	QVERIFY2(QByteArray(why).contains("not a directory only"), why);
+	QFile::setPermissions(dir.path(), QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+
+	/* Not through a link: what is checked must be what is read. */
+	const QString link = dir.filePath(QStringLiteral("linked"));
+	QVERIFY(QFile::link(path, link));
+	QCOMPARE(load(link, getuid()), -1);
+
+	QCOMPARE(load(QStringLiteral("relative/fuzznet-users"), getuid()), -1);
+	QCOMPARE(load(dir.filePath(QStringLiteral("absent")), getuid()), -1);
+	QCOMPARE(load(path, getuid()), 1);
+}
+
+void sshd_test::a_login_is_refused_for_root_strangers_and_nologin() {
+	bssh_login_t login;
+	char why[256];
+	QCOMPARE(bssh_login_lookup("root", nullptr, &login, why, sizeof(why)), -1);
+	QVERIFY2(QByteArray(why).contains("uid 0"), why);
+	QCOMPARE(bssh_login_lookup("bssh-no-such-user", nullptr, &login, why, sizeof(why)), -1);
+	QCOMPARE(bssh_login_lookup("-oops", nullptr, &login, why, sizeof(why)), -1);
+
+	const QString me = this_user();
+	if (me.isEmpty() || getuid() == 0) QSKIP("needs a user other than root in the password database");
+	QTemporaryDir dir;
+	const QByteArray nologin = QFile::encodeName(dir.filePath(QStringLiteral("nologin")));
+	QCOMPARE(bssh_login_lookup(me.toLocal8Bit().constData(), nologin.constData(), &login, why, sizeof(why)), 0);
+	QCOMPARE(login.uid, getuid());
+	QVERIFY(login.group_count >= 1);
+	QVERIFY(login.shell[0] == '/');
+
+	QFile marker(QString::fromLocal8Bit(nologin));
+	QVERIFY(marker.open(QIODevice::WriteOnly));
+	marker.close();
+	QCOMPARE(bssh_login_lookup(me.toLocal8Bit().constData(), nologin.constData(), &login, why, sizeof(why)), -1);
+	QVERIFY2(QByteArray(why).contains("logins are off"), why);
+}
+
+void sshd_test::a_login_environment_is_built_not_inherited() {
+	bssh_login_t login;
+	memset(&login, 0, sizeof(login));
+	login.uid = getuid();
+	login.gid = getgid();
+	strcpy(login.name, "someone");
+	strcpy(login.home, "/home/someone");
+	strcpy(login.shell, "/bin/sh");
+
+	QTemporaryDir runtime;
+	const QString own = runtime.filePath(QString::number(getuid()));
+	QVERIFY(QDir().mkdir(own));
+	QVERIFY(QFile::setPermissions(own, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+
+	qputenv("BSSH_DAEMON_ONLY", "secret");
+	qputenv("LANG", "sv_SE.UTF-8");
+	const auto restore = qScopeGuard([] { qunsetenv("BSSH_DAEMON_ONLY"); });
+	const auto made = [&] {
+		char *envp[16];
+		char storage[4096];
+		const QByteArray root = QFile::encodeName(runtime.path());
+		QStringList out;
+		if (bssh_login_environment(&login, root.constData(), envp, 16, storage, sizeof(storage)) != 0)
+			return QStringList{ QStringLiteral("FAILED") };
+		for (char **at = envp; *at; ++at) out << QString::fromLocal8Bit(*at);
+		return out;
+	};
+	QStringList env = made();
+	QVERIFY2(env.contains(QStringLiteral("HOME=/home/someone")), qPrintable(env.join(' ')));
+	QVERIFY(env.contains(QStringLiteral("USER=someone")));
+	QVERIFY(env.contains(QStringLiteral("LOGNAME=someone")));
+	QVERIFY(env.contains(QStringLiteral("SHELL=/bin/sh")));
+	QVERIFY(env.contains(QStringLiteral("LANG=sv_SE.UTF-8")));
+	QVERIFY(env.contains(QStringLiteral("XDG_RUNTIME_DIR=") + own));
+	for (const QString &each : env)
+		QVERIFY2(!each.startsWith(QStringLiteral("BSSH_DAEMON_ONLY")), "the daemon's environment leaked");
+
+	/* A runtime directory open to others is no place for the helper's sockets. */
+	QVERIFY(QFile::setPermissions(own, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner
+	                                           | QFile::ReadOther | QFile::ExeOther));
+	env = made();
+	for (const QString &each : env)
+		QVERIFY2(!each.startsWith(QStringLiteral("XDG_RUNTIME_DIR=")), qPrintable(each));
+
+	char *few[3];
+	char storage[4096];
+	QCOMPARE(bssh_login_environment(&login, nullptr, few, 3, storage, sizeof(storage)), -1);
+}
+
+void sshd_test::becoming_a_user_needs_root_and_never_becomes_root() {
+	bssh_login_t login;
+	memset(&login, 0, sizeof(login));
+	char why[256];
+	login.uid = 0;
+	QCOMPARE(bssh_login_become(&login, why, sizeof(why)), -1);
+	QVERIFY2(QByteArray(why).contains("uid 0"), why);
+
+	if (geteuid() == 0) QSKIP("as root the change would succeed; the hull vm test covers that");
+	/* In a child, so that whatever it does is not this process's. */
+	login.uid = getuid() + 1;
+	login.gid = getgid() + 1;
+	login.group_count = 0;
+	int pipe_fds[2];
+	QVERIFY(pipe(pipe_fds) == 0);
+	const pid_t child = fork();
+	QVERIFY(child >= 0);
+	if (child == 0) {
+		close(pipe_fds[0]);
+		char said[256] = "";
+		const int result = bssh_login_become(&login, said, sizeof(said));
+		const ssize_t wrote = write(pipe_fds[1], result == 0 ? "BECAME" : said, strlen(result == 0 ? "BECAME" : said));
+		(void)wrote;
+		_exit(0);
+	}
+	close(pipe_fds[1]);
+	QByteArray said;
+	char buffer[256];
+	ssize_t got;
+	while ((got = read(pipe_fds[0], buffer, sizeof(buffer))) > 0) said.append(buffer, int(got));
+	close(pipe_fds[0]);
+	waitpid(child, nullptr, 0);
+	QVERIFY2(said != "BECAME", "a user became another user");
+	QVERIFY2(said.contains("setgroups"), said.constData());
+}
+#endif
 
 void sshd_test::a_client_path_never_climbs_above_the_root() {
 	QCOMPARE(bssh_root_path::normalise(""), QByteArray("/"));

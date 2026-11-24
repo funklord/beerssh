@@ -1,0 +1,36 @@
+# beersshd as a root fuzznet daemon (project.md sec 5.6, "beersshd as a root
+# fuzznet daemon, sshd's shape"): BeerSSH's kept sessions for devices paired
+# with this host, each started as the user /etc/beersshd/fuzznet-users names
+# for the device's key.
+#
+# Shipped, not enabled: a root daemon on a UDP port is the administrator's to
+# turn on. Once, as root:
+#
+#   beersshd --fuzznet --fuzznet-dir=/var/lib/beersshd/fuzznet --new-root
+#   beersshd --fuzznet-pair --fuzznet-dir=/var/lib/beersshd/fuzznet
+#       (prints the device image the phone or desktop pastes)
+#   install -d -m 0755 /etc/beersshd
+#   install -m 0600 /dev/null /etc/beersshd/fuzznet-users
+#   systemctl enable --now beersshd-fuzznet
+#
+# The device's first try is refused and its key logged (journalctl -u
+# beersshd-fuzznet); add a line "KEY USER" to the map, and its next session
+# starts as USER. The map is read for every session, so no restart is needed.
+[Unit]
+Description=beersshd fuzznet host for BeerSSH's kept sessions
+Documentation=man:beersshd(1)
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/etc/beersshd/fuzznet-users
+
+[Service]
+ExecStart=/usr/bin/beersshd --fuzznet --fuzznet-dir=/var/lib/beersshd/fuzznet --sessions --users=/etc/beersshd/fuzznet-users
+StateDirectory=beersshd
+StateDirectoryMode=0700
+Restart=on-failure
+# As sshd's unit: a session started for a device lives in its own process,
+# and stopping or restarting the daemon must not end it.
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target

@@ -322,6 +322,16 @@ if ! make -j"$(nproc)" "$test_bin" >> /build/build.log 2>&1; then
 	exit 1
 fi
 cat /build/build.log
+
+# beersshd as a root fuzznet daemon (project.md sec 5.6), here where the
+# job is root and before the suite goes to its user: the drop to a mapped
+# user is the one thing the suite cannot try.
+if ! make check-fuzznet-root > /build/root.log 2>&1; then
+	cat /build/root.log
+	exit 1
+fi
+cat /build/root.log
+
 useradd -m check-ci
 if ! setpriv --reuid=check-ci --regid=check-ci --init-groups \
 	env HOME=/home/check-ci USER=check-ci QT_QPA_PLATFORM=offscreen \

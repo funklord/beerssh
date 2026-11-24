@@ -1102,6 +1102,21 @@ TEST_SESSION_BIN = $(if $(filter Linux,$(shell uname -s)),$(SESSION_BIN))
 check-fuzznet: $(SSHD_TARGET) $(SESSION_BIN) $(FUZZNET_PROBE)
 	tool/check-fuzznet.sh ./$(SSHD_TARGET) $(SESSION_BIN) $(FUZZNET_PROBE)
 
+# And as a root daemon starting each device's session as its mapped user
+# (tool/check-fuzznet-root.sh, project.md sec 5.6): built as whoever runs
+# make, run as root -- directly where make already is root, as in
+# check-ci's machine, and through `sudo -n` otherwise, as on GitHub's
+# runner. Not part of `make test`, which runs as a user and cannot drop to
+# another; `sudo -n` asks for no password, so a desktop without one fails
+# here at once rather than waiting at a prompt.
+.PHONY: check-fuzznet-root
+check-fuzznet-root: $(SSHD_TARGET) $(SESSION_BIN) $(FUZZNET_PROBE)
+	@if [ "$$(id -u)" = 0 ]; then \
+		tool/check-fuzznet-root.sh ./$(SSHD_TARGET) $(SESSION_BIN) $(FUZZNET_PROBE); \
+	else \
+		sudo -n tool/check-fuzznet-root.sh ./$(SSHD_TARGET) $(SESSION_BIN) $(FUZZNET_PROBE); \
+	fi
+
 test: check-build-tree $(TARGET) $(TEST_BIN) $(TEST_SESSION_BIN) $(TEST_FUZZNET)
 	@sandbox=$$(mktemp -d) && \
 	 HOME=$$sandbox XDG_CONFIG_HOME=$$sandbox/config XDG_DATA_HOME=$$sandbox/data \
@@ -1584,9 +1599,11 @@ $(ANDROID_FUZZNET_LIB): FORCE $(FUZZNET_LIB)
 	@$(MAKE) -s --no-print-directory -C $(FUZZNET_DIR) BUILD_DIR=$(abspath $(ANDROID_FUZZNET_BUILD)) \
 	         CC='$(NDK_BIN)/clang --target=$(ANDROID_TRIPLE)$(ANDROID_FUZZNET_API)' AR=$(NDK_BIN)/llvm-ar \
 	         FZN_LOG_PACK=0 PRESET=embedded-device daemon-lib
-$(ANDROID_FUZZNET_BIN): src/sshd/fuzznet_main.c src/sshd/fuzznet_node.c src/session/stream.c \
+$(ANDROID_FUZZNET_BIN): src/sshd/fuzznet_main.c src/sshd/fuzznet_node.c src/sshd/fuzznet_users.c \
+                        src/session/stream.c \
                         src/session/generated/frame.c src/session/generated/situ.c \
-                        $(wildcard src/sshd/fuzznet_node.h src/session/*.h src/session/generated/*.h) \
+                        $(wildcard src/sshd/fuzznet_node.h src/sshd/fuzznet_users.h src/session/*.h \
+                                   src/session/generated/*.h) \
                         $(ANDROID_FUZZNET_LIB)
 	@mkdir -p $(ANDROID_SESSION_DIR)
 	$(NDK_BIN)/clang --target=$(ANDROID_TRIPLE)$(ANDROID_FUZZNET_API) -std=gnu11 -Os -ffunction-sections \
@@ -1981,6 +1998,10 @@ install: $(ARTIFACTS) $(SESSION_BIN)
 	# beersshd, which debian/ packages apart from beerssh (sec 19).
 	install -m 0755 $(SSHD_TARGET) $(DESTDIR)$(PREFIX)/bin/$(SSHD_TARGET)
 	install -m 0644 $(SSHD_MAN_PAGE) $(DESTDIR)$(PREFIX)/share/man/man1/$(SSHD_MAN_PAGE)
+	# Its root fuzznet daemon's unit, shipped and not enabled (sec 5.6).
+	mkdir -p $(DESTDIR)$(PREFIX)/lib/systemd/system
+	install -m 0644 packaging/beersshd-fuzznet.service \
+	        $(DESTDIR)$(PREFIX)/lib/systemd/system/beersshd-fuzznet.service
 
 	# What a server needs for a kept shell (sec 5.6), packaged apart as well:
 	# a server has no use for the terminal and its Qt.
@@ -2142,6 +2163,7 @@ uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/share/man/man1/$(MAN_PAGE)
 	rm -f $(DESTDIR)$(PREFIX)/bin/$(SSHD_TARGET)
 	rm -f $(DESTDIR)$(PREFIX)/share/man/man1/$(SSHD_MAN_PAGE)
+	rm -f $(DESTDIR)$(PREFIX)/lib/systemd/system/beersshd-fuzznet.service
 	rm -f $(DESTDIR)$(PREFIX)/share/bash-completion/completions/$(TARGET)
 	rm -f $(DESTDIR)$(PREFIX)/share/applications/$(APP_ID).desktop
 	rm -f $(DESTDIR)$(PREFIX)/share/metainfo/$(APP_ID).metainfo.xml

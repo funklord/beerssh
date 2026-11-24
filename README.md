@@ -300,6 +300,17 @@ Modern `scp` works, since it speaks SFTP; `scp -O` does not. A path that
 leaves the folder — by `..` or through a symlink — is refused. See
 `project.md` §19.
 
+On a Linux server beersshd is also how BeerSSH reaches a host **directly
+over fuzznet**, with no SSH login: `beersshd --fuzznet --sessions` carries
+BeerSSH's kept sessions — shells that survive a dropped connection — to
+the devices paired with it. Run by a user, every session is that user's.
+Run by root, as the shipped `beersshd-fuzznet` service does, it works the
+way sshd does: each paired device's session starts as the user
+`/etc/beersshd/fuzznet-users` names for the device's key, never as root,
+and a device with no line there is refused and its key logged so it can
+be added. The service is installed switched off; the comment at the top
+of `beersshd-fuzznet.service` has the four commands that set it up.
+
 ## Presets
 
 A preset is a reusable set of terminal settings — `TERM`, scrollback,
