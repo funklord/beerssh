@@ -10035,6 +10035,13 @@ covered shape's divisions changed nothing measurable, so it went.
   the writers' output when the reader finds a secret missing, then decide
   whether going ahead unlocked should require the holder to be stopped or
   gone rather than merely slow (the debugger case the wait exists for).
+  **And a fourth, the same night, on Windows CI** (`df3625e`, a commit
+  touching only the terminals list): "writer b: a save was refused", and
+  the writer printed nothing, because the file store refused silently --
+  a failed re-read, open, write or rename all returned false unexplained.
+  Each now warns with its reason and the system's error (`secret store:
+  not re-read: ...`, `secret store: not saved: commit: ...`), which the
+  helper carries into the failure, so the next sighting names the step.
 - **A pane drag was raised from inside the view's own signal emission, and
   the thing it reaches destroys that view.** `mouseMoveEvent` emits
   `pane_drag_requested`; `start_session_drag` answers it with

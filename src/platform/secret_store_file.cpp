@@ -363,22 +363,33 @@ private:
 		const QString stamp = stamp_of(store_path());
 		if (stamp.isEmpty() || stamp == m_stamp) return true;
 
+		/*
+		 * Each refusal says why. Two processes saving at once lost a save
+		 * on Windows CI -- "a save was refused" -- with nothing printed to
+		 * tell a failed read from a failed write (2026-11-24, project.md
+		 * sec 8.4's store entry).
+		 */
+		const auto refuse = [](const QString &why) {
+			qWarning("secret store: not re-read: %s", qPrintable(why));
+			return false;
+		};
 		QFile file(store_path());
-		if (!file.open(QIODevice::ReadOnly)) return false;
+		if (!file.open(QIODevice::ReadOnly)) return refuse(QStringLiteral("open: ") + file.errorString());
 		const QByteArray blob = file.readAll();
 
 		const int header = int(sizeof(BSSH_MAGIC)) + 1 + BSSH_SALT_BYTES + BSSH_NONCE_BYTES;
-		if (blob.size() < header) return false;
-		if (blob.left(int(sizeof(BSSH_MAGIC))) != QByteArray(BSSH_MAGIC, sizeof(BSSH_MAGIC))) return false;
+		if (blob.size() < header) return refuse(QStringLiteral("%1 bytes, short").arg(blob.size()));
+		if (blob.left(int(sizeof(BSSH_MAGIC))) != QByteArray(BSSH_MAGIC, sizeof(BSSH_MAGIC)))
+			return refuse(QStringLiteral("not a store"));
 		int offset = int(sizeof(BSSH_MAGIC));
-		if (quint8(blob.at(offset++)) != BSSH_FORMAT_VERSION) return false;
-		if (blob.mid(offset, BSSH_SALT_BYTES) != m_salt) return false;
+		if (quint8(blob.at(offset++)) != BSSH_FORMAT_VERSION) return refuse(QStringLiteral("another version"));
+		if (blob.mid(offset, BSSH_SALT_BYTES) != m_salt) return refuse(QStringLiteral("another salt"));
 		offset += BSSH_SALT_BYTES;
 		const QByteArray nonce = blob.mid(offset, BSSH_NONCE_BYTES);
 		offset += BSSH_NONCE_BYTES;
 
 		const QByteArray plaintext = decrypt(blob.mid(offset), m_key, nonce);
-		if (plaintext.isEmpty()) return false;
+		if (plaintext.isEmpty()) return refuse(QStringLiteral("did not decrypt"));
 		m_secrets = QJsonDocument::fromJson(plaintext).object();
 		m_stamp = stamp;
 		return true;
@@ -424,7 +435,10 @@ private:
 		 */
 		file.setDirectWriteFallback(true);
 
-		if (!file.open(QIODevice::WriteOnly)) return false;
+		if (!file.open(QIODevice::WriteOnly)) {
+			qWarning("secret store: not saved: open: %s", qPrintable(file.errorString()));
+			return false;
+		}
 
 		/*
 		 * Owner-only, set on the temporary before it is renamed, so the
@@ -435,10 +449,16 @@ private:
 		 */
 		file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
 
-		if (file.write(blob) != blob.size()) return false;
+		if (file.write(blob) != blob.size()) {
+			qWarning("secret store: not saved: write: %s", qPrintable(file.errorString()));
+			return false;
+		}
 
 		/* commit() flushes, renames and reports -- close() would not. */
-		if (!file.commit()) return false;
+		if (!file.commit()) {
+			qWarning("secret store: not saved: commit: %s", qPrintable(file.errorString()));
+			return false;
+		}
 		m_stamp = stamp_of(store_path());
 		return true;
 	}
