@@ -1,6 +1,7 @@
 #ifndef BSSH_THEME_H
 #define BSSH_THEME_H
 
+#include <QIcon>
 #include <QObject>
 #include <QPalette>
 
@@ -63,5 +64,15 @@ signals:
 	/* An appearance was applied, and the terminal default with it. */
 	void appearance_applied();
 };
+
+/*
+ * The window icon: the icon theme's, where the package installed it
+ * (sec 12.2), else the one compiled in -- the SVG the package installs
+ * where Qt can read SVG, and its 128-pixel PNG where it cannot, as on
+ * Windows without Qt's SVG plugins (2026-11-24: no window icon there).
+ * Both compiled-in files are the packaging's own (resources.qrc), not
+ * copies.
+ */
+QIcon bssh_window_icon();
 
 #endif /* BSSH_THEME_H */

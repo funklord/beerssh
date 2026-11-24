@@ -7,3 +7,11 @@ file = "resources.qrc"
 find = "        <file alias=\"se.vibes.beerssh.svg\">packaging/se.vibes.beerssh.svg</file>\n"
 replace = ""
 expect = "the_window_icon_draws_with_no_icon_theme"
+
+# Where Qt reads no SVG (Windows without its plugins) the PNG is the icon.
+[[sabotage]]
+name = "no PNG for a Qt without SVG"
+file = "resources.qrc"
+find = "        <file alias=\"se.vibes.beerssh.png\">packaging/icon/128.png</file>\n"
+replace = ""
+expect = "the_window_icon_draws_with_no_icon_theme"

@@ -5,5 +5,7 @@
         <file alias="font-sources.txt">tool/font-sources.txt</file>
         <!-- The window icon's fallback: the file the package installs, not a copy (src/main.cpp). -->
         <file alias="se.vibes.beerssh.svg">packaging/se.vibes.beerssh.svg</file>
+        <!-- And where Qt reads no SVG, as on Windows without its SVG plugins. -->
+        <file alias="se.vibes.beerssh.png">packaging/icon/128.png</file>
     </qresource>
 </RCC>

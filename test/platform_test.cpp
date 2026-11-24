@@ -1359,25 +1359,15 @@ void platform_test::a_file_filled_out_of_order_fetches_what_its_reader_wants() {
 
 void platform_test::the_window_icon_draws_with_no_icon_theme() {
 	/*
-	 * main() asks the icon theme for the window icon and falls back to the
-	 * same SVG compiled in (resources.qrc). Under -platform offscreen, as
-	 * in a build run from the tree, there is no theme icon: before the
-	 * fallback the window had none (2026-11-24, claude-guidelines'
-	 * qt-desktop-integration skill). So the icon, asked as main() asks it,
-	 * must draw here -- which also needs the SVG icon engine
-	 * (qt6-svg-plugins, which the package recommends).
+	 * main() takes the icon theme's window icon and falls back to one
+	 * compiled in. Under -platform offscreen, as in a build run from the
+	 * tree, there is no theme icon: before the fallback the window had
+	 * none (2026-11-24). It must draw here on every platform -- the SVG
+	 * where Qt reads SVG, the PNG where it does not, as on Windows CI.
 	 */
-	QVERIFY2(QFile::exists(QStringLiteral(":/se.vibes.beerssh.svg")), "the icon is not compiled in");
-	/*
-	 * Drawing it needs Qt's SVG plugins, which a Linux package recommends
-	 * and Windows CI's Qt does not carry (2026-11-24: the icon drew
-	 * nothing there). Compiled in everywhere; drawn where SVG can be read.
-	 */
-	if (!QImageReader::supportedImageFormats().contains("svg"))
-		QSKIP("no SVG image plugin here, so no SVG icon can draw");
-	const QIcon icon = QIcon::fromTheme(QStringLiteral("se.vibes.beerssh"),
-	                                    QIcon(QStringLiteral(":/se.vibes.beerssh.svg")));
-	const QPixmap drawn = icon.pixmap(48, 48);
+	QVERIFY2(QFile::exists(QStringLiteral(":/se.vibes.beerssh.svg")), "the SVG is not compiled in");
+	QVERIFY2(QFile::exists(QStringLiteral(":/se.vibes.beerssh.png")), "the PNG is not compiled in");
+	const QPixmap drawn = bssh_window_icon().pixmap(48, 48);
 	QVERIFY2(!drawn.isNull(), "the window icon draws nothing");
 	const QImage image = drawn.toImage();
 	bool painted = false;

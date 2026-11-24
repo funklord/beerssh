@@ -21628,10 +21628,11 @@ refused. Each names its rule in claude-guidelines; read it there.
   `make` still writes nothing, and the same sabotage is caught. A `.pri`
   edit, the same shape, was measured to reach qmake already.
   **Windows CI has no SVG plugin** (2026-11-24): the icon drew nothing
-  there, so the test requires it compiled in everywhere and drawn where
-  Qt reads SVG. A Windows build of the app has no window icon for the
-  same reason; a Windows release would ship Qt's SVG plugins (windeployqt
-  takes `iconengines/qsvgicon` when asked) or compile in a PNG instead.
+  there. So `bssh_window_icon()` (`src/ui/theme.h`), which `main()` and
+  the test both call, falls back to the SVG where Qt reads SVG and to
+  `packaging/icon/128.png`, also compiled in, where it does not; the
+  test requires a drawn icon on every platform again, and a Windows
+  build of the app has its window icon.
 - **AppStream metainfo has no homepage (20261124T2114Z, 35daafd, the
   `debian-packaging` skill, "Lintian clean").** lintian warns
   `appstream-metadata-validation-failed` and `appstreamcli validate`

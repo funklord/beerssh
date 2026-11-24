@@ -1,4 +1,6 @@
 #include "ui/theme.h"
+
+#include <QImageReader>
 #include "term/colour_scheme.h"
 
 #include <QApplication>
@@ -208,4 +210,11 @@ bssh_theme::mode_t bssh_theme::from_text(const QString &text) {
 	if (text.compare(QStringLiteral("light"), Qt::CaseInsensitive) == 0) return MODE_LIGHT;
 	if (text.compare(QStringLiteral("dark"), Qt::CaseInsensitive) == 0) return MODE_DARK;
 	return MODE_SYSTEM;
+}
+
+QIcon bssh_window_icon() {
+	const QString fallback = QImageReader::supportedImageFormats().contains("svg")
+	                                 ? QStringLiteral(":/se.vibes.beerssh.svg")
+	                                 : QStringLiteral(":/se.vibes.beerssh.png");
+	return QIcon::fromTheme(QStringLiteral("se.vibes.beerssh"), QIcon(fallback));
 }
