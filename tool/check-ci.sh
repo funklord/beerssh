@@ -230,7 +230,9 @@ PY
 # the runner's recursive checkout gives -- listed by hand here before, and
 # the hand list had no snurra and no fuzznet once the desktop build linked
 # them (found 2026-11-18, with check-deb's and check-keepalive's same miss).
-# fuzznet's own flog and monocypher with it, which the node compiles.
+# fuzznet's flog and monocypher are root submodules since 2026-11-25 (one
+# copy of each dependency at the leaf), so this list carries them too and
+# fuzznet's nested copies are not wanted.
 if [ "$WANTS_SUBMODULES" = yes ]; then
 	mkdir "$STAGE/sub"
 	for path in $(git config --blob "$STAGED:.gitmodules" --get-regexp 'submodule\..*\.path' \
@@ -238,13 +240,6 @@ if [ "$WANTS_SUBMODULES" = yes ]; then
 		git -C "$path" archive --format=tar --prefix="$path/" "$(git rev-parse "$STAGED:$path")" \
 			| tar -xf - -C "$STAGE/sub" || exit 1
 	done
-	if fuzznet=$(git rev-parse "$STAGED:fuzznet" 2>/dev/null); then
-		for sub in flog monocypher; do
-			[ -e "fuzznet/$sub/.git" ] || git -C fuzznet submodule update --init "$sub" >&2 || exit 1
-			git -C "fuzznet/$sub" archive --format=tar --prefix="fuzznet/$sub/" \
-				"$(git -C fuzznet rev-parse "$fuzznet:$sub")" | tar -xf - -C "$STAGE/sub" || exit 1
-		done
-	fi
 	tar -cf "$STAGE/submodules.tar" -C "$STAGE/sub" . || exit 1
 	rm -rf "$STAGE/sub"
 else

@@ -877,17 +877,31 @@ FUZZNET_DIR       = fuzznet
 FUZZNET_BUILD_DIR = build-fuzznet
 FUZZNET_LIB       = $(FUZZNET_BUILD_DIR)/libfuzznetd.a
 
+# fuzznet's own dependencies, one copy each at this tree's root
+# (claude-guidelines' harmonization.md, "The leaf decides", 2026-11-24):
+# flog and monocypher are root submodules at the commits fuzznet's gitlinks
+# name, and every sub-make into fuzznet is told where they are, so its
+# nested copies are never fetched or read. The others fuzznet can use
+# (qtty, quirc, thorvg) are named as directories that do not exist: the
+# daemon library compiles none of them, and a nested copy must not be
+# picked up by default if that changes.
+FUZZNET_DEP_DIRS = MONOCYPHER_DIR=$(abspath monocypher) FLOG_DIR=$(abspath flog) \
+                   QTTY_DIR=$(abspath qtty) QUIRC_DIR=$(abspath quirc) THORVG_DIR=$(abspath thorvg)
+FUZZNET_MARKERS  = $(FUZZNET_DIR)/node/daemon.h flog/flog.c monocypher/src/monocypher.c
+
 $(FUZZNET_LIB): FORCE
-	@if [ ! -f $(FUZZNET_DIR)/node/daemon.h ] || [ ! -f $(FUZZNET_DIR)/flog/flog.c ] \
-	    || [ ! -f $(FUZZNET_DIR)/monocypher/src/monocypher.c ]; then \
+	@missing=; for marker in $(FUZZNET_MARKERS); do test -f $$marker || missing=1; done; \
+	if [ -n "$$missing" ]; then \
 		if ! command -v git >/dev/null 2>&1; then \
-			echo "make: $(FUZZNET_DIR)/ is incomplete and git is not installed." >&2; exit 1; \
+			echo "make: $(FUZZNET_DIR), flog or monocypher is missing and git is not installed." >&2; exit 1; \
 		fi; \
-		echo "make: fetching the $(FUZZNET_DIR) submodule, with its flog and monocypher" >&2; \
-		git submodule update --init $(FUZZNET_DIR) >&2 \
-		&& git -C $(FUZZNET_DIR) submodule update --init flog monocypher >&2 \
-		|| { echo "make: the $(FUZZNET_DIR) submodule could not be fetched;" \
-		          "FUZZNET= builds beersshd without it" >&2; exit 1; }; \
+		echo "make: fetching the $(FUZZNET_DIR), flog and monocypher submodules" >&2; \
+		git submodule update --init $(FUZZNET_DIR) flog monocypher >&2 \
+		|| { echo "make: the $(FUZZNET_DIR) submodules could not be fetched;" \
+		          "FUZZNET= builds beersshd without fuzznet" >&2; exit 1; }; \
+		for marker in $(FUZZNET_MARKERS); do \
+			test -f $$marker || { echo "make: $$marker is still missing after the fetch" >&2; exit 1; }; \
+		done; \
 	fi
 	@# One situ runtime on the link line: beersshd's stream brings this
 	@# tree's situ.c and libfuzznetd.a carries fuzznet's, so the linker takes
@@ -904,7 +918,7 @@ $(FUZZNET_LIB): FORCE
 	 fi; rm -f $(FUZZNET_BUILD_DIR).situ-ours $(FUZZNET_BUILD_DIR).situ-theirs
 	@mkdir -p $(FUZZNET_BUILD_DIR)
 	@$(MAKE) -s --no-print-directory -C $(FUZZNET_DIR) BUILD_DIR=$(abspath $(FUZZNET_BUILD_DIR)) \
-	         FZN_LOG_PACK=0 daemon-lib
+	         $(FUZZNET_DEP_DIRS) FZN_LOG_PACK=0 daemon-lib
 
 # The client's end of the same, for the check: a device paired to beersshd,
 # asking the session helper its version over fuzznet (tool/fuzznet_probe.c).
@@ -1610,7 +1624,7 @@ ANDROID_FUZZNET_API = 30
 $(ANDROID_FUZZNET_LIB): FORCE $(FUZZNET_LIB)
 	@test -n "$(ANDROID_TRIPLE)" || { echo "android: no NDK triple for '$(ANDROID_ABI)'" >&2; exit 1; }
 	@mkdir -p $(ANDROID_FUZZNET_BUILD)
-	@$(MAKE) -s --no-print-directory -C $(FUZZNET_DIR) BUILD_DIR=$(abspath $(ANDROID_FUZZNET_BUILD)) \
+	@$(MAKE) -s --no-print-directory -C $(FUZZNET_DIR) BUILD_DIR=$(abspath $(ANDROID_FUZZNET_BUILD)) $(FUZZNET_DEP_DIRS) \
 	         CC='$(NDK_BIN)/clang --target=$(ANDROID_TRIPLE)$(ANDROID_FUZZNET_API)' AR=$(NDK_BIN)/llvm-ar \
 	         FZN_LOG_PACK=0 PRESET=embedded-device daemon-lib
 $(ANDROID_FUZZNET_BIN): src/sshd/fuzznet_main.c src/sshd/fuzznet_node.c src/sshd/fuzznet_users.c \
@@ -1641,7 +1655,7 @@ ANDROID_CLIENT_LINK_LIB = $(ANDROID_CLIENT_FUZZNET_BUILD)/libbssh-fuzznet-link.a
 $(ANDROID_CLIENT_FUZZNET_LIB): FORCE $(FUZZNET_LIB)
 	@test -n "$(ANDROID_TRIPLE)" || { echo "android: no NDK triple for '$(ANDROID_ABI)'" >&2; exit 1; }
 	@mkdir -p $(ANDROID_CLIENT_FUZZNET_BUILD)
-	@$(MAKE) -s --no-print-directory -C $(FUZZNET_DIR) BUILD_DIR=$(abspath $(ANDROID_CLIENT_FUZZNET_BUILD)) \
+	@$(MAKE) -s --no-print-directory -C $(FUZZNET_DIR) BUILD_DIR=$(abspath $(ANDROID_CLIENT_FUZZNET_BUILD)) $(FUZZNET_DEP_DIRS) \
 	         CC='$(NDK_BIN)/clang --target=$(ANDROID_TRIPLE)$(ANDROID_API)' AR=$(NDK_BIN)/llvm-ar \
 	         FZN_LOG_PACK=0 PRESET=embedded-device daemon-lib
 $(ANDROID_CLIENT_LINK_OBJ): src/session/fuzznet_link.c src/session/fuzznet_link.h src/session/stream.h \

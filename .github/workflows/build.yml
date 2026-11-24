@@ -22,9 +22,13 @@ jobs:
       # without it every one of them reads as naming a file that is not
       # there (first seen 2026-10-22, the workflow's first run since
       # softkeys became a submodule).
+      # The tree's own submodules only, never recursive: fuzznet's flog and
+      # monocypher are this tree's root submodules since 2026-11-25 (one
+      # copy of each dependency, at the leaf), and a recursive checkout
+      # would fetch fuzznet's nested copies too, which nothing builds.
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: true
       - name: Indentation gate
         run: make style
 
@@ -68,7 +72,7 @@ jobs:
       # reads as an archiver problem rather than a checkout one.
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: true
       - name: Install Qt 6 (distro packages)
         run: |
           sudo apt-get update
@@ -125,7 +129,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: true
       # gmake because the system make is 3.81. openssl@3 and zlib are
       # keg-only, so their pkg-config files are named by hand.
       - name: Install Qt and libraries
@@ -172,7 +176,7 @@ jobs:
         run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: true
       - uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64
@@ -198,7 +202,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: true
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

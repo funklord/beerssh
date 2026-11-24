@@ -93,17 +93,8 @@ else
 		git -C "$path" archive --format=tar --prefix="src/$path/" \
 			"$(git rev-parse "HEAD:$path")" | tar -xf - -C "$STAGE" || exit 1
 	done
-	# And fuzznet's own two the node compiles, at the commits its tree names.
-	fuzznet=$(git rev-parse HEAD:fuzznet)
-	# Its own submodules fetched first where they are not: an empty one is
-	# no repository, and git asked inside it answers for fuzznet's instead.
-	for sub in flog monocypher; do
-		[ -e "fuzznet/$sub/.git" ] || git -C fuzznet submodule update --init "$sub" >&2 || exit 1
-	done
-	for sub in flog monocypher; do
-		git -C "fuzznet/$sub" archive --format=tar --prefix="src/fuzznet/$sub/" \
-			"$(git -C fuzznet rev-parse "$fuzznet:$sub")" | tar -xf - -C "$STAGE"
-	done
+	# fuzznet's flog and monocypher are root submodules since 2026-11-25,
+	# so the loop above carries them; fuzznet's nested copies are not used.
 	ln -s "$PWD/fonts" "$STAGE/src/fonts"
 
 	echo "check-deb: building $(git rev-parse --short HEAD) in a throwaway export"

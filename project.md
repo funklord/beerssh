@@ -21651,6 +21651,29 @@ refused. Each names its rule in claude-guidelines; read it there.
   library under `-j8`, silently turning a feature off with exit 0 --
   check the binary, not the exit code. A fresh-clone proof needs
   `protocol.file.allow=always` for local submodule URLs.
+  **Done 2026-11-25, this tree's step.** What beerssh compiles from
+  fuzznet's nested submodules is flog and monocypher, both into fuzznet's
+  archives (desktop and both Android ones); nothing of qtty, quirc or
+  thorvg. They are root submodules now, https, at the commits fuzznet's
+  gitlinks name (flog ba3007f, monocypher ab2b16d, 4.0.3). The pinned
+  fuzznet, 1585faa4 of 2026-11-18, read no `FLOG_DIR`, so **fuzznet moved
+  to aac57be5** (2026-11-24, the commit raidcfgd proved against; 203
+  commits). Every sub-make into fuzznet gets `FUZZNET_DEP_DIRS` --
+  `MONOCYPHER_DIR` and `FLOG_DIR` absolute, `QTTY_DIR`, `QUIRC_DIR` and
+  `THORVG_DIR` naming root directories that do not exist -- and the fetch
+  names the root submodules and checks each marker again afterwards with
+  `test -f`. check-ci and check-deb stage the root submodules by the same
+  loop as the rest, their fuzznet-nested blocks gone, and the workflow's
+  checkouts are `submodules: true`, not recursive. **Proved with
+  fuzznet's own copies removed** (`submodule deinit` in fuzznet): the
+  desktop and both Android archives built, every `.d` naming the root
+  copies and none the nested; check-fuzznet and `fuzznet_session_test`
+  with its binaries (8 of 8, a shell kept through a drop) pass on the new
+  fuzznet. **What a pin move can cost:** both ends built from this tree
+  agree, as the tests show; a phone running an older BeerSSH against a
+  host on this build, or the reverse, may not, if fuzznet's words changed
+  in those 203 commits -- update both. Next in the order: hull, named
+  with this tree's commit.
 
 ## From claude-guidelines: qtkit holds the shared theme
 

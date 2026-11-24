@@ -14,3 +14,9 @@
 	path = fuzznet
 	url = https://github.com/funklord/fuzznet
 	shallow = true
+[submodule "monocypher"]
+	path = monocypher
+	url = https://github.com/LoupVaillant/Monocypher.git
+[submodule "flog"]
+	path = flog
+	url = https://github.com/funklord/flog.git
