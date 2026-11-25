@@ -25,6 +25,17 @@ button), over the focused pane since 2026-11-23, that opens any terminal, from
 any BeerSSH window, here -- closing a window still closes its terminals. Open and
 the holder's: whether a package's version should name its commit.
 
+**Wind-down 2026-11-24/25 (weekly usage 98%), what landed since:** beersshd runs
+as a root fuzznet daemon, a session per mapped user (sec 5.6, *beersshd as a root
+fuzznet daemon*; tested as root on GitHub), and as one user's (`beersshd-fuzznet-user`
+unit); the stores' lock waits for a running holder (the lost-secret race, sec 8.4's
+store entry); the window icon falls back to the compiled-in SVG or PNG; PNG icons
+for TDE; flog and monocypher are root submodules and fuzznet moved to aac57be5
+(*Inbox of 2026-11-24*). Open and the holder's: pairing a root daemon from the
+app, PAM, the hover focus delay, arrangement files, a crash trace, version naming;
+and the Play release, signing, Fold checks. The fuzznet move means an older app
+and a host on this build may not speak: update both.
+
 ## 0.1 Name and identity — **[DECIDED]**
 
 | Field | Value |
