@@ -275,7 +275,9 @@ include($$PWD/softkeys/softkeys.pri)
 # arm64 library, which the first Android link demonstrated at length.
 android {
     BSSH_VTERM_LIB = $$PWD/build-vterm-android/$$QT_ARCH/libvterm.a
-} else {
+} else:isEmpty(BSSH_VTERM_LIB) {
+    # The Makefile names it (the package build keeps its own, build-deb/);
+    # the default is for qmake run by hand.
     BSSH_VTERM_LIB = $$PWD/build-vterm/libvterm.a
 }
 # forkpty(3) for the local shell transport (sec 2, sec 3). glibc puts it

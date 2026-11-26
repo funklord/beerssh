@@ -9,6 +9,31 @@
 %:
 	dh $@
 
+# Every tree the packages are built in, under the package build's own
+# (DEB_BUILD_DIR, from `make deb`), with the programs and their pages
+# beside them: a package build and a plain one never rebuild each other's
+# objects, and `make deb` twice compiles nothing the second time. Handed
+# over in the environment, not on make's command line, where a variable
+# would reach every sub-make -- fuzznet's and the ones qmake writes -- as
+# an override of their own assignments. PREFIX in the build as in the
+# install, so the two see one configuration.
+DEB_BUILD_DIR ?= build-deb
+BUILD_ENV = BUILD_DIR=$(DEB_BUILD_DIR)/app SSHD_BUILD_DIR=$(DEB_BUILD_DIR)/sshd \
+            VTERM_BUILD_DIR=$(DEB_BUILD_DIR)/vterm LIBSSH_BUILD_DIR=$(DEB_BUILD_DIR)/libssh \
+            FUZZNET_BUILD_DIR=$(DEB_BUILD_DIR)/fuzznet ARTIFACT_DIR=$(DEB_BUILD_DIR) \
+            PREFIX=/usr
+
+# Debian's flags are ADDED to the project's, and the Makefile hands them
+# to qmake, cmake and its own compiles with -O filtered out. fuzznet reads
+# CFLAGS itself, so -Os comes back for it here, the last -O winning.
+export DEB_CFLAGS_MAINT_APPEND = -Os
+export DEB_CXXFLAGS_MAINT_APPEND = -Os
+
+# The programs, their pages and the session helper, so that the install
+# step builds nothing.
+override_dh_auto_build:
+	$(BUILD_ENV) $(MAKE) all doc session
+
 # The suite is NOT run while packaging, and this line is what stops it.
 #
 # dh_auto_test runs `make test` whenever a test target exists, so a plain
@@ -34,12 +59,13 @@ override_dh_auto_test:
 # Clean with deb-clean, not the distclean debhelper picks by default:
 # distclean is veryclean, which removes the Android build too, so building
 # the desktop package deleted the APK (holder, 2026-10-29). deb-clean
-# removes every tree the package is built in and leaves the Android ones.
+# removes the package build's tree and nothing else. `make deb` passes -nc
+# and does not clean; this is for dpkg-buildpackage run directly.
 override_dh_auto_clean:
-	$(MAKE) deb-clean
+	DEB_BUILD_DIR=$(DEB_BUILD_DIR) $(MAKE) deb-clean
 
 override_dh_auto_install:
-	$(MAKE) install DESTDIR=$(CURDIR)/debian/tmp PREFIX=/usr
+	$(BUILD_ENV) $(MAKE) install DESTDIR=$(CURDIR)/debian/tmp
 
 # beersshd's root fuzznet daemon (project.md sec 5.6) is shipped and left
 # off: debhelper enables and starts every unit it finds unless told, and a

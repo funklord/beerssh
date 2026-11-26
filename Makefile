@@ -86,11 +86,10 @@
 #                        AppStream metadata and bundled fonts
 #   make uninstall    -- remove what install put there
 #   make deb          -- build beerssh and beerssh-fonts Debian packages
-#   make clean        -- remove compilation intermediates only; the built
-#                        binary is left in place, so `make install` stays
-#                        possible without a rebuild
-#   make deb-clean    -- the desktop build dirs only; what `make deb`
-#                        cleans with, so the Android build survives it
+#   make clean        -- remove compilation intermediates, the built
+#                        programs and pages, and the package build's tree
+#   make deb-clean    -- the package build's tree (build-deb/) only; what
+#                        a bare dpkg-buildpackage cleans with
 #   make veryclean    -- clean, plus the built binary and the build dirs
 #   make distclean    -- veryclean, plus stray editor files
 #
@@ -181,6 +180,21 @@ BUILD_DIR         ?= build
 # as openmlx4 sets it, where the build tree and the source tree are one.
 DEB_DIR ?= $(BUILD_DIR)/deb
 
+# The package build's own object tree, so that a second `make deb` compiles
+# nothing and `make` after `make deb` compiles nothing either. debian/rules
+# builds every tree the packages need under it -- the app, beersshd,
+# libvterm, libssh, fuzznet -- with Debian's flags, and puts the programs
+# and their generated pages there rather than at the root. Sharing the
+# plain trees, every switch between `make` and `make deb` would rebuild
+# them all for the change of flags, libssh with them. At the root, as in
+# every packaging tree here; `make clean` and `make deb-clean` remove it.
+DEB_BUILD_DIR ?= build-deb
+
+# Where the programs, the manual pages and the completion land: the root,
+# so ./beerssh runs after a plain make, and $(DEB_BUILD_DIR) in a package
+# build, so the package's copies never overwrite the plain build's.
+ARTIFACT_DIR ?= .
+
 # ABI-suffixed, the settled spelling (harmonization.md): the same `?=`
 # line every Android sibling carries, because the fragment deliberately
 # defaults nothing. The plain `build-android` this used to say meant an
@@ -248,7 +262,7 @@ VTERM_DIR  = vterm
 # has no business reaching the network. Goals not on this list are
 # assumed to need it, which is the safe direction: the cost of being
 # wrong is one unnecessary fetch, against a build that fails.
-BSSH_VTERM_FREE_GOALS = help style hooks clean deb-clean veryclean version-check
+BSSH_VTERM_FREE_GOALS = help style hooks clean deb-clean desktop-clean veryclean version-check
 
 ifneq ($(filter-out $(BSSH_VTERM_FREE_GOALS),$(or $(MAKECMDGOALS),all)),)
 ifeq ($(wildcard $(VTERM_DIR)/src/vterm.c),)
@@ -291,7 +305,7 @@ endif
 
 VTERM_SRCS = $(wildcard $(VTERM_DIR)/src/*.c)
 VTERM_OBJS = $(patsubst $(VTERM_DIR)/src/%.c,$(VTERM_BUILD_DIR)/%.o,$(VTERM_SRCS))
-VTERM_BUILD_DIR = build-vterm
+VTERM_BUILD_DIR ?= build-vterm
 VTERM_LIB  = $(VTERM_BUILD_DIR)/libvterm.a
 
 # Patches applied to the vendored copy at build time (vterm-patch/), kept
@@ -415,7 +429,7 @@ BSSH_VTERM_WITNESS := $(shell \
 # tool/build-deps-android.sh verified by checksum and signature: all 477
 # files identical, the tag adding only its git and CI metadata.
 LIBSSH_DIR       = libssh
-LIBSSH_BUILD_DIR = build-libssh
+LIBSSH_BUILD_DIR ?= build-libssh
 LIBSSH_PREFIX    = $(LIBSSH_BUILD_DIR)/prefix
 LIBSSH_LIB       = $(LIBSSH_PREFIX)/lib/libssh.a
 LIBSSH_PATCHES   = $(sort $(wildcard libssh-patch/*.patch))
@@ -488,14 +502,15 @@ $(LIBSSH_STAMP): $(LIBSSH_PATCHES)
 # tool/build-deps-android.sh's: static, with the server half beersshd
 # needs, without examples or tests.
 LIBSSH_SOURCES = $(shell find $(LIBSSH_DIR) -path $(LIBSSH_DIR)/.git -prune -o -type f \( -name '*.c' -o -name '*.h' -o -name 'CMakeLists.txt' -o -name '*.cmake' \) -print 2>/dev/null)
-$(LIBSSH_LIB): $(LIBSSH_STAMP) $(LIBSSH_SOURCES)
+$(LIBSSH_LIB): $(LIBSSH_STAMP) $(LIBSSH_SOURCES) $(LIBSSH_BUILD_DIR)/flags
 	@mkdir -p $(LIBSSH_BUILD_DIR)
-	@if [ ! -f $(LIBSSH_BUILD_DIR)/build/CMakeCache.txt ]; then \
+	@if [ ! -f $(LIBSSH_BUILD_DIR)/build/CMakeCache.txt ] \
+	   || [ $(LIBSSH_BUILD_DIR)/flags -nt $(LIBSSH_BUILD_DIR)/build/CMakeCache.txt ]; then \
 		cmake -S $(LIBSSH_DIR) -B $(LIBSSH_BUILD_DIR)/build \
 			-DCMAKE_INSTALL_PREFIX="$(CURDIR)/$(LIBSSH_PREFIX)" \
 			-DCMAKE_INSTALL_LIBDIR=lib \
 			-DCMAKE_BUILD_TYPE=MinSizeRel \
-			-DCMAKE_C_FLAGS="-ffunction-sections -fdata-sections" \
+			-DCMAKE_C_FLAGS="-ffunction-sections -fdata-sections $(BSSH_HANDED_CFLAGS)" \
 			-DCMAKE_POSITION_INDEPENDENT_CODE=ON \
 			-DBUILD_SHARED_LIBS=OFF \
 			-DWITH_EXAMPLES=OFF \
@@ -515,6 +530,11 @@ $(LIBSSH_LIB): $(LIBSSH_STAMP) $(LIBSSH_SOURCES)
 		|| { cat $(LIBSSH_BUILD_DIR)/install.log >&2; exit 1; }
 	@touch $@
 
+# Reconfigured when it moves: cmake keeps CMAKE_C_FLAGS in its cache and
+# recompiles what a changed value affects.
+$(LIBSSH_BUILD_DIR)/flags: FORCE
+	$(call bssh_flags_record,$(BSSH_HANDED_CFLAGS))
+
 ifdef DEBUG
     QMAKE_CONFIG = CONFIG+=debug CONFIG-=release
 else
@@ -526,6 +546,35 @@ ifdef SANITIZE
                     QMAKE_CXXFLAGS+=-fno-omit-frame-pointer \
                     QMAKE_LFLAGS+=-fsanitize=address,undefined
 endif
+
+# What a build hands its compilers from the environment, ADDED to the
+# project's own flags and never replacing them (the debian-packaging rule).
+# dh puts Debian's CPPFLAGS, CFLAGS, CXXFLAGS and LDFLAGS in the
+# environment, and only fuzznet read them: qmake writes Makefiles that
+# read none, and libvterm, libssh and the session helper were compiled
+# with flags of their own. So beerssh shipped with no _FORTIFY_SOURCE and
+# beerssh-session's debug file held no debug information (lintian:
+# debug-file-with-no-debug-symbols). -O is filtered out because the
+# project owns the level (-Os); a plain build, with all four unset, hands
+# over nothing and every compile line is as it was.
+#
+# From the environment only: a CFLAGS or CXXFLAGS on make's command line
+# reaches the Makefiles qmake writes as an override and replaces their
+# whole line -- -Os, -fPIC and every -D with it -- so it is refused.
+BSSH_HANDED_CFLAGS   = $(filter-out -O%,$(CPPFLAGS) $(CFLAGS))
+BSSH_HANDED_CXXFLAGS = $(filter-out -O%,$(CPPFLAGS) $(CXXFLAGS))
+BSSH_HANDED_LDFLAGS  = $(LDFLAGS)
+ifneq ($(filter command,$(origin CFLAGS) $(origin CXXFLAGS)),)
+$(error CFLAGS or CXXFLAGS on the command line would replace qmake's own; set it in the environment instead)
+endif
+
+# A file holding $(1), rewritten only when it changes: what a tree's
+# objects depend on, since an object depends on its sources and not on
+# the flags it was compiled with.
+define bssh_flags_record
+	@mkdir -p $(@D); printf '%s\n' '$(1)' > $@.new; \
+	if cmp -s $@.new $@; then rm -f $@.new; else mv $@.new $@; fi
+endef
 
 # What the build puts in the tree, named ONCE.
 #
@@ -541,15 +590,17 @@ endif
 # the completion are generated by running a program, which the program
 # does not need, so they are `make doc` -- and `install`, which ships
 # them, asks for everything.
-PROGRAMS = $(TARGET) $(SSHD_TARGET)
+BSSH_BIN = $(ARTIFACT_DIR)/$(TARGET)
+SSHD_BIN = $(ARTIFACT_DIR)/$(SSHD_TARGET)
+PROGRAMS = $(BSSH_BIN) $(SSHD_BIN)
 # Windows (sec 1, best-effort): no beersshd, whose SFTP serving is POSIX
 # file handling throughout (pread, fstatat, realpath). qmake's MinGW
 # Makefiles write the program with its .exe, which the copy names.
 ifeq ($(OS),Windows_NT)
-PROGRAMS = $(TARGET)
+PROGRAMS = $(BSSH_BIN)
 EXE = .exe
 endif
-DOCS = $(MAN_PAGE) $(SSHD_MAN_PAGE) $(COMPLETION)
+DOCS = $(addprefix $(ARTIFACT_DIR)/,$(MAN_PAGE) $(SSHD_MAN_PAGE) $(COMPLETION))
 ARTIFACTS = $(PROGRAMS) $(DOCS)
 
 all: $(PROGRAMS)
@@ -628,23 +679,23 @@ endif
 #
 # Not committed, for that reason. `--man` needs no display (it is answered
 # before QApplication is built), so this works in a build chroot.
-$(MAN_PAGE): $(TARGET)
-	./$(TARGET) --man > $@
+$(ARTIFACT_DIR)/$(MAN_PAGE): $(BSSH_BIN)
+	$(BSSH_BIN) --man > $@
 
 # beersshd's, on the same argument: its --help and this page are written
 # from one option table in src/sshd/main.cpp. It is a package of its own
 # (sec 19), and a package's command without a page is what lintian warns
 # about.
-$(SSHD_MAN_PAGE): $(SSHD_TARGET)
-	./$(SSHD_TARGET) --man > $@
+$(ARTIFACT_DIR)/$(SSHD_MAN_PAGE): $(SSHD_BIN)
+	$(SSHD_BIN) --man > $@
 
 # The same argument one file over, and the same rule shape. `bash -n`
 # because a completion that does not parse is sourced by every new shell
 # of everybody who installs it, and the failure lands in their prompt
 # rather than in this build -- so it is checked here, where somebody is
 # looking, and the file is not left behind when it fails.
-$(COMPLETION): $(TARGET)
-	./$(TARGET) --completion > $@
+$(ARTIFACT_DIR)/$(COMPLETION): $(BSSH_BIN)
+	$(BSSH_BIN) --completion > $@
 	@if command -v bash >/dev/null 2>&1; then \
 		bash -n $@ || { rm -f $@; exit 1; }; \
 	fi
@@ -667,9 +718,12 @@ $(VTERM_STAMP) $(VTERM_ANDROID_STAMP): $(VTERM_PATCHES)
 	@sh tool/apply-patches.sh $(VTERM_DIR) $(addprefix $(CURDIR)/,$(VTERM_PATCHES))
 	@touch $@
 
-$(VTERM_BUILD_DIR)/%.o: $(VTERM_DIR)/src/%.c $(VTERM_STAMP)
+$(VTERM_BUILD_DIR)/%.o: $(VTERM_DIR)/src/%.c $(VTERM_STAMP) $(VTERM_BUILD_DIR)/flags
 	@mkdir -p $(VTERM_BUILD_DIR)
-	$(CC) $(VTERM_CFLAGS) -MMD -MP -c $< -o $@
+	$(CC) $(VTERM_CFLAGS) $(BSSH_HANDED_CFLAGS) -MMD -MP -c $< -o $@
+
+$(VTERM_BUILD_DIR)/flags: FORCE
+	$(call bssh_flags_record,$(BSSH_HANDED_CFLAGS))
 
 # Read back what -MMD wrote, or it wrote nothing worth having: a .d file
 # nobody includes is dependency tracking that looks on and is off, and
@@ -744,7 +798,9 @@ FORCE:
 # bssh_qmake below then cleans the tree, since the compile lines changed.
 # The text is spelled out rather than taken from QMAKE_CONFIG, which the
 # app tree extends per target.
-bssh_qmake_args = DEBUG=$(DEBUG) SANITIZE=$(SANITIZE) CXX=$(CXX)
+bssh_qmake_args = DEBUG=$(DEBUG) SANITIZE=$(SANITIZE) CXX=$(CXX) \
+                  handed=$(BSSH_HANDED_CFLAGS)|$(BSSH_HANDED_CXXFLAGS)|$(BSSH_HANDED_LDFLAGS) \
+                  vterm=$(abspath $(VTERM_LIB)) libssh=$(abspath $(LIBSSH_PREFIX))
 define bssh_qmake_record
 	@mkdir -p $(@D); printf '%s\n' '$(bssh_qmake_args)' > $@.new; \
 	if cmp -s $@.new $@; then rm -f $@.new; else mv $@.new $@; fi
@@ -763,7 +819,10 @@ bssh_qmake_flags = grep -sE '^(CFLAGS|CXXFLAGS|DEFINES|LFLAGS)[[:space:]]*=' Mak
 define bssh_qmake
 	mkdir -p $(1)
 	cd $(1) && before=$$($(bssh_qmake_flags)); \
-	$(QMAKE) ../$(2) $(QMAKE_CONFIG) QMAKE_CXX=$(CXX) BSSH_VERSION=$(VERSION) && \
+	$(QMAKE) $(CURDIR)/$(2) $(QMAKE_CONFIG) QMAKE_CXX=$(CXX) BSSH_VERSION=$(VERSION) \
+	        "QMAKE_CFLAGS+=$(BSSH_HANDED_CFLAGS)" "QMAKE_CXXFLAGS+=$(BSSH_HANDED_CXXFLAGS)" \
+	        "QMAKE_LFLAGS+=$(BSSH_HANDED_LDFLAGS)" \
+	        BSSH_VTERM_LIB=$(abspath $(VTERM_LIB)) BSSH_LIBSSH_PREFIX=$(abspath $(LIBSSH_PREFIX)) && \
 	if [ -n "$$before" ] && [ "$$before" != "$$($(bssh_qmake_flags))" ]; then \
 		echo "make: $(2) changed the compile flags; rebuilding $(1) from clean" >&2; \
 		$(MAKE) clean; \
@@ -805,12 +864,12 @@ endif
 $(BUILD_DIR)/Makefile: beerssh.pro $(DESKTOP_MEDIA_SOURCE) $(BUILD_DIR)/qmake.args
 	$(call bssh_qmake,$(BUILD_DIR),beerssh.pro)
 
-$(TARGET): $(VTERM_LIB) $(LIBSSH_LIB) $(BUILD_DIR)/Makefile $(SOURCES) $(HEADERS) $(RESOURCE_INPUTS)
+$(BSSH_BIN): $(VTERM_LIB) $(LIBSSH_LIB) $(BUILD_DIR)/Makefile $(SOURCES) $(HEADERS) $(RESOURCE_INPUTS)
 	$(MAKE) -C $(BUILD_DIR) $(QMAKE_SUBMAKE)
-	cp $(BUILD_DIR)/$(TARGET)$(EXE) $(TARGET)$(EXE)
+	cp $(BUILD_DIR)/$(TARGET)$(EXE) $(BSSH_BIN)$(EXE)
 
-run: $(TARGET)
-	./$(TARGET)
+run: $(BSSH_BIN)
+	$(BSSH_BIN)
 
 # `make media` was the build with snurra in it, in a tree of its own, while
 # snurra was "far from done"; the default build is that build now (above),
@@ -853,7 +912,7 @@ media-check: $(SNURRA_DIR)/snurra.pri
 # its own .pro, sharing the libssh build and none of the terminal. In the
 # default build so check-ci compiles it against the runner's older Qt and
 # libssh, which is where an API it leans on would first be missing.
-SSHD_BUILD_DIR = build-sshd
+SSHD_BUILD_DIR ?= build-sshd
 SSHD_SOURCES   = $(wildcard src/sshd/*.cpp src/sshd/*.c src/sshd/*.h) \
                  src/session/stream.c src/session/stream.h \
                  src/session/generated/frame.c src/session/generated/frame.h \
@@ -874,7 +933,7 @@ SSHD_SOURCES   = $(wildcard src/sshd/*.cpp src/sshd/*.c src/sshd/*.h) \
 # keeping a few sessions does not need, and one library less to install.
 FUZZNET ?= $(if $(filter Linux,$(shell uname -s)),1,)
 FUZZNET_DIR       = fuzznet
-FUZZNET_BUILD_DIR = build-fuzznet
+FUZZNET_BUILD_DIR ?= build-fuzznet
 FUZZNET_LIB       = $(FUZZNET_BUILD_DIR)/libfuzznetd.a
 
 # fuzznet's own dependencies, one copy each at this tree's root
@@ -936,9 +995,11 @@ $(FUZZNET_PROBE): $(FUZZNET_PROBE_SRCS) $(wildcard src/session/*.h src/session/g
 FUZZNET_CLIENT_LIB = $(FUZZNET_BUILD_DIR)/libbssh-fuzznet-link.a
 FUZZNET_CLIENT_OBJ = $(FUZZNET_BUILD_DIR)/bssh-fuzznet-link.o
 $(FUZZNET_CLIENT_OBJ): src/session/fuzznet_link.c src/session/fuzznet_link.h src/session/stream.h \
-                       $(FUZZNET_LIB)
-	$(CC) -Os -Wall -Wextra -ffunction-sections -fdata-sections -I$(FUZZNET_DIR) -Isrc \
+                       $(FUZZNET_LIB) $(FUZZNET_BUILD_DIR)/link.flags
+	$(CC) -Os $(BSSH_HANDED_CFLAGS) -Wall -Wextra -ffunction-sections -fdata-sections -I$(FUZZNET_DIR) -Isrc \
 	      -c src/session/fuzznet_link.c -o $@
+$(FUZZNET_BUILD_DIR)/link.flags: FORCE
+	$(call bssh_flags_record,$(BSSH_HANDED_CFLAGS))
 $(FUZZNET_CLIENT_LIB): $(FUZZNET_CLIENT_OBJ)
 	rm -f $@
 	$(AR) rcs $@ $^
@@ -949,7 +1010,7 @@ SSHD_FUZZNET = $(FUZZNET_LIB)
 BSSH_FUZZNET_QMAKE = BSSH_FUZZNET_LIB=$(abspath $(FUZZNET_LIB)) \
                      BSSH_FUZZNET_CLIENT_LIB=$(abspath $(FUZZNET_CLIENT_LIB))
 $(BUILD_DIR)/Makefile: QMAKE_CONFIG += $(BSSH_FUZZNET_QMAKE)
-$(TARGET): $(FUZZNET_CLIENT_LIB)
+$(BSSH_BIN): $(FUZZNET_CLIENT_LIB)
 $(SSHD_BUILD_DIR)/Makefile: QMAKE_CONFIG += BSSH_FUZZNET_LIB=$(abspath $(FUZZNET_LIB)) \
                                             BSSH_FUZZNET_DIR=$(abspath $(FUZZNET_DIR))
 endif
@@ -964,13 +1025,16 @@ $(SSHD_FUZZNET_SOURCE): FORCE
 # BeerSSH's tree as well, which links the client's end; the tests' below.
 $(BUILD_DIR)/Makefile: $(SSHD_FUZZNET_SOURCE) fuzznet.pri
 
-$(SSHD_BUILD_DIR)/Makefile: beersshd.pro $(SSHD_FUZZNET_SOURCE) \
+$(SSHD_BUILD_DIR)/qmake.args: FORCE
+	$(bssh_qmake_record)
+
+$(SSHD_BUILD_DIR)/Makefile: beersshd.pro $(SSHD_FUZZNET_SOURCE) $(SSHD_BUILD_DIR)/qmake.args \
                             $(if $(call bssh_qmake_orphaned,$(SSHD_BUILD_DIR)),FORCE)
 	$(call bssh_qmake,$(SSHD_BUILD_DIR),beersshd.pro)
 
-$(SSHD_TARGET): $(LIBSSH_LIB) $(SSHD_FUZZNET) $(SSHD_BUILD_DIR)/Makefile $(SSHD_SOURCES)
+$(SSHD_BIN): $(LIBSSH_LIB) $(SSHD_FUZZNET) $(SSHD_BUILD_DIR)/Makefile $(SSHD_SOURCES)
 	$(MAKE) -C $(SSHD_BUILD_DIR) $(QMAKE_SUBMAKE)
-	cp $(SSHD_BUILD_DIR)/$(SSHD_TARGET) $(SSHD_TARGET)
+	cp $(SSHD_BUILD_DIR)/$(SSHD_TARGET) $(SSHD_BIN)
 
 # Built in its own directory from its own .pro: the test binary needs the
 # app's sources but not src/main.cpp, or it would have two main()s.
@@ -1033,10 +1097,14 @@ check-session: $(SESSION_BIN)
 
 # The patched libvterm, the client's own, for the live screen (sec 5.6): the
 # two ends must make the same screen of the same bytes.
-$(SESSION_BIN): $(SESSION_SRCS) $(VTERM_LIB) $(wildcard src/session/*.h src/session/generated/*.h)
+$(SESSION_BIN): $(SESSION_SRCS) $(VTERM_LIB) $(wildcard src/session/*.h src/session/generated/*.h) \
+               $(BUILD_DIR)/session.flags
 	@mkdir -p $(BUILD_DIR)
-	$(CC) -std=gnu11 -Os -ffunction-sections -fdata-sections -Wl,--gc-sections -static -Isrc \
-	      -I$(VTERM_DIR)/include -o $@ $(filter %.c,$^) $(VTERM_LIB)
+	$(CC) -std=gnu11 -Os $(BSSH_HANDED_CFLAGS) -ffunction-sections -fdata-sections -Wl,--gc-sections \
+	      $(BSSH_HANDED_LDFLAGS) -static -Isrc -I$(VTERM_DIR)/include -o $@ $(filter %.c,$^) $(VTERM_LIB)
+
+$(BUILD_DIR)/session.flags: FORCE
+	$(call bssh_flags_record,$(BSSH_HANDED_CFLAGS)|$(BSSH_HANDED_LDFLAGS))
 
 # The session protocol's bytes are defined by src/session/frame.situ, and what
 # situ generates from it is committed, so building needs no situ. This says
@@ -1127,8 +1195,8 @@ TEST_SESSION_BIN = $(if $(filter Linux,$(shell uname -s)),$(SESSION_BIN))
 # `make test` wherever beersshd links fuzznet. Below SESSION_BIN, which a
 # prerequisite list reads as it is written.
 .PHONY: check-fuzznet
-check-fuzznet: $(SSHD_TARGET) $(SESSION_BIN) $(FUZZNET_PROBE)
-	tool/check-fuzznet.sh ./$(SSHD_TARGET) $(SESSION_BIN) $(FUZZNET_PROBE)
+check-fuzznet: $(SSHD_BIN) $(SESSION_BIN) $(FUZZNET_PROBE)
+	tool/check-fuzznet.sh $(SSHD_BIN) $(SESSION_BIN) $(FUZZNET_PROBE)
 
 # And as a root daemon starting each device's session as its mapped user
 # (tool/check-fuzznet-root.sh, project.md sec 5.6): built as whoever runs
@@ -1138,17 +1206,17 @@ check-fuzznet: $(SSHD_TARGET) $(SESSION_BIN) $(FUZZNET_PROBE)
 # another; `sudo -n` asks for no password, so a desktop without one fails
 # here at once rather than waiting at a prompt.
 .PHONY: check-fuzznet-root
-check-fuzznet-root: $(SSHD_TARGET) $(SESSION_BIN) $(FUZZNET_PROBE)
+check-fuzznet-root: $(SSHD_BIN) $(SESSION_BIN) $(FUZZNET_PROBE)
 	@if [ "$$(id -u)" = 0 ]; then \
-		tool/check-fuzznet-root.sh ./$(SSHD_TARGET) $(SESSION_BIN) $(FUZZNET_PROBE); \
+		tool/check-fuzznet-root.sh $(SSHD_BIN) $(SESSION_BIN) $(FUZZNET_PROBE); \
 	else \
-		sudo -n tool/check-fuzznet-root.sh ./$(SSHD_TARGET) $(SESSION_BIN) $(FUZZNET_PROBE); \
+		sudo -n tool/check-fuzznet-root.sh $(SSHD_BIN) $(SESSION_BIN) $(FUZZNET_PROBE); \
 	fi
 
-test: check-build-tree $(TARGET) $(TEST_BIN) $(TEST_SESSION_BIN) $(TEST_FUZZNET)
+test: check-build-tree $(BSSH_BIN) $(TEST_BIN) $(TEST_SESSION_BIN) $(TEST_FUZZNET)
 	@sandbox=$$(mktemp -d) && \
 	 HOME=$$sandbox XDG_CONFIG_HOME=$$sandbox/config XDG_DATA_HOME=$$sandbox/data \
-	 QT_QPA_PLATFORM=offscreen ./$(TARGET) --self-test; \
+	 QT_QPA_PLATFORM=offscreen $(BSSH_BIN) --self-test; \
 	 status=$$?; rm -rf $$sandbox; exit $$status
 	@echo "test: headless smoke test passed"
 	@# Room to run in, checked before starting rather than discovered as
@@ -1168,7 +1236,7 @@ test: check-build-tree $(TARGET) $(TEST_BIN) $(TEST_SESSION_BIN) $(TEST_FUZZNET)
 	QT_QPA_PLATFORM=offscreen $(BSSH_TEST_CRASH_ENV) \
 	  $(if $(SANITIZE),LSAN_OPTIONS=suppressions=$(CURDIR)/tool/lsan-qt.supp) \
 	  $(if $(TEST_SESSION_BIN),BSSH_TEST_SESSION_BIN=$(TEST_SESSION_BIN)) \
-	  $(if $(TEST_FUZZNET),BSSH_TEST_SSHD_BIN=$(SSHD_TARGET)) ./$(TEST_BIN)
+	  $(if $(TEST_FUZZNET),BSSH_TEST_SSHD_BIN=$(SSHD_BIN)) ./$(TEST_BIN)
 
 # Throughput through the emulator, in MB/s (project.md sec 9.5, sec 12.3).
 # Built by `test` but not run by it: these take seconds and their numbers
@@ -1392,18 +1460,18 @@ check-handoff: $(LIBSSH_LIB)
 # sec 11's startup without a keyring: the first window within 5 seconds with
 # no session bus, and with one whose secrets service never comes up. Both
 # were 27 seconds. Needs Xvfb and dbus-run-session.
-check-startup: $(TARGET)
+check-startup: $(BSSH_BIN)
 	./tool/check-startup.sh
 
 # sec 8.4's refusal of a drop on another BeerSSH process, on X11, with a
 # control that the same drag onto nothing tears out. Needs Xvfb, xdotool
 # and dbus-run-session; drives a real pointer on a private X server.
-check-x11-drag: $(TARGET)
+check-x11-drag: $(BSSH_BIN)
 	./tool/check-x11-drag.sh
 
 # sec 8.4's windows across processes: a start brings every saved window back,
 # and New Window is a new shell. Needs what check-x11-drag does.
-check-windows: $(TARGET)
+check-windows: $(BSSH_BIN)
 	./tool/check-windows.sh
 
 # sec 7's emulation against xterm. Needs xterm and Xvfb; six sets of a minute.
@@ -2018,14 +2086,14 @@ check-apk: android
 # is invisible to every software centre and most launchers.
 install: $(ARTIFACTS) $(SESSION_BIN)
 	mkdir -p $(DESTDIR)$(PREFIX)/bin
-	install -m 0755 $(TARGET) $(DESTDIR)$(PREFIX)/bin/$(TARGET)
+	install -m 0755 $(BSSH_BIN) $(DESTDIR)$(PREFIX)/bin/$(TARGET)
 
 	mkdir -p $(DESTDIR)$(PREFIX)/share/man/man1
-	install -m 0644 $(MAN_PAGE) $(DESTDIR)$(PREFIX)/share/man/man1/$(MAN_PAGE)
+	install -m 0644 $(ARTIFACT_DIR)/$(MAN_PAGE) $(DESTDIR)$(PREFIX)/share/man/man1/$(MAN_PAGE)
 
 	# beersshd, which debian/ packages apart from beerssh (sec 19).
-	install -m 0755 $(SSHD_TARGET) $(DESTDIR)$(PREFIX)/bin/$(SSHD_TARGET)
-	install -m 0644 $(SSHD_MAN_PAGE) $(DESTDIR)$(PREFIX)/share/man/man1/$(SSHD_MAN_PAGE)
+	install -m 0755 $(SSHD_BIN) $(DESTDIR)$(PREFIX)/bin/$(SSHD_TARGET)
+	install -m 0644 $(ARTIFACT_DIR)/$(SSHD_MAN_PAGE) $(DESTDIR)$(PREFIX)/share/man/man1/$(SSHD_MAN_PAGE)
 	# Its root fuzznet daemon's unit, shipped and not enabled (sec 5.6).
 	mkdir -p $(DESTDIR)$(PREFIX)/lib/systemd/system
 	install -m 0644 packaging/beersshd-fuzznet.service \
@@ -2044,7 +2112,7 @@ install: $(ARTIFACTS) $(SESSION_BIN)
 	# on demand rather than at every shell start -- which is why the name
 	# is the command's and carries no suffix.
 	mkdir -p $(DESTDIR)$(PREFIX)/share/bash-completion/completions
-	install -m 0644 $(COMPLETION) \
+	install -m 0644 $(ARTIFACT_DIR)/$(COMPLETION) \
 	        $(DESTDIR)$(PREFIX)/share/bash-completion/completions/$(TARGET)
 
 	mkdir -p $(DESTDIR)$(PREFIX)/share/applications
@@ -2139,7 +2207,19 @@ deb: version-check fonts
 		echo "deb:   Fetch them first: make fonts"; \
 		exit 1; \
 	fi
-	dpkg-buildpackage -b -us -uc
+	@# -nc, so the build is not cleaned first: that clean is deb-clean, and
+	@# it made every package rebuild the app, beersshd, libssh, libvterm and
+	@# fuzznet from nothing. Make decides what is stale, in the package's own
+	@# tree (DEB_BUILD_DIR, debian/rules). The stamp goes because with it dh
+	@# skips the whole build sequence and packages what was there; and
+	@# debian/.debhelper because dh_strip collects every build's debug file
+	@# there and only the skipped clean emptied it, so -dbgsym would carry
+	@# the debug files of binaries built before. Not dh_clean, which also
+	@# deletes every *.orig, *.rej and *~ in the tree. `make clean deb` is
+	@# the package from clean.
+	rm -f debian/debhelper-build-stamp
+	$(call bssh_remove_tree,debian/.debhelper)
+	DEB_BUILD_DIR=$(DEB_BUILD_DIR) dpkg-buildpackage -b -us -uc -nc
 	@mkdir -p $(DEB_DIR)
 	@for f in ../beerssh_$(VERSION)_*.deb ../beerssh-fonts_$(VERSION)_all.deb \
 	          ../beerssh-dbgsym_$(VERSION)_*.deb \
@@ -2231,6 +2311,7 @@ uninstall:
 # else here.
 clean:
 	rm -f $(ARTIFACTS)
+	$(call bssh_remove_tree,$(DEB_BUILD_DIR))
 	$(call bssh_qmake_clean,$(BUILD_DIR))
 	$(call bssh_qmake_clean,$(TEST_BUILD_DIR))
 	$(call bssh_qmake_clean,$(SSHD_BUILD_DIR))
@@ -2276,19 +2357,26 @@ define bssh_remove_tree
 	done
 endef
 
-# What the package build cleans with (debian/rules: dh_auto_clean runs
-# this rather than distclean). Everything veryclean removes except the
-# Android trees: `make deb` ran distclean, so building the desktop package
-# deleted the APK and the whole Android build with it (holder, 2026-10-29:
-# "make deb shouldn't wipe the android build"). Nothing in the package is
-# built there, so nothing in it can be stale from there.
+# What a bare dpkg-buildpackage cleans with (debian/rules: dh_auto_clean
+# runs this rather than distclean): the package build's own tree and
+# nothing else. `make deb` passes -nc and never runs it.
 #
-# Not by way of `clean`, which runs qmake's own clean in the Android tree
-# too and would leave it to rebuild every object. The vendored sources are
-# still put back and re-patched, so the package is built from exactly the
-# committed patches; the Android build then recompiles only what includes
-# them.
+# It was every desktop tree, with the vendored libssh and libvterm put back
+# and re-patched, because the patches would not apply twice and the package
+# had to be built from exactly the committed set -- so every `make deb`
+# rebuilt libssh, libvterm, fuzznet and both programs from nothing, and
+# took the plain build's trees with it (2026-11-25). tool/apply-patches.sh
+# has since made application idempotent: it finds which prefix of the
+# series a tree is at and refuses a tree matching none, so the package is
+# still built from the committed patches without reverting them. Not
+# distclean, which once deleted the APK (holder, 2026-10-29).
 deb-clean:
+	$(call bssh_remove_tree,$(DEB_BUILD_DIR))
+
+# The desktop trees, with the vendored libvterm and libssh put back as
+# their submodules hold them. The file libssh-patch/0001 creates goes by
+# name: checkout restores tracked files and leaves an untracked one.
+desktop-clean:
 	rm -f $(ARTIFACTS)
 	$(call bssh_remove_tree,$(BUILD_DIR) $(TEST_BUILD_DIR) $(SSHD_BUILD_DIR) \
 	        $(VTERM_BUILD_DIR) $(LIBSSH_BUILD_DIR) $(SHOT_DIR) $(FUZZNET_BUILD_DIR))
@@ -2298,10 +2386,6 @@ deb-clean:
 	@if [ -d $(LIBSSH_DIR)/.git ] || [ -f $(LIBSSH_DIR)/.git ]; then \
 		git -C $(LIBSSH_DIR) checkout -- . && echo "libssh: patches reverted"; \
 	fi
-	@# The file libssh-patch/0001 creates, by name: checkout restores
-	@# tracked files and leaves an untracked one, and the patch cannot be
-	@# applied again over a file that is already there -- which is what
-	@# `make deb` met, dh_auto_clean running this before the build.
 	@rm -f $(LIBSSH_DIR)/src/transport_export.c
 	rm -f .qmake.stash
 
@@ -2309,7 +2393,7 @@ deb-clean:
 # the current ABI's tree, and which other ABIs were built is exactly the
 # unknowable-names case -- the same shape .gitignore already declares as
 # this build's own. Each expansion still goes through the checks above.
-veryclean: clean deb-clean
+veryclean: clean deb-clean desktop-clean
 	$(call bssh_remove_tree,$(ANDROID_BUILD_DIR) build-android-* build-sshd-android-* \
 	        $(VTERM_ANDROID_BASE) build-session-android build-fuzznet-android)
 
@@ -2329,7 +2413,7 @@ distclean: veryclean
 help:
 	@sed -n '/^# TARGETS/,/^#$$/p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \{0,1\}//'
 
-.PHONY: deb-clean all doc run media media-check test libssh-source bench style sabotage check-ci check-ssh check-handoff check-keepalive check-windows check-xterm fonts fonts-list check-fonts android-fonts terminfo android-terminfo check-build-tree uninstall \
+.PHONY: deb-clean desktop-clean all doc run media media-check test libssh-source bench style sabotage check-ci check-ssh check-handoff check-keepalive check-windows check-xterm fonts fonts-list check-fonts android-fonts terminfo android-terminfo check-build-tree uninstall \
         deb \
         android android-check android-aab android-run install clean veryclean \
         distclean help check style-tool style-source style-docs hooks version-check

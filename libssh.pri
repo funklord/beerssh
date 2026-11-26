@@ -8,7 +8,9 @@
 # Built by `make`, not by qmake: a bare qmake build fails at link time
 # naming the archive, which is the cue to run make.
 
-BSSH_LIBSSH_PREFIX = $$PWD/build-libssh/prefix
+# Named by the Makefile, since the package build keeps its own copy under
+# build-deb/; the default is for qmake run by hand.
+isEmpty(BSSH_LIBSSH_PREFIX): BSSH_LIBSSH_PREFIX = $$PWD/build-libssh/prefix
 
 INCLUDEPATH += $$BSSH_LIBSSH_PREFIX/include
 DEFINES += LIBSSH_STATIC

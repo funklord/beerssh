@@ -16344,6 +16344,43 @@ the binary rather than from a hand-kept list that drifts, and an empty result
 is a **fatal** build error: a package with no `Depends` installs happily onto a
 machine with no Qt and fails at first launch rather than at install time.
 
+**A second `make deb` compiles nothing, and neither does `make` after it**
+(2026-11-26, the debian-packaging rule). It used to rebuild everything:
+dpkg-buildpackage cleaned first with `deb-clean`, which removed every
+desktop tree and reverted the libssh and libvterm patches, so each package
+rebuilt the app, beersshd, libssh, libvterm and fuzznet from nothing, and
+the plain build's trees with them. Now `make deb` passes `-nc` (after
+removing `debian/debhelper-build-stamp` and `debian/.debhelper`), and
+`debian/rules` builds in the package's own tree, `build-deb/` -- `app/`,
+`sshd/`, `vterm/`, `libssh/`, `fuzznet/`, with the programs and their pages
+beside them (`ARTIFACT_DIR`), so a package build never overwrites
+`./beerssh`. The directories go to it in the environment rather than on
+make's command line, where they would override fuzznet's and qmake's own
+assignments. The patch revert went to `desktop-clean`, part of
+`veryclean`: `tool/apply-patches.sh` is idempotent, so the package is still
+built from exactly the committed series. `deb-clean` is now `build-deb/`
+alone, for a bare `dpkg-buildpackage`; `make clean deb` is the package
+from clean. Measured in a scratch clone: `make`, `make deb`, `make deb`,
+`make`, touch `src/main.cpp`, `make deb`, `make` compiled 528, 528, 0, 0,
+1, 1 objects.
+
+**Debian's flags reach every compile in the package, added to ours.**
+Before, only fuzznet read them: qmake's Makefiles read no `CFLAGS`, and
+libvterm, libssh and the session helper had flags of their own, so
+`beerssh` shipped with no `_FORTIFY_SOURCE` (0 `_chk` imports) and
+beerssh-session's debug file held no debug information. The Makefile now
+hands `CPPFLAGS`/`CFLAGS`/`CXXFLAGS`/`LDFLAGS` from the environment, `-O`
+filtered out, to qmake (`QMAKE_*FLAGS+=`), libssh's cmake and its own
+compiles, each tree keeping a record of the flags so a change rebuilds it;
+`debian/rules` appends `-Os` for fuzznet, which takes `CFLAGS` whole. A
+`CFLAGS` or `CXXFLAGS` on make's command line is refused, since it would
+replace qmake's whole line. After: `beerssh` 8 `_chk` imports, beersshd 14,
+the static session helper 16; each -dbgsym holds one debug file named by
+its binary's build-id, with DWARF; lintian reports only the fonts'
+`duplicate-font-file`. beerssh grew from 3,216,032 to 3,412,672 bytes;
+beersshd shrank from 2,281,208 to 1,888,152, fuzznet being `-Os` again
+instead of dpkg's `-O2`.
+
 Flatpak, `.dmg` and Windows installers are **deferred**. Nothing about the
 above blocks them later.
 
